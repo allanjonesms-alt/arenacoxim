@@ -1,0 +1,8 @@
+{
+  "name": "ARENA COXIM",
+  "description": "Plataforma completa para gestão de futebol amador, com painel administrativo, estatísticas de jogadores e placares em tempo real.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

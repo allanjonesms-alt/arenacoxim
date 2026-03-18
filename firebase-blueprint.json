@@ -1,0 +1,140 @@
+{
+  "entities": {
+    "Player": {
+      "title": "Player",
+      "description": "A player in the amateur football group",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Full name of the player" },
+        "nickname": { "type": "string", "description": "Nickname of the player" },
+        "position": { "type": "string", "enum": ["goleiro", "defensor", "atacante"], "description": "Player's preferred position" },
+        "photoUrl": { "type": "string", "description": "URL to player's photo" },
+        "stats": {
+          "type": "object",
+          "properties": {
+            "wins": { "type": "integer" },
+            "goals": { "type": "integer" },
+            "assists": { "type": "integer" },
+            "matches": { "type": "integer" }
+          }
+        },
+        "overallStats": {
+          "type": "object",
+          "properties": {
+            "speed": { "type": "integer" },
+            "stamina": { "type": "integer" },
+            "strength": { "type": "integer" },
+            "shooting": { "type": "integer" },
+            "dribbling": { "type": "integer" },
+            "passing": { "type": "integer" }
+          }
+        }
+      },
+      "required": ["name", "position"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "A football match (pelada)",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "time": { "type": "string" },
+        "location": { "type": "string" },
+        "teamA": { "type": "array", "items": { "type": "string" } },
+        "teamB": { "type": "array", "items": { "type": "string" } },
+        "scoreA": { "type": "integer" },
+        "scoreB": { "type": "integer" },
+        "status": { "type": "string", "enum": ["scheduled", "finished"] },
+        "mvpId": { "type": "string", "description": "ID of the match MVP" },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "playerId": { "type": "string" },
+              "type": { "type": "string", "enum": ["goal", "assist"] }
+            }
+          }
+        }
+      },
+      "required": ["date", "time", "location", "status"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "User with administrative privileges",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "locationId": { "type": "string" },
+        "role": { "type": "string" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["name", "email", "locationId"]
+    },
+    "Team": {
+      "title": "Team",
+      "description": "A football team",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the team" },
+        "location": { "type": "string", "description": "Home location of the team" },
+        "color": { "type": "string", "description": "Primary color of the team jersey" }
+      },
+      "required": ["name", "location", "color"]
+    },
+    "Location": {
+      "title": "Location",
+      "description": "A football field or arena",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the location" },
+        "address": { "type": "string", "description": "Full address of the location" },
+        "playerCount": { "type": "integer", "description": "Total players per match" },
+        "gameDuration": { "type": "integer", "description": "Duration in minutes" }
+      },
+      "required": ["name"]
+    },
+    "ScoringRules": {
+      "title": "Scoring Rules",
+      "description": "Rules for calculating player points",
+      "type": "object",
+      "properties": {
+        "win": { "type": "integer" },
+        "draw": { "type": "integer" },
+        "goal": { "type": "integer" },
+        "assist": { "type": "integer" },
+        "cleanSheet": { "type": "integer" },
+        "mvp": { "type": "integer" },
+        "updatedAt": { "type": "integer" }
+      },
+      "required": ["win", "draw", "goal", "assist", "cleanSheet", "mvp"]
+    }
+  },
+  "firestore": {
+    "/players/{playerId}": {
+      "schema": "Player",
+      "description": "Collection of players"
+    },
+    "/matches/{matchId}": {
+      "schema": "Match",
+      "description": "Collection of matches"
+    },
+    "/admins/{adminId}": {
+      "schema": "Admin",
+      "description": "Collection of administrators"
+    },
+    "/teams/{teamId}": {
+      "schema": "Team",
+      "description": "Collection of teams"
+    },
+    "/locations/{locationId}": {
+      "schema": "Location",
+      "description": "Collection of playing locations"
+    },
+    "/settings/scoring": {
+      "schema": "ScoringRules",
+      "description": "Global scoring rules configuration"
+    }
+  }
+}

@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             (request.auth.token.email.lower() == "allanjonesms@gmail.com" && 
+              request.auth.token.email_verified == true) ||
+             exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Rules
+    match /players/{playerId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /matches/{matchId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /teams/{teamId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /locations/{locationId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /admins/{adminId} {
+      allow get: if isAuthenticated() && request.auth.uid == adminId;
+      allow list, write: if isAdmin();
+    }
+
+    match /settings/scoring {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
