@@ -126,6 +126,8 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
         players={players}
         locationId={locationId}
         playerCount={playerCount}
+        teamA={teamA}
+        teamB={teamB}
       />
       
       <motion.div

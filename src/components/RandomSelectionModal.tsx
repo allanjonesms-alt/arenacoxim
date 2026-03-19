@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Player } from '../types';
+import { Player, Team } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Users, Trophy, User } from 'lucide-react';
 
@@ -10,6 +10,8 @@ interface RandomSelectionModalProps {
   players: Player[];
   locationId: string;
   playerCount: number;
+  teamA?: Team;
+  teamB?: Team;
 }
 
 export const RandomSelectionModal: React.FC<RandomSelectionModalProps> = ({
@@ -18,15 +20,28 @@ export const RandomSelectionModal: React.FC<RandomSelectionModalProps> = ({
   onConfirm,
   players,
   locationId,
-  playerCount
+  playerCount,
+  teamA,
+  teamB
 }) => {
   const [step, setStep] = useState<'idle' | 'selecting' | 'finished'>('idle');
-  const [teamA, setTeamA] = useState<Player[]>([]);
-  const [teamB, setTeamB] = useState<Player[]>([]);
+  const [teamASelected, setTeamASelected] = useState<Player[]>([]);
+  const [teamBSelected, setTeamBSelected] = useState<Player[]>([]);
   const [goalkeeperA, setGoalkeeperA] = useState<Player | null>(null);
   const [goalkeeperB, setGoalkeeperB] = useState<Player | null>(null);
   const [currentSelection, setCurrentSelection] = useState<Player | null>(null);
+  const [assignedTeam, setAssignedTeam] = useState<'A' | 'B' | null>(null);
+  const [targetTeam, setTargetTeam] = useState<'A' | 'B' | null>(null);
   const [countdown, setCountdown] = useState(5);
+
+  const selectionRefs = React.useRef({
+    teamAIds: [] as Player[],
+    teamBIds: [] as Player[],
+    gk1: null as Player | null,
+    gk2: null as Player | null,
+    currentIndex: 0,
+    nextTeam: 'A' as 'A' | 'B'
+  });
 
   const calculateOverall = (player: Player) => {
     if (!player.overallStats) return 0;
@@ -36,69 +51,109 @@ export const RandomSelectionModal: React.FC<RandomSelectionModalProps> = ({
 
   const startSelection = () => {
     setStep('selecting');
-    const availablePlayers = players.filter(p => p.locationId === locationId);
-    const goalkeepers = availablePlayers.filter(p => p.position === 'goleiro').sort((a, b) => calculateOverall(b) - calculateOverall(a));
+    setTeamASelected([]);
+    setTeamBSelected([]);
+    setGoalkeeperA(null);
+    setGoalkeeperB(null);
+    setCurrentSelection(null);
+    setAssignedTeam(null);
+    setTargetTeam(null);
+    
+    // Deduplicate players by ID to prevent duplicate names
+    const uniquePlayers = Array.from(new Map(players.map(p => [p.id, p])).values());
+    const availablePlayers = uniquePlayers.filter(p => p.locationId === locationId);
+    
+    const goalkeepers = availablePlayers.filter(p => p.position === 'goleiro');
     const fieldPlayers = availablePlayers.filter(p => p.position !== 'goleiro').sort((a, b) => calculateOverall(b) - calculateOverall(a));
 
-    const selectionSequence = [...goalkeepers, ...fieldPlayers];
+    const selectionSequence: {player: Player, team: 'A' | 'B'}[] = [];
+    
+    // 1. Pick GKs (A then B)
+    if (goalkeepers.length >= 2) {
+        const shuffledGKs = [...goalkeepers].sort(() => Math.random() - 0.5);
+        selectionSequence.push({player: shuffledGKs[0], team: 'A'});
+        selectionSequence.push({player: shuffledGKs[1], team: 'B'});
+    }
 
-    let teamAIds: Player[] = [];
-    let teamBIds: Player[] = [];
-    let gk1: Player | null = null;
-    let gk2: Player | null = null;
+    // 2. Pick Field Players (A then B)
+    // Algorithm: Pick a random player for A, then find the most similar overall for B
+    const fieldPool = [...fieldPlayers];
+    while (fieldPool.length >= 2 && selectionSequence.length < playerCount * 2) {
+        // Pick random for A
+        const randomIndex = Math.floor(Math.random() * fieldPool.length);
+        const playerA = fieldPool.splice(randomIndex, 1)[0];
+        const overallA = calculateOverall(playerA);
 
-    let currentIndex = 0;
-    let nextTeam: 'A' | 'B' = 'A';
+        // Find most similar for B in the remaining pool
+        let closestIndex = 0;
+        let minDiff = Infinity;
+        for (let j = 0; j < fieldPool.length; j++) {
+            const diff = Math.abs(calculateOverall(fieldPool[j]) - overallA);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closestIndex = j;
+            }
+        }
+        const playerB = fieldPool.splice(closestIndex, 1)[0];
+
+        selectionSequence.push({player: playerA, team: 'A'});
+        selectionSequence.push({player: playerB, team: 'B'});
+    }
+
+    selectionRefs.current = {
+      teamAIds: [],
+      teamBIds: [],
+      gk1: null,
+      gk2: null,
+      currentIndex: 0,
+      nextTeam: 'A'
+    };
 
     const selectNext = () => {
-      if (currentIndex < selectionSequence.length && (teamAIds.length + (gk1 ? 1 : 0) < playerCount || teamBIds.length + (gk2 ? 1 : 0) < playerCount)) {
-        const player = selectionSequence[currentIndex];
-        setCurrentSelection(player);
+      if (selectionRefs.current.currentIndex < selectionSequence.length) {
+        const { player, team } = selectionSequence[selectionRefs.current.currentIndex];
+        
+        setCurrentSelection(null);
+        setAssignedTeam(null);
+        setTargetTeam(team);
         setCountdown(5);
         
+        let localCountdown = 5;
         const timer = setInterval(() => {
-          setCountdown((prev) => {
-            if (prev <= 1) {
-              clearInterval(timer);
-              
-              if (player.position === 'goleiro') {
-                if (!gk1) {
-                  gk1 = player;
-                  setGoalkeeperA(gk1);
-                } else if (!gk2) {
-                  gk2 = player;
-                  setGoalkeeperB(gk2);
-                }
+          localCountdown--;
+          
+          if (localCountdown > 0) {
+            setCountdown(localCountdown);
+          } else {
+            clearInterval(timer);
+            
+            // Reveal
+            setCurrentSelection(player);
+            setAssignedTeam(team);
+            
+            if (player.position === 'goleiro') {
+              if (team === 'A') {
+                selectionRefs.current.gk1 = player;
+                setGoalkeeperA(player);
               } else {
-                if (nextTeam === 'A') {
-                  if (teamAIds.length < playerCount) {
-                    teamAIds.push(player);
-                    setTeamA([...teamAIds]);
-                    nextTeam = 'B';
-                  } else {
-                    teamBIds.push(player);
-                    setTeamB([...teamBIds]);
-                    nextTeam = 'A';
-                  }
-                } else {
-                  if (teamBIds.length < playerCount) {
-                    teamBIds.push(player);
-                    setTeamB([...teamBIds]);
-                    nextTeam = 'A';
-                  } else {
-                    teamAIds.push(player);
-                    setTeamA([...teamAIds]);
-                    nextTeam = 'B';
-                  }
-                }
+                selectionRefs.current.gk2 = player;
+                setGoalkeeperB(player);
               }
-              
-              currentIndex++;
-              selectNext();
-              return 0;
+            } else {
+              if (team === 'A') {
+                selectionRefs.current.teamAIds.push(player);
+                setTeamASelected([...selectionRefs.current.teamAIds]);
+              } else {
+                selectionRefs.current.teamBIds.push(player);
+                setTeamBSelected([...selectionRefs.current.teamBIds]);
+              }
             }
-            return prev - 1;
-          });
+            
+            setTimeout(() => {
+              selectionRefs.current.currentIndex++;
+              selectNext();
+            }, 3000);
+          }
         }, 1000);
       } else {
         setStep('finished');
@@ -110,6 +165,9 @@ export const RandomSelectionModal: React.FC<RandomSelectionModalProps> = ({
 
   if (!isOpen) return null;
 
+  const currentTeamColor = targetTeam === 'A' ? (teamA?.color || '#00ff00') : (teamB?.color || '#ff0000');
+  const currentTeamName = targetTeam === 'A' ? (teamA?.name || 'Time A') : (teamB?.name || 'Time B');
+
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={onClose} />
@@ -119,49 +177,143 @@ export const RandomSelectionModal: React.FC<RandomSelectionModalProps> = ({
         animate={{ opacity: 1, scale: 1 }}
         className="relative bg-[#111] w-full max-w-lg rounded-3xl border border-white/10 p-8 text-center"
       >
-        <h2 className="text-2xl font-black uppercase italic tracking-tight mb-6">Sorteio Dramático</h2>
+        <h2 className="text-4xl font-black uppercase italic tracking-tighter mb-8 text-white">SORTEIO</h2>
+
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          <div className="bg-white/5 p-4 rounded-xl border border-white/5">
+            <h3 className="text-white font-black uppercase italic text-[10px] mb-4 border-b border-white/10 pb-2 flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: teamA?.color || '#00ff00' }} />
+              {teamA?.name || 'Time A'}
+            </h3>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
+                <span className="text-gray-500">Goleiro:</span>
+                <span className={goalkeeperA ? "text-[#00ff00]" : "text-gray-700"}>
+                  {goalkeeperA ? (goalkeeperA.nickname || goalkeeperA.name) : "Aguardando..."}
+                </span>
+              </div>
+              {Array.from({ length: playerCount - 1 }).map((_, i) => (
+                <div key={i} className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
+                  <span className="text-gray-500">Jogador {i + 2}:</span>
+                  <span className={teamASelected[i] ? "text-white" : "text-gray-700"}>
+                    {teamASelected[i] ? (teamASelected[i].nickname || teamASelected[i].name) : "---"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="bg-white/5 p-4 rounded-xl border border-white/5">
+            <h3 className="text-white font-black uppercase italic text-[10px] mb-4 border-b border-white/10 pb-2 flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: teamB?.color || '#ff0000' }} />
+              {teamB?.name || 'Time B'}
+            </h3>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
+                <span className="text-gray-500">Goleiro:</span>
+                <span className={goalkeeperB ? "text-[#00ff00]" : "text-gray-700"}>
+                  {goalkeeperB ? (goalkeeperB.nickname || goalkeeperB.name) : "Aguardando..."}
+                </span>
+              </div>
+              {Array.from({ length: playerCount - 1 }).map((_, i) => (
+                <div key={i} className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
+                  <span className="text-gray-500">Jogador {i + 2}:</span>
+                  <span className={teamBSelected[i] ? "text-white" : "text-gray-700"}>
+                    {teamBSelected[i] ? (teamBSelected[i].nickname || teamBSelected[i].name) : "---"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
         
         {step === 'idle' && (
           <button 
             onClick={startSelection}
-            className="w-full bg-[#00ff00] text-black py-4 rounded-2xl font-black uppercase tracking-widest hover:brightness-90"
+            className="w-full bg-[#00ff00] text-black py-4 rounded-2xl font-black uppercase tracking-widest hover:brightness-90 transition-all"
           >
             Iniciar Sorteio
           </button>
         )}
 
-        {step === 'selecting' && currentSelection && (
-          <div className="flex flex-col items-center gap-4">
-            <div className="text-6xl font-black text-[#00ff00]">{countdown}</div>
-            <div className="flex flex-col items-center">
-              {currentSelection.photoUrl ? (
-                <img src={currentSelection.photoUrl} className="w-24 h-24 rounded-full object-cover mb-2" />
+        {step === 'selecting' && (
+          <div className="relative h-80 flex items-center justify-center">
+            <AnimatePresence mode="wait">
+              {!currentSelection ? (
+                <motion.div
+                  key="countdown"
+                  initial={{ scale: 0.8, opacity: 0, rotate: -10 }}
+                  animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                  exit={{ scale: 1.2, opacity: 0, rotate: 10 }}
+                  className="w-64 h-64 rounded-[2.5rem] flex flex-col items-center justify-center shadow-[0_0_50px_rgba(0,0,0,0.3)] relative overflow-hidden"
+                  style={{ backgroundColor: currentTeamColor }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/30 to-transparent opacity-50" />
+                  <span className="relative z-10 text-black/60 font-black text-xs uppercase tracking-[0.3em] mb-4">
+                    {currentTeamName}
+                  </span>
+                  <span className="relative z-10 text-black font-black text-9xl leading-none tracking-tighter">
+                    {countdown}
+                  </span>
+                </motion.div>
               ) : (
-                <div className="w-24 h-24 rounded-full bg-white/10 flex items-center justify-center mb-2">
-                  <User size={48} className="text-gray-600" />
-                </div>
+                <motion.div
+                  key="reveal"
+                  initial={{ scale: 0.8, opacity: 0, rotateY: 90 }}
+                  animate={{ scale: 1, opacity: 1, rotateY: 0 }}
+                  className="w-64 h-64 rounded-[2.5rem] p-6 flex flex-col items-center justify-center shadow-[0_0_50px_rgba(0,0,0,0.3)] relative overflow-hidden"
+                  style={{ backgroundColor: currentTeamColor }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/30 to-transparent opacity-50" />
+                  <div className="relative z-10 mb-4">
+                    {currentSelection.photoUrl ? (
+                      <img src={currentSelection.photoUrl} className="w-20 h-20 rounded-full object-cover border-4 border-black/10" />
+                    ) : (
+                      <div className="w-20 h-20 rounded-full bg-black/5 flex items-center justify-center border-4 border-black/10">
+                        <User size={40} className="text-black/40" />
+                      </div>
+                    )}
+                    <div 
+                      className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full border-4 border-black/10 flex items-center justify-center text-[10px] font-black bg-black text-white"
+                    >
+                      {targetTeam}
+                    </div>
+                  </div>
+                  <h3 className="relative z-10 text-black font-black text-2xl uppercase italic leading-tight text-center">
+                    {currentSelection.nickname || currentSelection.name}
+                  </h3>
+                  <p className="relative z-10 text-black/60 font-bold uppercase text-[10px] tracking-widest mt-1">
+                    {currentSelection.position === 'goleiro' ? 'GOLEIRO' : 'JOGADOR'}
+                  </p>
+                  <div className="relative z-10 mt-4 px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-black text-white">
+                    {currentTeamName}
+                  </div>
+                </motion.div>
               )}
-              <p className="text-white font-black text-xl">{currentSelection.nickname || currentSelection.name}</p>
-              <p className="text-gray-400 text-sm">{currentSelection.position}</p>
-            </div>
+            </AnimatePresence>
           </div>
         )}
 
         {step === 'finished' && (
-          <div className="flex flex-col gap-4">
-            <p className="text-white font-bold">Times sorteados!</p>
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col gap-4"
+          >
+            <div className="bg-[#00ff00]/10 border border-[#00ff00]/20 p-4 rounded-2xl">
+              <p className="text-[#00ff00] font-black uppercase italic text-sm">Sorteio Finalizado!</p>
+            </div>
             <button 
               onClick={() => onConfirm(
-                teamA.map(p => p.id), 
-                teamB.map(p => p.id), 
+                teamASelected.map(p => p.id), 
+                teamBSelected.map(p => p.id), 
                 goalkeeperA?.id || '', 
                 goalkeeperB?.id || ''
               )}
-              className="w-full bg-[#00ff00] text-black py-4 rounded-2xl font-black uppercase tracking-widest hover:brightness-90"
+              className="w-full bg-[#00ff00] text-black py-4 rounded-2xl font-black uppercase tracking-widest hover:brightness-90 transition-all shadow-lg shadow-[#00ff00]/20"
             >
-              Confirmar Times
+              Concluir Escalação
             </button>
-          </div>
+          </motion.div>
         )}
       </motion.div>
     </div>
