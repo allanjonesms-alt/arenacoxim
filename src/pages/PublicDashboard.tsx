@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { Player, Match, Location, Team } from '../types';
+import { Player, Match, Location, Team, AdminData } from '../types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Trophy, Star, MapPin, Calendar as CalendarIcon, ChevronRight, TrendingUp, User } from 'lucide-react';
@@ -10,7 +10,11 @@ import { SoccerJersey } from '../components/SoccerJersey';
 import { SoccerBall, SoccerCleat } from '../components/Icons';
 import { handleFirestoreError, OperationType } from '../App';
 
-export default function PublicDashboard() {
+interface PublicDashboardProps {
+  adminData?: AdminData | null;
+}
+
+export default function PublicDashboard({ adminData }: PublicDashboardProps) {
   const [matches, setMatches] = useState<Match[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -20,12 +24,23 @@ export default function PublicDashboard() {
   useEffect(() => {
     const qMatches = query(collection(db, 'matches'), orderBy('date', 'desc'), orderBy('time', 'desc'));
     const unsubscribeMatches = onSnapshot(qMatches, (snapshot) => {
-      setMatches(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match)));
+      let matchesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match));
+      
+      if (adminData && adminData.role !== 'master' && adminData.locationId) {
+        matchesData = matchesData.filter(m => m.locationId === adminData.locationId);
+      }
+      
+      setMatches(matchesData);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'matches'));
 
     const qPlayers = query(collection(db, 'players'));
     const unsubscribePlayers = onSnapshot(qPlayers, (snapshot) => {
-      const playersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
+      let playersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
+      
+      if (adminData && adminData.role !== 'master' && adminData.locationId) {
+        playersData = playersData.filter(p => p.locationId === adminData.locationId);
+      }
+      
       setPlayers(playersData);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'players'));
 
@@ -34,7 +49,13 @@ export default function PublicDashboard() {
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'locations'));
 
     const unsubscribeTeams = onSnapshot(collection(db, 'teams'), (snapshot) => {
-      setTeams(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team)));
+      let teamsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team));
+      
+      if (adminData && adminData.role !== 'master' && adminData.locationId) {
+        teamsData = teamsData.filter(t => t.locationId === adminData.locationId);
+      }
+      
+      setTeams(teamsData);
       setLoading(false);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'teams'));
 
@@ -44,7 +65,7 @@ export default function PublicDashboard() {
       unsubscribeLocations();
       unsubscribeTeams();
     };
-  }, []);
+  }, [adminData]);
 
   const topScorers = [...players].sort((a, b) => b.stats.goals - a.stats.goals).slice(0, 5);
   const topPoints = [...players].sort((a, b) => (b.stats.points || 0) - (a.stats.points || 0)).slice(0, 5);
@@ -69,9 +90,17 @@ export default function PublicDashboard() {
       {/* Main Content: Match Results */}
       <div className="lg:col-span-8 space-y-6">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-2xl font-black uppercase italic tracking-tight flex items-center gap-2">
-            <TrendingUp className="text-[#00ff00]" /> Últimos Resultados
-          </h2>
+          <div className="flex flex-col">
+            <h2 className="text-2xl font-black uppercase italic tracking-tight flex items-center gap-2">
+              <TrendingUp className="text-[#00ff00]" /> Últimos Resultados
+            </h2>
+            {adminData && adminData.role !== 'master' && adminData.locationId && (
+              <div className="flex items-center gap-1 text-gray-500 text-[10px] uppercase font-bold tracking-widest mt-1">
+                <MapPin className="w-3 h-3 text-[#00ff00]" />
+                Restrito a: {getLocationName(adminData.locationId)}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="space-y-4">

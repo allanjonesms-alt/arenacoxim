@@ -3,7 +3,7 @@ import { Routes, Route, Link, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
 import { auth, db } from './firebase';
 import { doc, getDoc, setDoc, getDocFromServer, collection, query, where, getDocs } from 'firebase/firestore';
-import { Trophy, Users, Calendar, LayoutDashboard, LogIn, LogOut, Menu, X, ShieldCheck, AlertTriangle, MapPin, User as UserIcon } from 'lucide-react';
+import { Trophy, Users, Calendar, LayoutDashboard, LogIn, LogOut, Menu, X, ShieldCheck, MapPin, TrendingUp, User as UserIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AdminData } from './types';
 
@@ -15,55 +15,6 @@ import MatchManagement from './pages/MatchManagement';
 import TeamManagement from './pages/TeamManagement';
 import LocationManagement from './pages/LocationManagement';
 import AdminManagement from './pages/AdminManagement';
-
-// Error Boundary
-interface ErrorBoundaryProps {
-  children: React.ReactNode;
-}
-
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-}
-
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("Uncaught error:", error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4">
-          <div className="bg-[#1a1a1a] border border-red-500/50 p-8 rounded-3xl max-w-md w-full text-center space-y-4">
-            <AlertTriangle className="w-12 h-12 text-red-500 mx-auto" />
-            <h2 className="text-xl font-black uppercase italic">Algo deu errado</h2>
-            <p className="text-gray-400 text-sm">
-              Ocorreu um erro inesperado. Por favor, tente recarregar a página.
-            </p>
-            <button 
-              onClick={() => window.location.reload()}
-              className="w-full bg-red-500 text-white py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-red-600 transition-colors"
-            >
-              Recarregar
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    return this.props.children;
-  }
-}
 
 export enum OperationType {
   CREATE = 'create',
@@ -201,9 +152,8 @@ export default function App() {
   }
 
   return (
-    <ErrorBoundary>
-      <div className="min-h-screen bg-[#0a0a0a] text-white font-sans selection:bg-[#00ff00] selection:text-black">
-      {/* Navigation */}
+    <div className="min-h-screen bg-[#0a0a0a] text-white font-sans selection:bg-[#00ff00] selection:text-black">
+    {/* Navigation */}
         <nav className="bg-[#1a1a1a] border-b border-white/10 sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
@@ -220,7 +170,9 @@ export default function App() {
 
               {/* Desktop Menu */}
               <div className="hidden md:flex items-center gap-6">
-                <Link to="/" className="hover:text-[#00ff00] transition-colors font-medium text-sm uppercase tracking-wider">Resultados</Link>
+                <Link to="/" className="hover:text-[#00ff00] transition-colors font-medium text-sm uppercase tracking-wider flex items-center gap-1">
+                  <TrendingUp className="w-4 h-4" /> Resultados
+                </Link>
                 {isAdmin && (
                   <>
                     <Link to="/admin" className="hover:text-[#00ff00] transition-colors font-medium text-sm uppercase tracking-wider flex items-center gap-1">
@@ -242,6 +194,11 @@ export default function App() {
                     <Link to="/admin/matches" className="hover:text-[#00ff00] transition-colors font-medium text-sm uppercase tracking-wider flex items-center gap-1">
                       <Calendar className="w-4 h-4" /> Partidas
                     </Link>
+                    {adminData?.role === 'master' && (
+                      <Link to="/admin/scoring" className="hover:text-[#00ff00] transition-colors font-medium text-sm uppercase tracking-wider flex items-center gap-1">
+                        <Trophy className="w-4 h-4" /> Regras
+                      </Link>
+                    )}
                   </>
                 )}
                 
@@ -290,19 +247,38 @@ export default function App() {
                 className="md:hidden bg-[#1a1a1a] border-t border-white/10 overflow-hidden"
               >
                 <div className="px-4 pt-2 pb-6 space-y-2">
-                  <Link to="/" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">Resultados</Link>
+                  <Link to="/" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">
+                    <TrendingUp className="w-4 h-4 text-[#00ff00]" /> Resultados
+                  </Link>
                   {isAdmin && (
                     <>
-                      <Link to="/admin" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">Painel</Link>
-                      <Link to="/admin/players" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">Jogadores</Link>
-                      <Link to="/admin/teams" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">Times</Link>
+                      <Link to="/admin" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">
+                        <LayoutDashboard className="w-4 h-4 text-[#00ff00]" /> Painel
+                      </Link>
+                      <Link to="/admin/players" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">
+                        <Users className="w-4 h-4 text-[#00ff00]" /> Jogadores
+                      </Link>
+                      <Link to="/admin/teams" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">
+                        <ShieldCheck className="w-4 h-4 text-[#00ff00]" /> Times
+                      </Link>
                       {adminData?.role === 'master' && (
                         <>
-                          <Link to="/admin/locations" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">Locais</Link>
-                          <Link to="/admin/admins" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">Admins</Link>
+                          <Link to="/admin/locations" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">
+                            <MapPin className="w-4 h-4 text-[#00ff00]" /> Locais
+                          </Link>
+                          <Link to="/admin/admins" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">
+                            <UserIcon className="w-4 h-4 text-[#00ff00]" /> Admins
+                          </Link>
                         </>
                       )}
-                      <Link to="/admin/matches" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">Partidas</Link>
+                      <Link to="/admin/matches" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">
+                        <Calendar className="w-4 h-4 text-[#00ff00]" /> Partidas
+                      </Link>
+                      {adminData?.role === 'master' && (
+                        <Link to="/admin/scoring" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">
+                          <Trophy className="w-4 h-4 text-[#00ff00]" /> Regras
+                        </Link>
+                      )}
                     </>
                   )}
                   {user ? (
@@ -319,7 +295,7 @@ export default function App() {
         {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Routes>
-            <Route path="/" element={<PublicDashboard />} />
+            <Route path="/" element={<PublicDashboard adminData={adminData} />} />
             {isAdmin && (
               <>
                 <Route path="/admin" element={<AdminPanel adminData={adminData} />} />
@@ -351,6 +327,5 @@ export default function App() {
           </div>
         </footer>
       </div>
-    </ErrorBoundary>
   );
 }

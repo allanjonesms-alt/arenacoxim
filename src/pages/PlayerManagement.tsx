@@ -17,6 +17,7 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<string>('all');
 
   // Form State
   const [name, setName] = useState('');
@@ -184,7 +185,11 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
   };
 
   const filteredPlayers = players
-    .filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    .filter(p => {
+      const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesLocation = selectedLocationId === 'all' || p.locationId === selectedLocationId;
+      return matchesSearch && matchesLocation;
+    })
     .sort((a, b) => {
       const avgA = a.overallStats ? calculateAverage(a.overallStats) : 0;
       const avgB = b.overallStats ? calculateAverage(b.overallStats) : 0;
@@ -317,9 +322,27 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-black uppercase italic tracking-tight">Gestão de Jogadores</h2>
-          <p className="text-gray-500 text-sm">Cadastre e gerencie os atletas da arena.</p>
+        <div className="flex flex-col md:flex-row md:items-center gap-4">
+          <div>
+            <h2 className="text-3xl font-black uppercase italic tracking-tight">Gestão de Jogadores</h2>
+            <p className="text-gray-500 text-sm">Cadastre e gerencie os atletas da arena.</p>
+          </div>
+
+          {adminData?.role === 'master' && (
+            <div className="flex items-center gap-2 bg-[#1a1a1a] p-1 rounded-xl border border-white/5">
+              <MapPin className="w-4 h-4 text-[#00ff00] ml-2" />
+              <select
+                value={selectedLocationId}
+                onChange={(e) => setSelectedLocationId(e.target.value)}
+                className="bg-transparent text-xs font-bold uppercase tracking-widest py-2 px-3 outline-none border-none focus:ring-0"
+              >
+                <option value="all">Todos os Locais</option>
+                {locations.map(loc => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         <button 
           onClick={() => setIsModalOpen(true)}

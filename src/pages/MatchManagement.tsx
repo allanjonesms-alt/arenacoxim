@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, addDoc, onSnapshot, doc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, doc, updateDoc, writeBatch, deleteDoc } from 'firebase/firestore';
 import { Player, Match, Location, Team, ScoringRules, AdminData } from '../types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Calendar, MapPin, Clock, Plus, Users, CheckCircle2, XCircle, Trophy, Goal, Map, ShieldCheck, X } from 'lucide-react';
+import { Calendar, MapPin, Clock, Plus, Users, CheckCircle2, XCircle, Trophy, Goal, Map, ShieldCheck, X, Trash2, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SoccerJersey } from '../components/SoccerJersey';
 import { SoccerBall, SoccerCleat, GoalkeeperGlove } from '../components/Icons';
@@ -38,13 +38,14 @@ export default function MatchManagement({ adminData }: MatchManagementProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPlayerSelectionOpen, setIsPlayerSelectionOpen] = useState(false);
   const [activeMatch, setActiveMatch] = useState<Match | null>(null);
+  const [matchToDelete, setMatchToDelete] = useState<Match | null>(null);
+  const [editingMatch, setEditingMatch] = useState<Match | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<string>('all');
 
   // Form State
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [time, setTime] = useState('19:00');
   const [locationId, setLocationId] = useState('');
-  const [teamAId, setTeamAId] = useState('');
-  const [teamBId, setTeamBId] = useState('');
 
   useEffect(() => {
     const unsubscribeMatches = onSnapshot(collection(db, 'matches'), (snapshot) => {
@@ -128,27 +129,36 @@ export default function MatchManagement({ adminData }: MatchManagementProps) {
     setIsPlayerSelectionOpen(true);
   };
 
-  const onConfirmPlayerSelection = async (teamAPlayers: string[], teamBPlayers: string[], goalkeeperAId: string, goalkeeperBId: string) => {
+  const onConfirmPlayerSelection = async (tAId: string, tBId: string, teamAPlayers: string[], teamBPlayers: string[], goalkeeperAId: string, goalkeeperBId: string) => {
     try {
-      await addDoc(collection(db, 'matches'), {
+      const matchData = {
         date,
         time,
         locationId,
-        teamAId,
-        teamBId,
+        teamAId: tAId,
+        teamBId: tBId,
         teamA: teamAPlayers,
         teamB: teamBPlayers,
         goalkeeperAId,
         goalkeeperBId,
-        scoreA: 0,
-        scoreB: 0,
-        status: 'scheduled',
-        createdAt: Date.now()
-      });
+      };
+
+      if (editingMatch) {
+        await updateDoc(doc(db, 'matches', editingMatch.id), matchData);
+      } else {
+        await addDoc(collection(db, 'matches'), {
+          ...matchData,
+          scoreA: 0,
+          scoreB: 0,
+          status: 'scheduled',
+          createdAt: Date.now()
+        });
+      }
       setIsPlayerSelectionOpen(false);
+      setEditingMatch(null);
       resetForm();
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'matches');
+      handleFirestoreError(error, editingMatch ? OperationType.UPDATE : OperationType.CREATE, 'matches');
     }
   };
 
@@ -156,8 +166,17 @@ export default function MatchManagement({ adminData }: MatchManagementProps) {
     setDate(format(new Date(), 'yyyy-MM-dd'));
     setTime('19:00');
     setLocationId(adminData && adminData.role !== 'master' && adminData.locationId ? adminData.locationId : '');
-    setTeamAId('');
-    setTeamBId('');
+    setEditingMatch(null);
+  };
+  
+  const handleDeleteMatch = async () => {
+    if (!matchToDelete) return;
+    try {
+      await deleteDoc(doc(db, 'matches', matchToDelete.id));
+      setMatchToDelete(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'matches');
+    }
   };
 
   const getLocationName = (locId: string) => {
@@ -467,9 +486,27 @@ export default function MatchManagement({ adminData }: MatchManagementProps) {
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-black uppercase italic tracking-tight">Gestão de Partidas</h2>
-          <p className="text-gray-500 text-sm">Agende jogos e registre resultados.</p>
+        <div className="flex flex-col md:flex-row md:items-center gap-4">
+          <div>
+            <h2 className="text-3xl font-black uppercase italic tracking-tight">Gestão de Partidas</h2>
+            <p className="text-gray-500 text-sm">Agende jogos e registre resultados.</p>
+          </div>
+          
+          {adminData?.role === 'master' && (
+            <div className="flex items-center gap-2 bg-[#1a1a1a] p-1 rounded-xl border border-white/5">
+              <MapPin className="w-4 h-4 text-[#00ff00] ml-2" />
+              <select
+                value={selectedLocationId}
+                onChange={(e) => setSelectedLocationId(e.target.value)}
+                className="bg-transparent text-xs font-bold uppercase tracking-widest py-2 px-3 outline-none border-none focus:ring-0"
+              >
+                <option value="all">Todos os Locais</option>
+                {locations.map(loc => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         <button 
           onClick={() => {
@@ -483,7 +520,9 @@ export default function MatchManagement({ adminData }: MatchManagementProps) {
       </div>
 
       <div className="grid grid-cols-1 gap-4">
-        {matches.map((match) => (
+        {matches
+          .filter(m => selectedLocationId === 'all' || m.locationId === selectedLocationId)
+          .map((match) => (
           <div key={match.id} className="bg-[#1a1a1a] rounded-2xl border border-white/5 p-6 flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-6">
               <div className="bg-[#222] p-4 rounded-2xl text-center min-w-[100px]">
@@ -525,21 +564,46 @@ export default function MatchManagement({ adminData }: MatchManagementProps) {
               </div>
             </div>
 
-            <div className="flex items-center gap-8">
+            <div className="flex items-center gap-4 md:gap-8">
               <div className="text-center">
                 <div className="text-3xl font-black italic">{match.scoreA} - {match.scoreB}</div>
                 <div className={`text-[10px] uppercase font-black tracking-widest mt-1 ${match.status === 'finished' ? 'text-gray-500' : 'text-[#00ff00]'}`}>
                   {match.status === 'finished' ? 'Finalizado' : 'Em Aberto'}
                 </div>
               </div>
-              {match.status === 'scheduled' && (
+              <div className="flex items-center gap-2">
+                {match.status === 'scheduled' && (
+                  <>
+                    <button 
+                      onClick={() => setActiveMatch(match)}
+                      className="bg-white/5 hover:bg-[#00ff00]/20 hover:text-[#00ff00] p-3 rounded-xl transition-all"
+                      title="Iniciar Partida"
+                    >
+                      <CheckCircle2 className="w-6 h-6" />
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setEditingMatch(match);
+                        setDate(match.date);
+                        setTime(match.time);
+                        setLocationId(match.locationId);
+                        setIsModalOpen(true);
+                      }}
+                      className="bg-white/5 hover:bg-blue-500/20 hover:text-blue-500 p-3 rounded-xl transition-all"
+                      title="Editar Partida"
+                    >
+                      <Pencil className="w-6 h-6" />
+                    </button>
+                  </>
+                )}
                 <button 
-                  onClick={() => setActiveMatch(match)}
-                  className="bg-white/5 hover:bg-[#00ff00]/20 hover:text-[#00ff00] p-3 rounded-xl transition-all"
+                  onClick={() => setMatchToDelete(match)}
+                  className="bg-white/5 hover:bg-red-500/20 hover:text-red-500 p-3 rounded-xl transition-all"
+                  title="Excluir Partida"
                 >
-                  <CheckCircle2 className="w-6 h-6" />
+                  <Trash2 className="w-6 h-6" />
                 </button>
-              )}
+              </div>
             </div>
           </div>
         ))}
@@ -549,33 +613,36 @@ export default function MatchManagement({ adminData }: MatchManagementProps) {
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => {
+              setIsModalOpen(false);
+              setEditingMatch(null);
+            }} />
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               className="relative bg-[#1a1a1a] w-full max-w-4xl rounded-2xl md:rounded-3xl border border-white/10 overflow-hidden max-h-[95vh] overflow-y-auto"
             >
               <form onSubmit={handleCreateMatch} className="p-4 md:p-8 space-y-6 md:space-y-8">
-                <h3 className="text-xl md:text-2xl font-black uppercase italic tracking-tight text-center">Agendar Nova Partida</h3>
+                <h3 className="text-xl md:text-2xl font-black uppercase italic tracking-tight text-center">
+                  {editingMatch ? 'Editar Partida' : 'Agendar Nova Partida'}
+                </h3>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-                  <div className="space-y-3 lg:col-span-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-3">
                     <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest flex items-center justify-between">
                       Local da Partida
-                      <Link to="/admin/locations" className="text-[#00ff00] hover:underline normal-case font-bold flex items-center gap-1">
-                        <Plus className="w-2 h-2" /> Novo
-                      </Link>
+                      {adminData?.role === 'master' && (
+                        <Link to="/admin/locations" className="text-[#00ff00] hover:underline normal-case font-bold flex items-center gap-1">
+                          <Plus className="w-2 h-2" /> Novo
+                        </Link>
+                      )}
                     </label>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {locations.map(loc => (
                         <button
                           key={loc.id}
                           type="button"
-                          onClick={() => {
-                            setLocationId(loc.id);
-                            setTeamAId('');
-                            setTeamBId('');
-                          }}
+                          onClick={() => setLocationId(loc.id)}
                           className={`p-3 rounded-xl border text-xs font-bold transition-all text-center ${locationId === loc.id ? 'bg-[#00ff00]/10 border-[#00ff00] text-[#00ff00]' : 'bg-black/20 border-white/10 text-gray-400 hover:border-white/30'}`}
                         >
                           {loc.name}
@@ -584,7 +651,7 @@ export default function MatchManagement({ adminData }: MatchManagementProps) {
                     </div>
                   </div>
 
-                  <div className="space-y-2 lg:col-span-3">
+                  <div className="space-y-2">
                     <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest">Data e Horário</label>
                     <div className="flex gap-4">
                       <input required type="date" value={date} onChange={e => setDate(e.target.value)} className="flex-1 bg-black/20 border border-white/10 rounded-xl py-3 px-4 focus:border-[#00ff00] outline-none" />
@@ -593,80 +660,8 @@ export default function MatchManagement({ adminData }: MatchManagementProps) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* Team A Selection */}
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest flex items-center justify-between">
-                        TIME A
-                        <Link to="/admin/teams" className="text-[#00ff00] hover:underline normal-case font-bold flex items-center gap-1">
-                          <Plus className="w-2 h-2" /> Novo
-                        </Link>
-                      </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {teams.filter(t => {
-                          if (!locationId) return false;
-                          const selectedLoc = locations.find(l => l.id === locationId);
-                          return t.locationId === locationId || (selectedLoc && t.locationId === selectedLoc.name);
-                        }).map(t => (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() => setTeamAId(t.id)}
-                            className={`p-3 rounded-xl border text-[10px] font-black transition-all flex items-center gap-3 ${teamAId === t.id ? 'bg-[#00ff00]/10 border-[#00ff00] text-[#00ff00]' : 'bg-black/20 border-white/10 text-gray-500'}`}
-                          >
-                            <SoccerJersey color={t.color} size={24} />
-                            {t.name.toUpperCase()}
-                          </button>
-                        ))}
-                        {locationId && teams.filter(t => {
-                          const selectedLoc = locations.find(l => l.id === locationId);
-                          return t.locationId === locationId || (selectedLoc && t.locationId === selectedLoc.name);
-                        }).length === 0 && (
-                          <p className="text-[10px] text-gray-500 col-span-2 text-center py-2 italic">Nenhum time neste local.</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Team B Selection */}
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest flex items-center justify-between">
-                        TIME B
-                        <Link to="/admin/teams" className="text-blue-500 hover:underline normal-case font-bold flex items-center gap-1">
-                          <Plus className="w-2 h-2" /> Novo
-                        </Link>
-                      </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {teams.filter(t => {
-                          if (!locationId) return false;
-                          const selectedLoc = locations.find(l => l.id === locationId);
-                          return t.locationId === locationId || (selectedLoc && t.locationId === selectedLoc.name);
-                        }).map(t => (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() => setTeamBId(t.id)}
-                            className={`p-3 rounded-xl border text-[10px] font-black transition-all flex items-center gap-3 ${teamBId === t.id ? 'bg-blue-500/10 border-blue-500 text-blue-500' : 'bg-black/20 border-white/10 text-gray-500'}`}
-                          >
-                            <SoccerJersey color={t.color} size={24} />
-                            {t.name.toUpperCase()}
-                          </button>
-                        ))}
-                        {locationId && teams.filter(t => {
-                          const selectedLoc = locations.find(l => l.id === locationId);
-                          return t.locationId === locationId || (selectedLoc && t.locationId === selectedLoc.name);
-                        }).length === 0 && (
-                          <p className="text-[10px] text-gray-500 col-span-2 text-center py-2 italic">Nenhum time neste local.</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <button type="submit" disabled={!locationId || !teamAId || !teamBId || teamAId === teamBId} className="w-full bg-[#00ff00] text-black py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-[#00cc00] transition-colors disabled:bg-gray-800 disabled:text-gray-500">
-                  Próximo: Escalar Atletas
+                <button type="submit" disabled={!locationId} className="w-full bg-[#00ff00] text-black py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-[#00cc00] transition-colors disabled:bg-gray-800 disabled:text-gray-500">
+                  Próximo: Selecionar Atletas
                 </button>
               </form>
             </motion.div>
@@ -682,14 +677,63 @@ export default function MatchManagement({ adminData }: MatchManagementProps) {
       {/* Player Selection Modal */}
       <PlayerSelectionModal
         isOpen={isPlayerSelectionOpen}
-        onClose={() => setIsPlayerSelectionOpen(false)}
+        onClose={() => {
+          setIsPlayerSelectionOpen(false);
+          setEditingMatch(null);
+        }}
         onConfirm={onConfirmPlayerSelection}
         players={players}
-        teamA={teams.find(t => t.id === teamAId)}
-        teamB={teams.find(t => t.id === teamBId)}
+        allTeams={teams}
+        allLocations={locations}
         locationId={locationId}
         playerCount={locations.find(l => l.id === locationId)?.playerCount || 5}
+        initialData={editingMatch ? {
+          teamAId: editingMatch.teamAId,
+          teamBId: editingMatch.teamBId,
+          teamAPlayers: editingMatch.teamA,
+          teamBPlayers: editingMatch.teamB,
+          goalkeeperAId: editingMatch.goalkeeperAId || '',
+          goalkeeperBId: editingMatch.goalkeeperBId || ''
+        } : undefined}
       />
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {matchToDelete && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setMatchToDelete(null)} />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="relative bg-[#1a1a1a] w-full max-w-md rounded-3xl border border-white/10 p-8 text-center"
+            >
+              <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Trash2 className="w-10 h-10 text-red-500" />
+              </div>
+              <h3 className="text-2xl font-black uppercase italic mb-2">Excluir Partida?</h3>
+              <p className="text-gray-400 mb-8">
+                Esta ação não pode ser desfeita. 
+                {matchToDelete.status === 'finished' && ' Os pontos já atribuídos aos atletas não serão removidos automaticamente.'}
+              </p>
+              
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => setMatchToDelete(null)}
+                  className="flex-1 bg-white/5 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-white/10 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleDeleteMatch}
+                  className="flex-1 bg-red-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-red-600 transition-colors"
+                >
+                  Excluir
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

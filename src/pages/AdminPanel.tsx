@@ -3,6 +3,7 @@ import { db } from '../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { Player, Match, AdminData, Admin } from '../types';
 import { Trophy, Users, Calendar, TrendingUp, ShieldCheck, User, ChevronRight } from 'lucide-react';
+import { format } from 'date-fns';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import { SoccerBall } from '../components/Icons';
@@ -20,6 +21,7 @@ export default function AdminPanel({ adminData }: AdminPanelProps) {
     activeAdmins: 0
   });
   const [recentPlayers, setRecentPlayers] = useState<Player[]>([]);
+  const [recentMatches, setRecentMatches] = useState<Match[]>([]);
 
   useEffect(() => {
     const unsubPlayers = onSnapshot(collection(db, 'players'), (snap) => {
@@ -45,6 +47,7 @@ export default function AdminPanel({ adminData }: AdminPanelProps) {
       }
 
       setStats(prev => ({ ...prev, totalMatches: matches.length }));
+      setRecentMatches(matches.slice(0, 5));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'matches'));
 
     const unsubAdmins = onSnapshot(collection(db, 'admins'), (snap) => {
@@ -105,25 +108,54 @@ export default function AdminPanel({ adminData }: AdminPanelProps) {
             <TrendingUp className="text-[#00ff00] w-4 h-4" /> Jogadores Recentes
           </h3>
           <div className="space-y-4">
-            {recentPlayers.map(player => (
-              <div key={player.id} className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                <div className="flex items-center gap-3">
-                  {player.photoUrl ? (
-                    <img src={player.photoUrl} className="w-8 h-8 rounded-full object-cover" />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center">
-                      <User size={16} className="text-gray-600" />
-                    </div>
-                  )}
-                  <span className="text-sm font-bold">{player.name}</span>
+            {recentPlayers.length === 0 ? (
+              <p className="text-gray-500 text-xs text-center py-4">Nenhum jogador encontrado.</p>
+            ) : (
+              recentPlayers.map(player => (
+                <div key={player.id} className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    {player.photoUrl ? (
+                      <img src={player.photoUrl} className="w-8 h-8 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center">
+                        <User size={16} className="text-gray-600" />
+                      </div>
+                    )}
+                    <span className="text-sm font-bold">{player.name}</span>
+                  </div>
+                  <span className="text-[10px] uppercase font-black text-gray-500">{player.position}</span>
                 </div>
-                <span className="text-[10px] uppercase font-black text-gray-500">{player.position}</span>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-[#1a1a1a] to-[#111] rounded-2xl border border-white/5 p-8 flex flex-col justify-center text-center">
+        <div className="bg-[#1a1a1a] rounded-2xl border border-white/5 p-8">
+          <h3 className="text-sm font-black uppercase tracking-widest italic mb-6 flex items-center gap-2">
+            <Calendar className="text-[#00ff00] w-4 h-4" /> Partidas Recentes
+          </h3>
+          <div className="space-y-4">
+            {recentMatches.length === 0 ? (
+              <p className="text-gray-500 text-xs text-center py-4">Nenhuma partida encontrada.</p>
+            ) : (
+              recentMatches.map(match => (
+                <div key={match.id} className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="text-xs font-black italic text-[#00ff00]">
+                      {match.scoreA} - {match.scoreB}
+                    </div>
+                    <span className="text-xs font-bold">{format(new Date(match.date + 'T00:00:00'), 'dd/MM')}</span>
+                  </div>
+                  <span className={`text-[10px] uppercase font-black ${match.status === 'finished' ? 'text-gray-500' : 'text-[#00ff00]'}`}>
+                    {match.status === 'finished' ? 'Finalizada' : 'Agendada'}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-[#1a1a1a] to-[#111] rounded-2xl border border-white/5 p-8 flex flex-col justify-center text-center lg:col-span-2">
           <Trophy className="w-16 h-16 text-[#00ff00] mx-auto mb-4 animate-bounce" />
           <h3 className="text-xl font-black uppercase italic mb-2">ARENA COXIM Pro</h3>
           <p className="text-gray-500 text-sm mb-6">Você está no comando da melhor gestão de peladas da região.</p>

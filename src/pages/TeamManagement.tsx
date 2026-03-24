@@ -29,6 +29,7 @@ export default function TeamManagement({ adminData }: TeamManagementProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<string>('all');
 
   // Form State
   const [name, setName] = useState('');
@@ -146,16 +147,36 @@ export default function TeamManagement({ adminData }: TeamManagementProps) {
 
   const filteredTeams = teams.filter(t => {
     const locName = getLocationName(t.locationId);
-    return t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           locName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         locName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesLocation = selectedLocationId === 'all' || t.locationId === selectedLocationId;
+    return matchesSearch && matchesLocation;
   });
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-black uppercase italic tracking-tight">Gestão de Times</h2>
-          <p className="text-gray-500 text-sm">Cadastre os times, locais e uniformes.</p>
+        <div className="flex flex-col md:flex-row md:items-center gap-4">
+          <div>
+            <h2 className="text-3xl font-black uppercase italic tracking-tight">Gestão de Times</h2>
+            <p className="text-gray-500 text-sm">Cadastre os times, locais e uniformes.</p>
+          </div>
+
+          {adminData?.role === 'master' && (
+            <div className="flex items-center gap-2 bg-[#1a1a1a] p-1 rounded-xl border border-white/5">
+              <MapPin className="w-4 h-4 text-[#00ff00] ml-2" />
+              <select
+                value={selectedLocationId}
+                onChange={(e) => setSelectedLocationId(e.target.value)}
+                className="bg-transparent text-xs font-bold uppercase tracking-widest py-2 px-3 outline-none border-none focus:ring-0"
+              >
+                <option value="all">Todos os Locais</option>
+                {locations.map(loc => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         <button 
           onClick={() => setIsModalOpen(true)}
@@ -292,9 +313,11 @@ export default function TeamManagement({ adminData }: TeamManagementProps) {
                   <div className="space-y-1.5">
                     <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest flex items-center justify-between">
                       Local de Jogo
-                      <Link to="/admin/locations" className="text-[#00ff00] hover:underline normal-case font-bold flex items-center gap-1">
-                        <Plus className="w-2 h-2" /> Novo
-                      </Link>
+                      {adminData?.role === 'master' && (
+                        <Link to="/admin/locations" className="text-[#00ff00] hover:underline normal-case font-bold flex items-center gap-1">
+                          <Plus className="w-2 h-2" /> Novo
+                        </Link>
+                      )}
                     </label>
                     <select 
                       required

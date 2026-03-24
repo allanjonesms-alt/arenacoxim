@@ -60,8 +60,7 @@ export const RandomSelectionModal: React.FC<RandomSelectionModalProps> = ({
     setTargetTeam(null);
     
     // Deduplicate players by ID to prevent duplicate names
-    const uniquePlayers = Array.from(new Map(players.map(p => [p.id, p])).values());
-    const availablePlayers = uniquePlayers.filter(p => p.locationId === locationId);
+    const availablePlayers = Array.from(new Map(players.map(p => [p.id, p])).values());
     
     const goalkeepers = availablePlayers.filter(p => p.position === 'goleiro');
     const fieldPlayers = availablePlayers.filter(p => p.position !== 'goleiro').sort((a, b) => calculateOverall(b) - calculateOverall(a));
@@ -272,11 +271,6 @@ export const RandomSelectionModal: React.FC<RandomSelectionModalProps> = ({
                         <User size={40} className="text-black/40" />
                       </div>
                     )}
-                    <div 
-                      className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full border-4 border-black/10 flex items-center justify-center text-[10px] font-black bg-black text-white"
-                    >
-                      {targetTeam}
-                    </div>
                   </div>
                   <h3 className="relative z-10 text-black font-black text-2xl uppercase italic leading-tight text-center">
                     {currentSelection.nickname || currentSelection.name}
