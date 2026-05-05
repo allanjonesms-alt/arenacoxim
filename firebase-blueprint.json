@@ -39,12 +39,18 @@
       "properties": {
         "date": { "type": "string", "format": "date" },
         "time": { "type": "string" },
-        "location": { "type": "string" },
+        "locationId": { "type": "string" },
+        "teamAId": { "type": "string" },
+        "teamBId": { "type": "string" },
         "teamA": { "type": "array", "items": { "type": "string" } },
         "teamB": { "type": "array", "items": { "type": "string" } },
+        "confirmedPlayers": { "type": "array", "items": { "type": "string" } },
+        "goalkeeperAId": { "type": "string" },
+        "goalkeeperBId": { "type": "string" },
         "scoreA": { "type": "integer" },
         "scoreB": { "type": "integer" },
-        "status": { "type": "string", "enum": ["scheduled", "finished"] },
+        "substitutesCount": { "type": "integer" },
+        "status": { "type": "string", "enum": ["scheduled", "live", "finished"] },
         "mvpId": { "type": "string", "description": "ID of the match MVP" },
         "events": {
           "type": "array",
@@ -55,9 +61,10 @@
               "type": { "type": "string", "enum": ["goal", "assist"] }
             }
           }
-        }
+        },
+        "createdAt": { "type": "integer" }
       },
-      "required": ["date", "time", "location", "status"]
+      "required": ["date", "time", "locationId", "status", "createdAt"]
     },
     "Admin": {
       "title": "Admin",
@@ -90,8 +97,10 @@
       "properties": {
         "name": { "type": "string", "description": "Name of the location" },
         "address": { "type": "string", "description": "Full address of the location" },
-        "playerCount": { "type": "integer", "description": "Total players per match" },
-        "gameDuration": { "type": "integer", "description": "Duration in minutes" }
+        "playerCount": { "type": "integer", "description": "Players per team in a match" },
+        "gameDuration": { "type": "integer", "description": "Duration in minutes" },
+        "allowSubstitutes": { "type": "boolean" },
+        "substitutesCount": { "type": "integer" }
       },
       "required": ["name"]
     },

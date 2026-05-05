@@ -102,7 +102,7 @@ export default function LocationManagement() {
           placeholder="Buscar local pelo nome ou endereço..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl py-4 pl-12 pr-4 focus:outline-none focus:border-[#00ff00] transition-colors"
+          className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl py-4 pl-12 pr-4 focus:outline-none focus:border-[#00ff00] transition-colors text-white"
         />
       </div>
 
@@ -192,7 +192,7 @@ export default function LocationManagement() {
                       type="text" 
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full bg-black/20 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:border-[#00ff00]"
+                      className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:border-[#00ff00] text-white"
                       placeholder="Ex: Arena Central"
                     />
                   </div>
@@ -202,7 +202,7 @@ export default function LocationManagement() {
                     <textarea 
                       value={address}
                       onChange={(e) => setAddress(e.target.value)}
-                      className="w-full bg-black/20 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:border-[#00ff00] min-h-[80px] resize-none"
+                      className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:border-[#00ff00] min-h-[80px] resize-none text-white"
                       placeholder="Rua Exemplo, 123 - Bairro"
                     />
                   </div>
@@ -215,7 +215,7 @@ export default function LocationManagement() {
                         type="number" 
                         value={playerCount}
                         onChange={(e) => setPlayerCount(parseInt(e.target.value) || 0)}
-                        className="w-full bg-black/20 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:border-[#00ff00]"
+                        className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:border-[#00ff00] text-white"
                         placeholder="Ex: 5"
                       />
                     </div>
@@ -226,7 +226,7 @@ export default function LocationManagement() {
                         type="number" 
                         value={gameDuration}
                         onChange={(e) => setGameDuration(parseInt(e.target.value) || 0)}
-                        className="w-full bg-black/20 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:border-[#00ff00]"
+                        className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:border-[#00ff00] text-white"
                         placeholder="Ex: 60"
                       />
                     </div>

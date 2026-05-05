@@ -168,11 +168,11 @@ export default function TeamManagement({ adminData }: TeamManagementProps) {
               <select
                 value={selectedLocationId}
                 onChange={(e) => setSelectedLocationId(e.target.value)}
-                className="bg-transparent text-xs font-bold uppercase tracking-widest py-2 px-3 outline-none border-none focus:ring-0"
+                className="bg-transparent text-white text-xs font-bold uppercase tracking-widest py-2 px-3 outline-none border-none focus:ring-0"
               >
-                <option value="all">Todos os Locais</option>
+                <option value="all" className="bg-[#1a1a1a] text-white">Todos os Locais</option>
                 {locations.map(loc => (
-                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                  <option key={loc.id} value={loc.id} className="bg-[#1a1a1a] text-white">{loc.name}</option>
                 ))}
               </select>
             </div>
@@ -221,7 +221,7 @@ export default function TeamManagement({ adminData }: TeamManagementProps) {
           placeholder="Buscar time ou local..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl py-4 pl-12 pr-4 focus:outline-none focus:border-[#00ff00] transition-colors"
+          className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl py-4 pl-12 pr-4 focus:outline-none focus:border-[#00ff00] transition-colors text-white"
         />
       </div>
 
@@ -305,7 +305,7 @@ export default function TeamManagement({ adminData }: TeamManagementProps) {
                       type="text" 
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 focus:outline-none focus:border-[#00ff00]"
+                      className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 px-4 focus:outline-none focus:border-[#00ff00] text-white"
                       placeholder="Ex: Real Madruga"
                     />
                   </div>
@@ -323,11 +323,11 @@ export default function TeamManagement({ adminData }: TeamManagementProps) {
                       required
                       value={locationId}
                       onChange={(e) => setLocationId(e.target.value)}
-                      className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 focus:outline-none focus:border-[#00ff00] appearance-none"
+                      className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 px-4 focus:outline-none focus:border-[#00ff00] appearance-none text-white"
                     >
-                      <option value="" disabled>Selecione um local</option>
+                      <option value="" disabled className="bg-[#1a1a1a] text-white">Selecione um local</option>
                       {locations.map(loc => (
-                        <option key={loc.id} value={loc.id}>{loc.name}</option>
+                        <option key={loc.id} value={loc.id} className="bg-[#1a1a1a] text-white">{loc.name}</option>
                       ))}
                     </select>
                     {locations.length === 0 && (
@@ -344,7 +344,7 @@ export default function TeamManagement({ adminData }: TeamManagementProps) {
                       max="20"
                       value={playerCount}
                       onChange={(e) => setPlayerCount(Number(e.target.value))}
-                      className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 focus:outline-none focus:border-[#00ff00]"
+                      className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 px-4 focus:outline-none focus:border-[#00ff00] text-white"
                       placeholder="Ex: 5"
                     />
                   </div>

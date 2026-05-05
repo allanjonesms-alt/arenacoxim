@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { Player, Match, AdminData, Admin } from '../types';
+import { getPositionAbbr, getPositionColor } from '../utils/playerUtils';
 import { Trophy, Users, Calendar, TrendingUp, ShieldCheck, User, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'motion/react';
@@ -123,7 +124,9 @@ export default function AdminPanel({ adminData }: AdminPanelProps) {
                     )}
                     <span className="text-sm font-bold">{player.name}</span>
                   </div>
-                  <span className="text-[10px] uppercase font-black text-gray-500">{player.position}</span>
+                  <span className={`text-[10px] uppercase font-black ${getPositionColor(player.position)}`}>
+                    {getPositionAbbr(player.position)}
+                  </span>
                 </div>
               ))
             )}
@@ -146,8 +149,11 @@ export default function AdminPanel({ adminData }: AdminPanelProps) {
                     </div>
                     <span className="text-xs font-bold">{format(new Date(match.date + 'T00:00:00'), 'dd/MM')}</span>
                   </div>
-                  <span className={`text-[10px] uppercase font-black ${match.status === 'finished' ? 'text-gray-500' : 'text-[#00ff00]'}`}>
-                    {match.status === 'finished' ? 'Finalizada' : 'Agendada'}
+                  <span className={`text-[10px] uppercase font-black ${
+                    match.status === 'finished' ? 'text-gray-500' : 
+                    match.status === 'live' ? 'text-[#00ff00] animate-pulse' : 'text-blue-500'
+                  }`}>
+                    {match.status === 'finished' ? 'Finalizada' : match.status === 'live' ? 'AO VIVO' : 'Agendada'}
                   </span>
                 </div>
               ))
@@ -161,6 +167,17 @@ export default function AdminPanel({ adminData }: AdminPanelProps) {
           <p className="text-gray-500 text-sm mb-6">Você está no comando da melhor gestão de peladas da região.</p>
           
           <div className="flex flex-col gap-3">
+            <button 
+              onClick={async () => {
+                const { recalculateAllPlayerStats } = await import('../utils/maintenanceUtils');
+                alert("Iniciando recalculo... isso pode demorar um pouco.");
+                await recalculateAllPlayerStats();
+                alert("Recalculado com sucesso!");
+              }}
+              className="flex items-center justify-center gap-2 bg-red-900 text-white py-3 px-6 rounded-xl font-black uppercase tracking-widest hover:bg-red-800 transition-all"
+            >
+              Recalcular Estatísticas Gerais
+            </button>
             {adminData?.role === 'master' && (
               <>
                 <Link 

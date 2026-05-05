@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, addDoc, onSnapshot, doc, deleteDoc, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, doc, deleteDoc, query, orderBy, updateDoc } from 'firebase/firestore';
 import { Admin, Location, AdminData } from '../types';
-import { Plus, Trash2, ShieldCheck, Mail, User, MapPin, Loader2, Search } from 'lucide-react';
+import { Plus, Trash2, ShieldCheck, Mail, User, MapPin, Loader2, Search, Edit2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../App';
 
@@ -22,9 +22,10 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
   const [email, setEmail] = useState('');
   const [locationId, setLocationId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [editingAdmin, setEditingAdmin] = useState<Admin | null>(null);
 
   useEffect(() => {
-    const qAdmins = query(collection(db, 'admins'), orderBy('createdAt', 'desc'));
+    const qAdmins = query(collection(db, 'admins'), orderBy('name', 'asc'));
     const unsubscribeAdmins = onSnapshot(qAdmins, (snapshot) => {
       let adminsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Admin));
       
@@ -55,38 +56,73 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
   }, [adminData]);
 
   useEffect(() => {
-    if (adminData && adminData.role !== 'master' && adminData.locationId) {
-      setLocationId(adminData.locationId);
+    if (isModalOpen && !editingAdmin) {
+      if (adminData && adminData.role !== 'master' && adminData.locationId) {
+        setLocationId(adminData.locationId);
+      }
     }
-  }, [adminData, isModalOpen]);
+  }, [adminData, isModalOpen, editingAdmin]);
 
   const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // Check for duplicate email
+    const isDuplicate = admins.some(a => a.email.toLowerCase().trim() === normalizedEmail && a.id !== editingAdmin?.id);
+    if (isDuplicate) {
+      alert('Já existe um administrador cadastrado com este e-mail.');
+      setSaving(false);
+      return;
+    }
+
     try {
-      await addDoc(collection(db, 'admins'), {
-        name,
-        email: email.toLowerCase().trim(),
-        locationId,
-        role: 'admin',
-        createdAt: Date.now()
-      });
+      if (editingAdmin) {
+        // Find if this is a UID doc or manual doc
+        // Actually updateDoc works the same for both if we have the ID
+        await updateDoc(doc(db, 'admins', editingAdmin.id), {
+          name,
+          email: normalizedEmail,
+          locationId,
+          role: 'admin'
+        });
+      } else {
+        await addDoc(collection(db, 'admins'), {
+          name,
+          email: normalizedEmail,
+          locationId,
+          role: 'admin',
+          createdAt: Date.now()
+        });
+      }
+      
       setIsModalOpen(false);
       setName('');
       setEmail('');
       setLocationId('');
+      setEditingAdmin(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'admins');
+      handleFirestoreError(error, editingAdmin ? OperationType.UPDATE : OperationType.CREATE, 'admins');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleEditAdmin = (admin: Admin) => {
+    setEditingAdmin(admin);
+    setName(admin.name);
+    setEmail(admin.email);
+    setLocationId(admin.locationId);
+    setIsModalOpen(true);
   };
 
   const handleDeleteAdmin = async (id: string) => {
     if (!window.confirm('Tem certeza que deseja remover este administrador?')) return;
     try {
       await deleteDoc(doc(db, 'admins', id));
-    } catch (error) {
+    } catch (error: any) {
+      alert('Erro ao excluir: ' + (error.message || 'Sem permissão'));
       handleFirestoreError(error, OperationType.DELETE, 'admins');
     }
   };
@@ -131,7 +167,7 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
           placeholder="Buscar por nome ou e-mail..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-[#1a1a1a] border border-white/10 rounded-2xl py-4 pl-12 pr-4 focus:border-[#00ff00] outline-none transition-all"
+          className="w-full bg-[#1a1a1a] border border-white/10 rounded-2xl py-4 pl-12 pr-4 focus:border-[#00ff00] outline-none transition-all text-white"
         />
       </div>
 
@@ -145,15 +181,35 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
             className="bg-[#1a1a1a] p-6 rounded-2xl border border-white/5 hover:border-[#00ff00]/30 transition-all group"
           >
             <div className="flex items-start justify-between mb-4">
-              <div className="bg-white/5 p-3 rounded-xl text-[#00ff00]">
-                <ShieldCheck className="w-6 h-6" />
+              <div className="flex gap-2">
+                <div className="bg-white/5 p-3 rounded-xl text-[#00ff00]">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                {admin.updatedAt ? (
+                  <div className="bg-[#00ff00]/10 text-[#00ff00] text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-full h-fit mt-1 border border-[#00ff00]/20">
+                    Ativo
+                  </div>
+                ) : (
+                  <div className="bg-orange-500/10 text-orange-500 text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-full h-fit mt-1 border border-orange-500/20">
+                    Pendente
+                  </div>
+                )}
               </div>
-              <button 
-                onClick={() => handleDeleteAdmin(admin.id)}
-                className="p-2 text-gray-600 hover:text-red-500 transition-colors"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
+              <div className="flex gap-1">
+                <button 
+                  onClick={() => handleEditAdmin(admin)}
+                  className="p-2 text-gray-600 hover:text-[#00ff00] transition-colors"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button 
+                  onClick={() => handleDeleteAdmin(admin.id)}
+                  className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                  title="Remover Administrador"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             
             <div className="space-y-3">
@@ -183,7 +239,13 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => {
+              setIsModalOpen(false);
+              setEditingAdmin(null);
+              setName('');
+              setEmail('');
+              setLocationId('');
+            }} />
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -195,8 +257,12 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
                   <div className="bg-[#00ff00]/10 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
                     <ShieldCheck className="w-8 h-8 text-[#00ff00]" />
                   </div>
-                  <h3 className="text-2xl font-black uppercase italic tracking-tight">Novo Administrador</h3>
-                  <p className="text-gray-500 text-sm mt-1">Cadastre um novo responsável por local.</p>
+                  <h3 className="text-2xl font-black uppercase italic tracking-tight">
+                    {editingAdmin ? 'Editar Administrador' : 'Novo Administrador'}
+                  </h3>
+                  <p className="text-gray-500 text-sm mt-1">
+                    {editingAdmin ? 'Alterando os dados do responsável.' : 'Cadastre um novo responsável por local.'}
+                  </p>
                 </div>
 
                 <div className="space-y-4">
@@ -210,7 +276,7 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
                       value={name}
                       onChange={e => setName(e.target.value)}
                       placeholder="Ex: João Silva"
-                      className="w-full bg-black/20 border border-white/10 rounded-xl py-3 px-4 focus:border-[#00ff00] outline-none transition-all"
+                      className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 focus:border-[#00ff00] outline-none transition-all text-white"
                     />
                   </div>
 
@@ -224,7 +290,7 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
                       value={email}
                       onChange={e => setEmail(e.target.value)}
                       placeholder="usuario@gmail.com"
-                      className="w-full bg-black/20 border border-white/10 rounded-xl py-3 px-4 focus:border-[#00ff00] outline-none transition-all"
+                      className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 focus:border-[#00ff00] outline-none transition-all text-white"
                     />
                   </div>
 
@@ -236,11 +302,11 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
                       required
                       value={locationId}
                       onChange={e => setLocationId(e.target.value)}
-                      className="w-full bg-black/20 border border-white/10 rounded-xl py-3 px-4 focus:border-[#00ff00] outline-none transition-all appearance-none"
+                      className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 focus:border-[#00ff00] outline-none transition-all appearance-none text-white"
                     >
-                      <option value="" disabled className="bg-[#1a1a1a]">Selecione um local</option>
+                      <option value="" disabled className="bg-[#1a1a1a] text-white">Selecione um local</option>
                       {locations.map(loc => (
-                        <option key={loc.id} value={loc.id} className="bg-[#1a1a1a]">{loc.name}</option>
+                        <option key={loc.id} value={loc.id} className="bg-[#1a1a1a] text-white">{loc.name}</option>
                       ))}
                     </select>
                   </div>
@@ -249,7 +315,13 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
                 <div className="flex gap-3 pt-4">
                   <button 
                     type="button"
-                    onClick={() => setIsModalOpen(false)}
+                    onClick={() => {
+                      setIsModalOpen(false);
+                      setEditingAdmin(null);
+                      setName('');
+                      setEmail('');
+                      setLocationId('');
+                    }}
                     className="flex-1 px-6 py-3 rounded-xl font-bold uppercase tracking-widest text-gray-500 hover:bg-white/5 transition-all"
                   >
                     Cancelar
@@ -259,8 +331,8 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
                     disabled={saving}
                     className="flex-1 bg-[#00ff00] text-black px-6 py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-[#00cc00] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-                    {saving ? 'Salvando...' : 'Cadastrar'}
+                    {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : (editingAdmin ? <ShieldCheck className="w-5 h-5" /> : <Plus className="w-5 h-5" />)}
+                    {saving ? 'Salvando...' : (editingAdmin ? 'Salvar' : 'Cadastrar')}
                   </button>
                 </div>
               </form>

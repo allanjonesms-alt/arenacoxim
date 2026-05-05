@@ -2,7 +2,7 @@ import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'rea
 import { Routes, Route, Link, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
 import { auth, db } from './firebase';
-import { doc, getDoc, setDoc, getDocFromServer, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, getDocFromServer, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { Trophy, Users, Calendar, LayoutDashboard, LogIn, LogOut, Menu, X, ShieldCheck, MapPin, TrendingUp, User as UserIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AdminData } from './types';
@@ -15,6 +15,7 @@ import MatchManagement from './pages/MatchManagement';
 import TeamManagement from './pages/TeamManagement';
 import LocationManagement from './pages/LocationManagement';
 import AdminManagement from './pages/AdminManagement';
+import Tabelas from './pages/Tabelas';
 
 export enum OperationType {
   CREATE = 'create',
@@ -57,32 +58,56 @@ export default function App() {
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      console.log("Current user:", currentUser?.email, currentUser?.uid);
       if (currentUser) {
         try {
           const isMaster = currentUser.email?.toLowerCase() === MASTER_EMAIL;
+          console.log("Is master:", isMaster);
           
           // Check if user is admin in Firestore by UID
           const adminRef = doc(db, 'admins', currentUser.uid);
           let adminDoc = await getDoc(adminRef);
           let adminDataFromDoc = adminDoc.exists() ? adminDoc.data() as AdminData : null;
+          console.log("Admin doc by UID exists:", adminDoc.exists(), adminDataFromDoc);
 
           // If not found by UID, check by email (for admins added via AdminManagement)
           if (!adminDataFromDoc && currentUser.email) {
+            const normalizedEmail = currentUser.email.toLowerCase().trim();
+            console.log("Checking by email:", normalizedEmail);
             const adminsQuery = query(
-              collection(db, 'admins'), 
-              where('email', '==', currentUser.email.toLowerCase().trim())
+              collection(db, 'admins')
             );
             const querySnapshot = await getDocs(adminsQuery);
-            if (!querySnapshot.empty) {
-              const docData = querySnapshot.docs[0].data() as AdminData;
+            const allAdmins = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            console.log("All admins in DB:");
+            console.table(allAdmins);
+            
+            const filteredAdmins = querySnapshot.docs.filter(d => {
+              const data = d.data();
+              return data.email?.toLowerCase().trim() === normalizedEmail;
+            });
+            
+            console.log("Filtered admins by email:", filteredAdmins.map(d => d.data()));
+            
+            if (filteredAdmins.length > 0) {
+              const docData = filteredAdmins[0].data() as AdminData;
               adminDataFromDoc = docData;
+              console.log("Found admin by email (manual filter):", docData);
               
               // Optional: Migrate to UID-based document for faster lookups
               try {
+                const oldDocId = filteredAdmins[0].id;
                 await setDoc(adminRef, {
                   ...docData,
                   updatedAt: Date.now()
                 });
+                
+                // Delete the old email-based document to prevent duplicates
+                if (oldDocId !== currentUser.uid) {
+                  await deleteDoc(doc(db, 'admins', oldDocId));
+                }
+                
+                console.log("Migrated admin to UID-based doc and deleted legacy record");
               } catch (e) {
                 console.error("Failed to migrate admin to UID-based doc:", e);
               }
@@ -108,9 +133,11 @@ export default function App() {
               }
             }
           } else if (adminDataFromDoc) {
+            console.log("Setting isAdmin to true for:", currentUser.email);
             setIsAdmin(true);
             setAdminData(adminDataFromDoc);
           } else {
+            console.log("User is not an admin:", currentUser.email);
             setIsAdmin(false);
             setAdminData(null);
           }
@@ -299,7 +326,7 @@ export default function App() {
             {isAdmin && (
               <>
                 <Route path="/admin" element={<AdminPanel adminData={adminData} />} />
-                <Route path="/admin/players" element={<PlayerManagement adminData={adminData} />} />
+                <Route path="/admin/players" element={<PlayerManagement adminData={adminData} adminId={user?.uid} />} />
                 <Route path="/admin/teams" element={<TeamManagement adminData={adminData} />} />
                 {adminData?.role === 'master' && (
                   <>
@@ -308,6 +335,9 @@ export default function App() {
                   </>
                 )}
                 <Route path="/admin/matches" element={<MatchManagement adminData={adminData} />} />
+                {adminData?.role === 'master' && (
+                  <Route path="/admin/scoring" element={<Tabelas />} />
+                )}
               </>
             )}
             <Route path="*" element={<div className="text-center py-20"><h1 className="text-4xl font-bold">404</h1><p className="text-gray-400">Página não encontrada ou acesso restrito.</p></div>} />
@@ -324,6 +354,11 @@ export default function App() {
               </span>
             </div>
             <p className="text-gray-500 text-sm">© 2026 ARENA COXIM - Gestão de Futebol Amador</p>
+            {user && (
+              <div className="mt-4 p-2 bg-white/5 rounded-lg text-[10px] text-gray-600 font-mono">
+                Conectado como: {user.email} ({user.uid}) | Admin: {isAdmin ? 'Sim' : 'Não'}
+              </div>
+            )}
           </div>
         </footer>
       </div>

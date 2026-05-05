@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { Player, Position, Location, OverallStats, AdminData } from '../types';
-import { Users, UserPlus, Trash2, Edit2, Shield, Sword, ShieldAlert, Search, X, MapPin, Zap, Heart, Dumbbell, Target, Move, Share2, BarChart3, User } from 'lucide-react';
+import { getPositionAbbr, getPositionColor } from '../utils/playerUtils';
+import { Users, UserPlus, Trash2, Edit2, Shield, Sword, ShieldAlert, Search, X, MapPin, Zap, Heart, Dumbbell, Target, Move, Share2, BarChart3, User, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../App';
 import { calculateGrade, calculateAverage, valueToLetter, letterToValue, getGradeColor } from '../utils/gradeUtils';
 
 interface PlayerManagementProps {
   adminData?: AdminData | null;
+  adminId?: string;
 }
 
-export default function PlayerManagement({ adminData }: PlayerManagementProps) {
+export default function PlayerManagement({ adminData, adminId }: PlayerManagementProps) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -22,18 +24,27 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
   // Form State
   const [name, setName] = useState('');
   const [nickname, setNickname] = useState('');
-  const [position, setPosition] = useState<Position>('atacante');
+  const [position, setPosition] = useState<Position>('centroavante');
   const [locationId, setLocationId] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [isOverallModalOpen, setIsOverallModalOpen] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState(false);
   const [overallStats, setOverallStats] = useState<OverallStats>({
-    speed: 75,
-    stamina: 75,
-    strength: 75,
-    shooting: 75,
-    dribbling: 75,
-    passing: 75
+    ratings: {}
   });
+
+  const checkDuplicate = (nameToCheck: string, locId: string) => {
+    if (!nameToCheck || !locId) {
+      setDuplicateWarning(false);
+      return;
+    }
+    const isDuplicate = players.some(p => 
+      p.locationId === locId && 
+      p.name.toUpperCase().trim() === nameToCheck.toUpperCase().trim() &&
+      p.id !== editingPlayer?.id
+    );
+    setDuplicateWarning(isDuplicate);
+  };
 
   useEffect(() => {
     const unsubscribePlayers = onSnapshot(collection(db, 'players'), (snapshot) => {
@@ -70,6 +81,17 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
     }
   }, [adminData, isModalOpen]);
 
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!locationId) {
@@ -88,20 +110,37 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
       return;
     }
 
-    const playerData = {
-      name,
-      nickname,
-      position,
-      locationId,
-      photoUrl: photoUrl || '',
-      stats: editingPlayer?.stats || { wins: 0, goals: 0, assists: 0, matches: 0 },
-      overallStats
-    };
+    const currentAdminId = auth.currentUser?.uid || 'unknown';
+    const currentRating = overallStats.ratings?.[currentAdminId];
 
     try {
       if (editingPlayer) {
-        await updateDoc(doc(db, 'players', editingPlayer.id), playerData);
+        const updateData: any = {
+          name: name.toUpperCase().trim(),
+          nickname,
+          position,
+          locationId,
+          photoUrl: photoUrl || '',
+        };
+        
+        // Safely update only the current admin's rating using dot notation
+        if (currentRating !== undefined) {
+          updateData[`overallStats.ratings.${currentAdminId}`] = currentRating;
+        }
+        
+        await updateDoc(doc(db, 'players', editingPlayer.id), updateData);
       } else {
+        const playerData = {
+          name: name.toUpperCase().trim(),
+          nickname,
+          position,
+          locationId,
+          photoUrl: photoUrl || '',
+          stats: { wins: 0, goals: 0, assists: 0, matches: 0 },
+          overallStats: {
+            ratings: currentRating !== undefined ? { [currentAdminId]: currentRating } : {}
+          }
+        };
         await addDoc(collection(db, 'players'), playerData);
       }
       resetForm();
@@ -113,19 +152,14 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
   const resetForm = () => {
     setName('');
     setNickname('');
-    setPosition('atacante');
+    setPosition('centroavante');
     setLocationId(adminData && adminData.role !== 'master' && adminData.locationId ? adminData.locationId : '');
     setPhotoUrl('');
     setEditingPlayer(null);
     setIsModalOpen(false);
     setIsOverallModalOpen(false);
     setOverallStats({
-      speed: 75,
-      stamina: 75,
-      strength: 75,
-      shooting: 75,
-      dribbling: 75,
-      passing: 75
+      ratings: {}
     });
   };
 
@@ -150,12 +184,7 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
       setOverallStats(player.overallStats);
     } else {
       setOverallStats({
-        speed: 75,
-        stamina: 75,
-        strength: 75,
-        shooting: 75,
-        dribbling: 75,
-        passing: 75
+        ratings: {}
       });
     }
     setIsModalOpen(true);
@@ -198,46 +227,15 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
     });
 
   const getPositionIcon = (pos: Position) => {
-    switch (pos) {
-      case 'goleiro': return <ShieldAlert className="w-4 h-4 text-yellow-500" />;
-      case 'defensor': return <Shield className="w-4 h-4 text-blue-500" />;
-      case 'atacante': return <Sword className="w-4 h-4 text-red-500" />;
-    }
+    return <span className={`text-[8px] font-black ${getPositionColor(pos)} leading-none`}>{getPositionAbbr(pos)}</span>;
   };
 
   const OverallModal = () => {
+    const currentAdminId = auth.currentUser?.uid || 'unknown';
+    const currentRating = overallStats.ratings?.[currentAdminId] || 75;
+    const averageRating = calculateAverage(overallStats);
     const { grade, color } = calculateGrade(overallStats);
-    
-    const statsList = [
-      { key: 'speed', label: 'Velocidade', icon: <Zap className="w-4 h-4" /> },
-      { key: 'stamina', label: 'Vitalidade', icon: <Heart className="w-4 h-4" /> },
-      { key: 'strength', label: 'Força', icon: <Dumbbell className="w-4 h-4" /> },
-      { key: 'shooting', label: 'Chute', icon: <Target className="w-4 h-4" /> },
-      { key: 'dribbling', label: 'Drible', icon: <Move className="w-4 h-4" /> },
-      { key: 'passing', label: 'Passe', icon: <Share2 className="w-4 h-4" /> },
-    ];
-
-    const letterToSlider = (letter: string) => {
-      switch(letter) {
-        case 'A': return 5;
-        case 'B': return 4;
-        case 'C': return 3;
-        case 'D': return 2;
-        case 'E': return 1;
-        default: return 3;
-      }
-    };
-
-    const sliderToLetter = (val: number) => {
-      switch(val) {
-        case 5: return 'A';
-        case 4: return 'B';
-        case 3: return 'C';
-        case 2: return 'D';
-        case 1: return 'E';
-        default: return 'C';
-      }
-    };
+    const adminCount = Object.keys(overallStats.ratings || {}).length;
 
     return (
       <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
@@ -255,63 +253,77 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
           className="relative bg-[#1a1a1a] w-full max-w-md rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[95vh]"
         >
           <div className="p-4 md:p-6 overflow-y-auto">
-            <div className="flex items-center justify-between mb-2 md:mb-4">
+            <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-lg md:text-xl font-black uppercase italic tracking-tight">Atributos</h3>
-                <p className="text-gray-500 text-[9px] md:text-[10px] font-bold uppercase tracking-widest">Nível do Atleta</p>
+                <h3 className="text-lg md:text-xl font-black uppercase italic tracking-tight">Avaliação Técnica</h3>
+                <p className="text-gray-500 text-[9px] md:text-[10px] font-bold uppercase tracking-widest">Média de {adminCount} {adminCount === 1 ? 'Admin' : 'Admins'}</p>
               </div>
-              <div className={`text-3xl md:text-4xl font-black italic ${color} drop-shadow-[0_0_15px_rgba(0,0,0,0.5)]`}>
-                {grade}
+              <div className="flex flex-col items-end">
+                <div className={`text-4xl md:text-5xl font-black italic ${color} drop-shadow-[0_0_15px_rgba(0,0,0,0.3)]`}>
+                  {grade}
+                </div>
+                <div className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Média: {averageRating.toFixed(1)}</div>
               </div>
             </div>
 
-            <div className="space-y-2 md:space-y-3">
-              {statsList.map((stat) => {
-                const currentValue = overallStats[stat.key as keyof OverallStats];
-                const currentLetter = valueToLetter(currentValue);
-                const sliderValue = letterToSlider(currentLetter);
-
-                return (
-                  <div key={stat.key} className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-[8px] md:text-[9px] uppercase font-black text-gray-400 tracking-widest">
-                        {stat.icon}
-                        {stat.label}
-                      </div>
-                      <span className={`text-[10px] md:text-xs font-black ${getGradeColor(currentLetter)}`}>
-                        {currentLetter}
-                      </span>
-                    </div>
-                    <div className="relative pt-1">
-                      <input 
-                        type="range" 
-                        min="1" 
-                        max="5" 
-                        step="1"
-                        value={sliderValue}
-                        onChange={(e) => {
-                          const newLetter = sliderToLetter(parseInt(e.target.value));
-                          const newValue = letterToValue(newLetter);
-                          setOverallStats({ ...overallStats, [stat.key]: newValue });
-                        }}
-                        className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-[#00ff00]"
-                      />
-                      <div className="flex justify-between mt-0.5 px-1">
-                        {['E', 'D', 'C', 'B', 'A'].map((l) => (
-                          <span key={l} className="text-[7px] font-black text-gray-600">{l}</span>
-                        ))}
-                      </div>
-                    </div>
+            <div className="space-y-8 py-4">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[10px] md:text-xs uppercase font-black text-gray-300 tracking-widest">
+                    <Star className="w-4 h-4 text-[#00ff00]" />
+                    Sua Avaliação
                   </div>
-                );
-              })}
+                  <span className={`text-xl font-black ${getGradeColor(valueToLetter(currentRating))}`}>
+                    {currentRating}
+                  </span>
+                </div>
+                
+                <div className="relative pt-2">
+                  <input 
+                    type="range" 
+                    min="50" 
+                    max="100" 
+                    step="1"
+                    value={currentRating}
+                    onChange={(e) => {
+                      const newValue = parseInt(e.target.value);
+                      const newRatings = { ...(overallStats.ratings || {}), [currentAdminId]: newValue };
+                      setOverallStats({ ratings: newRatings });
+                    }}
+                    className="w-full h-2 bg-white/5 rounded-lg appearance-none cursor-pointer accent-[#00ff00]"
+                  />
+                  <div className="flex justify-between mt-2 px-1">
+                    <span className="text-[8px] font-black text-gray-600">50 (E)</span>
+                    <span className="text-[8px] font-black text-gray-600">75 (C)</span>
+                    <span className="text-[8px] font-black text-gray-600">100 (A)</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                <h4 className="text-[9px] font-black uppercase text-gray-500 tracking-widest mb-3">Escala de Categorias</h4>
+                <div className="grid grid-cols-5 gap-2">
+                  {[
+                    { l: 'A', r: '90-100', c: 'text-yellow-400' },
+                    { l: 'B', r: '80-89', c: 'text-emerald-400' },
+                    { l: 'C', r: '70-79', c: 'text-blue-400' },
+                    { l: 'D', r: '60-69', c: 'text-orange-400' },
+                    { l: 'E', r: '50-59', c: 'text-red-400' }
+                  ].map((item) => (
+                    <div key={item.l} className="text-center">
+                      <div className={`text-lg font-black ${item.c}`}>{item.l}</div>
+                      <div className="text-[7px] text-gray-600 font-bold">{item.r}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <button 
               onClick={() => setIsOverallModalOpen(false)}
-              className="w-full bg-[#00ff00] text-black py-2.5 md:py-3 rounded-xl font-black uppercase tracking-widest hover:bg-[#00cc00] transition-colors mt-4 md:mt-6"
+              className="w-full bg-[#00ff00] text-black py-3 md:py-4 rounded-xl font-black uppercase tracking-widest hover:bg-[#00cc00] transition-colors mt-6"
             >
-              Confirmar Atributos
+              Confirmar Avaliação
             </button>
           </div>
         </motion.div>
@@ -334,11 +346,11 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
               <select
                 value={selectedLocationId}
                 onChange={(e) => setSelectedLocationId(e.target.value)}
-                className="bg-transparent text-xs font-bold uppercase tracking-widest py-2 px-3 outline-none border-none focus:ring-0"
+                className="bg-transparent text-white text-xs font-bold uppercase tracking-widest py-2 px-3 outline-none border-none focus:ring-0"
               >
-                <option value="all">Todos os Locais</option>
+                <option value="all" className="bg-[#1a1a1a] text-white">Todos os Locais</option>
                 {locations.map(loc => (
-                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                  <option key={loc.id} value={loc.id} className="bg-[#1a1a1a] text-white">{loc.name}</option>
                 ))}
               </select>
             </div>
@@ -360,7 +372,7 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
           placeholder="Buscar jogador pelo nome..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl py-4 pl-12 pr-4 focus:outline-none focus:border-[#00ff00] transition-colors"
+          className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl py-4 pl-12 pr-4 focus:outline-none focus:border-[#00ff00] transition-colors text-white"
         />
       </div>
 
@@ -372,8 +384,42 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             key={player.id} 
-            className="bg-[#1a1a1a] rounded-2xl border border-white/5 overflow-hidden group hover:border-[#00ff00]/30 transition-all"
+            onClick={() => handleEdit(player)}
+            className="bg-[#1a1a1a] rounded-2xl border border-white/5 overflow-hidden group hover:border-[#00ff00]/30 transition-all cursor-pointer relative"
           >
+            <div className="absolute top-0 left-0 z-10">
+              {player.overallStats && player.overallStats.ratings && Object.keys(player.overallStats.ratings).length > 0 ? (
+                <div className={`bg-[#222] px-3 py-1.5 rounded-br-2xl border-r border-b border-white/10 font-black italic text-xl ${calculateGrade(player.overallStats).color} shadow-lg shadow-black/50`}>
+                  {calculateGrade(player.overallStats).grade}
+                </div>
+              ) : (
+                <div className="bg-[#222] px-3 py-1.5 rounded-br-2xl border-r border-b border-white/10 font-black italic text-xs text-gray-500 shadow-lg shadow-black/50">
+                  N/A
+                </div>
+              )}
+              {adminId && (!player.overallStats?.ratings?.[adminId]) && (
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEdit(player);
+                  }}
+                  className="mt-2 ml-2 bg-[#00ff00] text-black px-2 py-1 rounded-lg text-[10px] font-black uppercase italic hover:bg-[#00cc00] transition-colors"
+                >
+                  Avaliar
+                </button>
+              )}
+            </div>
+            <div className="absolute top-2 right-2 z-10">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete(player.id);
+                }}
+                className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-lg transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
             <div className="p-4">
               <div className="flex justify-center mb-2 relative">
                 {player.photoUrl ? (
@@ -387,38 +433,17 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
                     <User size={32} className="text-gray-600" />
                   </div>
                 )}
-                <div className="absolute -bottom-1 right-1/2 translate-x-8 bg-[#222] p-1 rounded-full border border-white/10">
+                <div className="absolute -bottom-1 right-1/2 translate-x-8 bg-[#222] px-1.5 py-0.5 rounded-full border border-white/10 flex items-center justify-center min-w-[20px]">
                   {getPositionIcon(player.position)}
                 </div>
-                {player.overallStats && (
-                  <div className={`absolute top-0 right-0 bg-[#222] px-2 py-0.5 rounded-bl-xl border-l border-b border-white/10 font-black italic text-base ${calculateGrade(player.overallStats).color}`}>
-                    {calculateGrade(player.overallStats).grade}
-                  </div>
-                )}
               </div>
                 <div className="text-center mb-2">
                   <h3 className="text-sm font-bold truncate leading-tight">{player.nickname || player.name}</h3>
-                  <p className="text-[8px] uppercase font-black text-gray-500 tracking-widest mt-0.5">{player.position}</p>
                   <div className="flex items-center justify-center gap-1 mt-0.5 text-[8px] text-gray-500 font-bold uppercase">
                     <MapPin className="w-2 h-2 text-[#00ff00]" />
                     {getLocationName(player.locationId)}
                   </div>
                 </div>
-
-              <div className="flex items-center gap-1.5">
-                <button 
-                  onClick={() => handleEdit(player)}
-                  className="flex-1 bg-white/5 hover:bg-white/10 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <Edit2 className="w-2.5 h-2.5 text-[#00ff00]" /> PERFIL
-                </button>
-                <button 
-                  onClick={() => handleDelete(player.id)}
-                  className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-lg transition-colors"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
             </div>
           </motion.div>
         ))}
@@ -446,7 +471,19 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
                   <h3 className="text-lg md:text-2xl font-black uppercase italic tracking-tight">
                     {editingPlayer ? 'PERFIL DO JOGADOR' : 'Novo Jogador'}
                   </h3>
-                  <button onClick={resetForm} className="p-2 hover:bg-white/5 rounded-full"><X /></button>
+                  <div className="flex items-center gap-2">
+                    {editingPlayer && (
+                      <button 
+                        type="button"
+                        onClick={() => setIsOverallModalOpen(true)}
+                        className="p-2 bg-[#00ff00]/10 hover:bg-[#00ff00]/20 text-[#00ff00] rounded-full transition-colors"
+                        title="Definir Atributos"
+                      >
+                        <Zap className="w-5 h-5" />
+                      </button>
+                    )}
+                    <button onClick={resetForm} className="p-2 hover:bg-white/5 rounded-full"><X /></button>
+                  </div>
                 </div>
 
                 {editingPlayer && (
@@ -469,16 +506,64 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
                 <form onSubmit={handleSubmit} className="space-y-3 md:space-y-6">
                   <div className="space-y-1 md:space-y-2">
                     <label className="text-[9px] md:text-[10px] uppercase font-black text-gray-500 tracking-widest flex items-center gap-1">
+                      Local de Partida <span className="text-red-500">*</span>
+                    </label>
+                    <select 
+                      required
+                      value={locationId}
+                      onChange={(e) => {
+                        setLocationId(e.target.value);
+                        checkDuplicate(name, e.target.value);
+                      }}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 md:py-3 px-4 focus:outline-none focus:border-[#00ff00] text-sm text-white"
+                    >
+                      <option value="" className="bg-[#1a1a1a] text-white">Selecione um local</option>
+                      {locations.map(loc => (
+                        <option key={loc.id} value={loc.id} className="bg-[#1a1a1a] text-white">{loc.name}</option>
+                      ))}
+                    </select>
+                    {locations.length === 0 && (
+                      <p className="text-[9px] text-red-500 font-bold">Nenhum local cadastrado.</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1 md:space-y-2">
+                    <label className="text-[9px] md:text-[10px] uppercase font-black text-gray-500 tracking-widest flex items-center gap-1">
                       Nome Completo <span className="text-red-500">*</span>
                     </label>
                     <input 
                       required
                       type="text" 
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 md:py-3 px-4 focus:outline-none focus:border-[#00ff00] text-sm"
+                      onChange={(e) => {
+                        const upperName = e.target.value.toUpperCase();
+                        setName(upperName);
+                        checkDuplicate(upperName, locationId);
+                      }}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 md:py-3 px-4 focus:outline-none focus:border-[#00ff00] text-sm text-white"
                       placeholder="Ex: Ronaldinho Gaúcho"
                     />
+                    {duplicateWarning && (
+                      <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl mt-2">
+                        <p className="text-red-500 text-xs font-bold">Atenção: Já existe um jogador com este nome neste local!</p>
+                        <div className="flex gap-2 mt-3">
+                          <button 
+                            type="button"
+                            onClick={() => { setName(''); setDuplicateWarning(false); }} 
+                            className="bg-white/5 px-4 py-2 rounded-lg text-[10px] font-bold uppercase hover:bg-white/10"
+                          >
+                            Cancelar
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => setDuplicateWarning(false)} 
+                            className="bg-red-500/20 text-red-500 px-4 py-2 rounded-lg text-[10px] font-bold uppercase hover:bg-red-500/30"
+                          >
+                            Continuar
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 md:gap-4">
@@ -491,7 +576,7 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
                         type="text" 
                         value={nickname}
                         onChange={(e) => setNickname(e.target.value)}
-                        className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 md:py-3 px-4 focus:outline-none focus:border-[#00ff00] text-sm"
+                        className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 md:py-3 px-4 focus:outline-none focus:border-[#00ff00] text-sm text-white"
                         placeholder="Ex: Bruxo"
                       />
                     </div>
@@ -500,55 +585,55 @@ export default function PlayerManagement({ adminData }: PlayerManagementProps) {
                       <select 
                         value={position}
                         onChange={(e) => setPosition(e.target.value as Position)}
-                        className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 md:py-3 px-4 focus:outline-none focus:border-[#00ff00] text-sm"
+                        className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 md:py-3 px-4 focus:outline-none focus:border-[#00ff00] text-sm text-white"
                       >
-                        <option value="atacante">Atacante</option>
-                        <option value="defensor">Defensor</option>
-                        <option value="goleiro">Goleiro</option>
+                      <option value="goleiro" className="bg-[#1a1a1a] text-white">GK</option>
+                      <option value="zagueiro" className="bg-[#1a1a1a] text-white">DF</option>
+                      <option value="lateral" className="bg-[#1a1a1a] text-white">LAT</option>
+                      <option value="meio-campo" className="bg-[#1a1a1a] text-white">MAT</option>
+                      <option value="centroavante" className="bg-[#1a1a1a] text-white">CA</option>
                       </select>
                     </div>
                   </div>
 
                   <div className="space-y-1 md:space-y-2">
-                    <label className="text-[9px] md:text-[10px] uppercase font-black text-gray-500 tracking-widest flex items-center gap-1">
-                      Local de Partida <span className="text-red-500">*</span>
-                    </label>
-                    <select 
-                      required
-                      value={locationId}
-                      onChange={(e) => setLocationId(e.target.value)}
-                      className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 md:py-3 px-4 focus:outline-none focus:border-[#00ff00] text-sm"
-                    >
-                      <option value="">Selecione um local</option>
-                      {locations.map(loc => (
-                        <option key={loc.id} value={loc.id}>{loc.name}</option>
-                      ))}
-                    </select>
-                    {locations.length === 0 && (
-                      <p className="text-[9px] text-red-500 font-bold">Nenhum local cadastrado.</p>
-                    )}
+                    <label className="text-[9px] md:text-[10px] uppercase font-black text-gray-500 tracking-widest">Foto do Jogador</label>
+                    <div className="flex items-center gap-4">
+                      <div 
+                        onClick={() => document.getElementById('photo-upload')?.click()}
+                        className="w-20 h-20 rounded-2xl border-2 border-dashed border-white/10 hover:border-[#00ff00]/50 transition-colors cursor-pointer overflow-hidden flex items-center justify-center bg-black/20"
+                      >
+                        {photoUrl ? (
+                          <img src={photoUrl} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <UserPlus className="w-8 h-8 text-gray-600" />
+                        )}
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <button 
+                          type="button"
+                          onClick={() => document.getElementById('photo-upload')?.click()}
+                          className="text-[10px] font-black uppercase tracking-widest text-[#00ff00] hover:underline"
+                        >
+                          Upload de Foto
+                        </button>
+                        <input 
+                          id="photo-upload"
+                          type="file" 
+                          accept="image/*"
+                          onChange={handlePhotoUpload}
+                          className="hidden"
+                        />
+                        <input 
+                          type="url" 
+                          value={photoUrl}
+                          onChange={(e) => setPhotoUrl(e.target.value)}
+                          className="w-full bg-black/40 border border-white/10 rounded-xl py-2 md:py-2.5 px-4 focus:outline-none focus:border-[#00ff00] text-xs text-white"
+                          placeholder="Ou cole a URL da imagem..."
+                        />
+                      </div>
+                    </div>
                   </div>
-
-                  <div className="space-y-1 md:space-y-2">
-                    <label className="text-[9px] md:text-[10px] uppercase font-black text-gray-500 tracking-widest">URL da Foto (Opcional)</label>
-                    <input 
-                      type="url" 
-                      value={photoUrl}
-                      onChange={(e) => setPhotoUrl(e.target.value)}
-                      className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 md:py-3 px-4 focus:outline-none focus:border-[#00ff00] text-sm"
-                      placeholder="https://..."
-                    />
-                  </div>
-
-                  {editingPlayer && (
-                    <button 
-                      type="button"
-                      onClick={() => setIsOverallModalOpen(true)}
-                      className="w-full bg-white/5 border border-white/10 text-white py-3 md:py-4 rounded-xl font-black uppercase tracking-widest hover:bg-white/10 transition-colors flex items-center justify-center gap-2 text-xs md:text-sm"
-                    >
-                      <BarChart3 className="w-4 h-4 md:w-5 md:h-5 text-[#00ff00]" /> Definir Atributos (Overall)
-                    </button>
-                  )}
 
                   <button 
                     type="submit"

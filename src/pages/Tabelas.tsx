@@ -76,7 +76,7 @@ export default function Tabelas() {
     { key: 'draw', label: 'Empate', icon: Info, color: 'text-blue-500', description: 'Pontos por empate na partida' },
     { key: 'goal', label: 'Gol', icon: SoccerBall, color: 'text-red-500', description: 'Pontos por cada gol marcado' },
     { key: 'assist', label: 'Assistência', icon: SoccerCleat, color: 'text-[#00ff00]', description: 'Pontos por cada assistência' },
-    { key: 'cleanSheet', label: 'Clean Sheet', icon: Shield, color: 'text-cyan-500', description: 'Pontos por não sofrer gols (Goleiros/Zagueiros)' },
+    { key: 'cleanSheet', label: 'Defesa Invicta', icon: Shield, color: 'text-cyan-500', description: 'Pontos por não sofrer gols (Goleiros/Zagueiros/Laterais)' },
     { key: 'mvp', label: 'Craque do Jogo', icon: Star, color: 'text-purple-500', description: 'Pontos extras para o melhor da partida' },
   ];
 

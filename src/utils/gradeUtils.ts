@@ -1,14 +1,17 @@
 import { OverallStats } from '../types';
 
-export const calculateAverage = (stats: OverallStats) => {
-  return (stats.speed + stats.stamina + stats.strength + stats.shooting + stats.dribbling + stats.passing) / 6;
+export const calculateAverage = (stats?: OverallStats) => {
+  if (!stats || !stats.ratings || Object.keys(stats.ratings).length === 0) return 75;
+  const ratings = Object.values(stats.ratings);
+  const sum = ratings.reduce((acc, val) => acc + val, 0);
+  return sum / ratings.length;
 };
 
 export const valueToLetter = (value: number) => {
-  if (value > 90) return 'A';
-  if (value > 80) return 'B';
-  if (value > 70) return 'C';
-  if (value > 60) return 'D';
+  if (value >= 90) return 'A';
+  if (value >= 80) return 'B';
+  if (value >= 70) return 'C';
+  if (value >= 60) return 'D';
   return 'E';
 };
 
@@ -34,7 +37,7 @@ export const getGradeColor = (grade: string) => {
   }
 };
 
-export const calculateGrade = (stats: OverallStats) => {
+export const calculateGrade = (stats?: OverallStats) => {
   const avg = calculateAverage(stats);
   const grade = valueToLetter(avg);
   return { grade, color: getGradeColor(grade) };

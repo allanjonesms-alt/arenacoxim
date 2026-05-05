@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Player, Team } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Users, Trophy, User } from 'lucide-react';
+import { calculateAverage } from '../utils/gradeUtils';
 
 interface RandomSelectionModalProps {
   isOpen: boolean;
@@ -44,9 +45,7 @@ export const RandomSelectionModal: React.FC<RandomSelectionModalProps> = ({
   });
 
   const calculateOverall = (player: Player) => {
-    if (!player.overallStats) return 0;
-    const { speed, stamina, strength, shooting, dribbling, passing } = player.overallStats;
-    return speed + stamina + strength + shooting + dribbling + passing;
+    return calculateAverage(player.overallStats);
   };
 
   const startSelection = () => {
