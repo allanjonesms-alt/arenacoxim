@@ -103,8 +103,14 @@ export default function App() {
                 });
                 
                 // Delete the old email-based document to prevent duplicates
-                if (oldDocId !== currentUser.uid) {
-                  await deleteDoc(doc(db, 'admins', oldDocId));
+                try {
+                  if (oldDocId !== currentUser.uid) {
+                    console.log("Attempting to delete old admin doc:", oldDocId);
+                    await deleteDoc(doc(db, 'admins', oldDocId));
+                    console.log("Deleted legacy record");
+                  }
+                } catch (deleteError) {
+                  console.error("Failed to delete legacy admin record:", deleteError);
                 }
                 
                 console.log("Migrated admin to UID-based doc and deleted legacy record");
@@ -172,57 +178,57 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#00ff00]"></div>
+      <div className="min-h-screen bg-app-bg flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-blue"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white font-sans selection:bg-[#00ff00] selection:text-black">
+    <div className="min-h-screen bg-app-bg text-app-text font-sans selection:bg-primary-blue selection:text-white">
     {/* Navigation */}
-        <nav className="bg-[#1a1a1a] border-b border-white/10 sticky top-0 z-50">
+        <nav className="bg-primary-blue text-white shadow-lg sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
               <div className="flex items-center gap-2">
                 <Link to="/" className="flex items-center gap-2 group">
-                  <div className="bg-[#00ff00] p-1.5 rounded-lg group-hover:scale-110 transition-transform">
-                    <Trophy className="w-6 h-6 text-black" />
+                  <div className="bg-primary-yellow p-1.5 rounded-lg group-hover:scale-110 transition-transform shadow-md">
+                    <Trophy className="w-6 h-6 text-primary-blue" />
                   </div>
                   <span className="text-xl font-black tracking-tighter uppercase italic">
-                    ARENA<span className="text-[#00ff00]">COXIM</span>
+                    ARENA<span className="text-primary-yellow">COXIM</span>
                   </span>
                 </Link>
               </div>
 
               {/* Desktop Menu */}
               <div className="hidden md:flex items-center gap-6">
-                <Link to="/" className="hover:text-[#00ff00] transition-colors font-medium text-sm uppercase tracking-wider flex items-center gap-1">
+                <Link to="/" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
                   <TrendingUp className="w-4 h-4" /> Resultados
                 </Link>
                 {isAdmin && (
                   <>
-                    <Link to="/admin" className="hover:text-[#00ff00] transition-colors font-medium text-sm uppercase tracking-wider flex items-center gap-1">
+                    <Link to="/admin" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
                       <LayoutDashboard className="w-4 h-4" /> Painel
                     </Link>
-                    <Link to="/admin/players" className="hover:text-[#00ff00] transition-colors font-medium text-sm uppercase tracking-wider flex items-center gap-1">
+                    <Link to="/admin/players" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
                       <Users className="w-4 h-4" /> Jogadores
                     </Link>
-                    <Link to="/admin/teams" className="hover:text-[#00ff00] transition-colors font-medium text-sm uppercase tracking-wider flex items-center gap-1">
+                    <Link to="/admin/teams" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
                       <ShieldCheck className="w-4 h-4" /> Times
                     </Link>
                     {adminData?.role === 'master' && (
                       <>
-                        <Link to="/admin/locations" className="hover:text-[#00ff00] transition-colors font-medium text-sm uppercase tracking-wider flex items-center gap-1">
+                        <Link to="/admin/locations" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
                           <MapPin className="w-4 h-4" /> Locais
                         </Link>
                       </>
                     )}
-                    <Link to="/admin/matches" className="hover:text-[#00ff00] transition-colors font-medium text-sm uppercase tracking-wider flex items-center gap-1">
+                    <Link to="/admin/matches" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
                       <Calendar className="w-4 h-4" /> Partidas
                     </Link>
                     {adminData?.role === 'master' && (
-                      <Link to="/admin/scoring" className="hover:text-[#00ff00] transition-colors font-medium text-sm uppercase tracking-wider flex items-center gap-1">
+                      <Link to="/admin/scoring" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
                         <Trophy className="w-4 h-4" /> Regras
                       </Link>
                     )}
@@ -230,25 +236,25 @@ export default function App() {
                 )}
                 
                 {user ? (
-                  <div className="flex items-center gap-4 pl-4 border-l border-white/10">
+                  <div className="flex items-center gap-4 pl-4 border-l border-white/20">
                     <div className="flex items-center gap-2">
                       {user.photoURL ? (
-                        <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full border border-[#00ff00] object-cover" />
+                        <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full border-2 border-primary-yellow object-cover" />
                       ) : (
-                        <div className="w-8 h-8 rounded-full border border-[#00ff00] bg-white/5 flex items-center justify-center">
-                          <UserIcon size={16} className="text-gray-600" />
+                        <div className="w-8 h-8 rounded-full border-2 border-primary-yellow bg-white/10 flex items-center justify-center">
+                          <UserIcon size={16} className="text-white" />
                         </div>
                       )}
                       <span className="text-xs font-bold truncate max-w-[100px]">{user.displayName}</span>
                     </div>
-                    <button onClick={handleLogout} className="p-2 hover:bg-white/5 rounded-full transition-colors text-red-500">
+                    <button onClick={handleLogout} className="p-2 hover:bg-white/10 rounded-full transition-colors text-red-200">
                       <LogOut className="w-5 h-5" />
                     </button>
                   </div>
                 ) : (
                   <button 
                     onClick={handleLogin}
-                    className="flex items-center gap-2 bg-[#00ff00] text-black px-4 py-2 rounded-lg font-bold text-sm uppercase tracking-wider hover:bg-[#00cc00] transition-colors"
+                    className="flex items-center gap-2 bg-primary-yellow text-primary-blue px-4 py-2 rounded-lg font-black text-xs uppercase tracking-wider hover:bg-yellow-400 transition-all shadow-md active:scale-95"
                   >
                     <LogIn className="w-4 h-4" /> Entrar
                   </button>
@@ -257,7 +263,7 @@ export default function App() {
 
               {/* Mobile Menu Button */}
               <div className="md:hidden">
-                <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 text-[#00ff00]">
+                <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 text-primary-yellow">
                   {isMenuOpen ? <X /> : <Menu />}
                 </button>
               </div>
@@ -271,47 +277,47 @@ export default function App() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="md:hidden bg-[#1a1a1a] border-t border-white/10 overflow-hidden"
+                className="md:hidden bg-primary-blue border-t border-white/10 overflow-hidden"
               >
                 <div className="px-4 pt-2 pb-6 space-y-2">
-                  <Link to="/" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">
-                    <TrendingUp className="w-4 h-4 text-[#00ff00]" /> Resultados
+                  <Link to="/" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
+                    <TrendingUp className="w-4 h-4 text-primary-yellow" /> Resultados
                   </Link>
                   {isAdmin && (
                     <>
-                      <Link to="/admin" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">
-                        <LayoutDashboard className="w-4 h-4 text-[#00ff00]" /> Painel
+                      <Link to="/admin" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
+                        <LayoutDashboard className="w-4 h-4 text-primary-yellow" /> Painel
                       </Link>
-                      <Link to="/admin/players" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">
-                        <Users className="w-4 h-4 text-[#00ff00]" /> Jogadores
+                      <Link to="/admin/players" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
+                        <Users className="w-4 h-4 text-primary-yellow" /> Jogadores
                       </Link>
-                      <Link to="/admin/teams" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">
-                        <ShieldCheck className="w-4 h-4 text-[#00ff00]" /> Times
+                      <Link to="/admin/teams" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
+                        <ShieldCheck className="w-4 h-4 text-primary-yellow" /> Times
                       </Link>
                       {adminData?.role === 'master' && (
                         <>
-                          <Link to="/admin/locations" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">
-                            <MapPin className="w-4 h-4 text-[#00ff00]" /> Locais
+                          <Link to="/admin/locations" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
+                            <MapPin className="w-4 h-4 text-primary-yellow" /> Locais
                           </Link>
-                          <Link to="/admin/admins" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">
-                            <UserIcon className="w-4 h-4 text-[#00ff00]" /> Admins
+                          <Link to="/admin/admins" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
+                            <UserIcon className="w-4 h-4 text-primary-yellow" /> Admins
                           </Link>
                         </>
                       )}
-                      <Link to="/admin/matches" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">
-                        <Calendar className="w-4 h-4 text-[#00ff00]" /> Partidas
+                      <Link to="/admin/matches" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
+                        <Calendar className="w-4 h-4 text-primary-yellow" /> Partidas
                       </Link>
                       {adminData?.role === 'master' && (
-                        <Link to="/admin/scoring" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium hover:bg-white/5">
-                          <Trophy className="w-4 h-4 text-[#00ff00]" /> Regras
+                        <Link to="/admin/scoring" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
+                          <Trophy className="w-4 h-4 text-primary-yellow" /> Regras
                         </Link>
                       )}
                     </>
                   )}
                   {user ? (
-                    <button onClick={handleLogout} className="w-full text-left px-3 py-2 rounded-md text-base font-medium text-red-500 hover:bg-white/5">Sair</button>
+                    <button onClick={handleLogout} className="w-full text-left px-3 py-2 rounded-md text-base font-bold text-red-200 hover:bg-white/5">Sair</button>
                   ) : (
-                    <button onClick={handleLogin} className="w-full text-left px-3 py-2 rounded-md text-base font-medium text-[#00ff00] hover:bg-white/5">Entrar</button>
+                    <button onClick={handleLogin} className="w-full text-left px-3 py-2 rounded-md text-base font-bold text-primary-yellow hover:bg-white/5">Entrar</button>
                   )}
                 </div>
               </motion.div>
@@ -345,17 +351,17 @@ export default function App() {
         </main>
 
         {/* Footer */}
-        <footer className="bg-[#111] border-t border-white/5 py-12 mt-20">
+        <footer className="bg-white border-t border-gray-200 py-12 mt-20">
           <div className="max-w-7xl mx-auto px-4 text-center">
             <div className="flex items-center justify-center gap-2 mb-4">
-              <Trophy className="w-5 h-5 text-[#00ff00]" />
-              <span className="text-lg font-black tracking-tighter uppercase italic">
-                ARENA<span className="text-[#00ff00]">COXIM</span>
+              <Trophy className="w-5 h-5 text-primary-blue" />
+              <span className="text-lg font-black tracking-tighter uppercase italic text-primary-gray">
+                ARENA<span className="text-primary-blue">COXIM</span>
               </span>
             </div>
-            <p className="text-gray-500 text-sm">© 2026 ARENA COXIM - Gestão de Futebol Amador</p>
+            <p className="text-gray-400 text-sm font-medium">© 2026 ARENA COXIM - Gestão de Futebol Amador</p>
             {user && (
-              <div className="mt-4 p-2 bg-white/5 rounded-lg text-[10px] text-gray-600 font-mono">
+              <div className="mt-4 p-2 bg-gray-50 rounded-lg text-[10px] text-gray-400 font-mono border border-gray-100">
                 Conectado como: {user.email} ({user.uid}) | Admin: {isAdmin ? 'Sim' : 'Não'}
               </div>
             )}

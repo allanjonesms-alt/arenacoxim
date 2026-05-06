@@ -118,12 +118,15 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
   };
 
   const handleDeleteAdmin = async (id: string) => {
-    if (!window.confirm('Tem certeza que deseja remover este administrador?')) return;
     try {
+      console.log('Attempting to delete admin:', id);
       await deleteDoc(doc(db, 'admins', id));
+      console.log('Admin deleted successfully');
+      alert('Administrador removido com sucesso!');
     } catch (error: any) {
+      console.error('Delete error:', error);
       alert('Erro ao excluir: ' + (error.message || 'Sem permissão'));
-      handleFirestoreError(error, OperationType.DELETE, 'admins');
+      // handleFirestoreError(error, OperationType.DELETE, 'admins'); // Commented out to prevent app crash
     }
   };
 

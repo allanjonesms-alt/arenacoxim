@@ -12,7 +12,9 @@ export interface PlayerScoreResult {
   breakdown: {
     result: number;
     goals: number;
+    goalsCount: number;
     assists: number;
+    assistsCount: number;
     goalkeeperBonus: number;
     cleanSheet: number;
     goalDifference: number;
@@ -101,7 +103,9 @@ export const calculateMatchPoints = (
       breakdown: {
         result: resultPoints,
         goals: goalPoints,
+        goalsCount: goalsScored,
         assists: assistPoints,
+        assistsCount: assistsMade,
         goalkeeperBonus,
         cleanSheet: cleanSheetPoints,
         goalDifference: gdPoints,

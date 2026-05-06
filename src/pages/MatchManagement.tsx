@@ -544,7 +544,7 @@ export default function MatchManagement({ adminData }: MatchManagementProps) {
 
               <div className="flex items-center gap-2 md:gap-4 px-4 md:px-8 py-2 bg-black/40 rounded-2xl border border-white/10 shrink-0">
                 <div className="text-3xl md:text-6xl font-black tabular-nums">{sA}</div>
-                <div className="text-lg md:text-2xl font-black text-[#00ff00] italic">X</div>
+                <div className="text-xs md:text-sm font-black text-[#00ff00] italic">X</div>
                 <div className="text-4xl md:text-6xl font-black tabular-nums">{sB}</div>
               </div>
 
@@ -682,16 +682,22 @@ export default function MatchManagement({ adminData }: MatchManagementProps) {
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-500">Histórico de Eventos ({events.length})</h4>
                 <div className="bg-black/20 rounded-2xl p-3 max-h-40 overflow-y-auto flex flex-wrap gap-2">
                   {events.map((e, i) => {
+                    const foundPlayer = players.find(x => x.id === e.playerId);
                     const p = e.playerId.startsWith('unidentified_') 
-                      ? { nickname: 'Não Identificado', team: e.playerId.endsWith('_A') ? 'A' : 'B' }
-                      : { ...players.find(x => x.id === e.playerId), team: match.teamA.includes(e.playerId) ? 'A' : 'B' };
+                      ? { nickname: 'Não Identificado', name: 'Não Identificado', team: e.playerId.endsWith('_A') ? 'A' : 'B' }
+                      : { 
+                          ...(foundPlayer || { nickname: 'Jogador Não Encontrado', name: 'Jogador Não Encontrado' }), 
+                          team: match.teamA.includes(e.playerId) ? 'A' : 'B' 
+                        };
                     const teamColor = p.team === 'A' ? teamA?.color : teamB?.color;
                     return (
                       <div key={i} className="flex items-center gap-2 p-1.5 bg-white/5 border border-white/5 rounded-lg">
                         <SoccerJersey color={teamColor || '#555'} size={10} />
                         {e.type === 'goal' ? <SoccerBall size={10} className="text-[#00ff00]" /> : <SoccerCleat size={10} className="text-blue-500" />}
-                        <span className="text-[9px] font-bold">{p.nickname || (p as any).name}</span>
-                        <button onClick={() => removeEvent(i)} className="text-red-500 hover:text-red-400"><XCircle size={12} /></button>
+                        <span className="text-[9px] font-bold">
+                          {e.type === 'goal' ? 'Gol' : 'Assist'} de {p.nickname || p.name || '???'}: PID={e.playerId}
+                        </span>
+                        <button onClick={() => removeEvent(i)} className="text-red-500 hover:text-red-400 ml-auto"><XCircle size={12} /></button>
                       </div>
                     );
                   })}
@@ -748,110 +754,149 @@ export default function MatchManagement({ adminData }: MatchManagementProps) {
             match.status === 'finished' ? 'bg-[#0f0f0f]' : 
             match.status === 'scheduled' ? 'bg-blue-600/10' : 
             'bg-[#1a1a1a]'
-          } rounded-2xl border ${match.status === 'scheduled' ? 'border-blue-500/20' : 'border-white/5'} p-6 flex flex-col md:flex-row items-center justify-between gap-6 transition-all`}>
-            <div className="flex items-center gap-6">
-              <div className={`${match.status === 'finished' ? 'bg-[#141414]' : 'bg-[#222]'} p-4 rounded-2xl text-center min-w-[100px]`}>
-                <div className="text-2xl font-black italic leading-none">{format(new Date(match.date + 'T00:00:00'), 'dd')}</div>
-                <div className="text-[10px] uppercase font-bold text-gray-500">{format(new Date(match.date + 'T00:00:00'), 'MMM', { locale: ptBR })}</div>
-              </div>
-              <div>
-                <h3 className="text-lg font-bold flex items-center gap-2 uppercase italic tracking-tight">
-                  <MapPin className="w-4 h-4 text-[#00ff00]" /> {getLocationName(match.locationId)}
-                </h3>
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <SoccerJersey color={teams.find(t => t.id === match.teamAId)?.color || '#555'} size={16} />
-                    <span className="text-sm font-black uppercase italic tracking-tight">
-                      {teams.find(t => t.id === match.teamAId)?.name || 'Time não definido'}
-                    </span>
-                    {match.goalkeeperAId && (
-                      <span className="text-[8px] bg-white/5 px-1.5 py-0.5 rounded text-gray-400 font-bold">
-                        GOL: {players.find(p => p.id === match.goalkeeperAId)?.nickname || players.find(p => p.id === match.goalkeeperAId)?.name}
+          } rounded-2xl border ${match.status === 'scheduled' ? 'border-blue-500/20' : 'border-white/5'} p-6 flex flex-col gap-6 transition-all`}>
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex items-center gap-6">
+                <div className={`${match.status === 'finished' ? 'bg-[#141414]' : 'bg-[#222]'} p-4 rounded-2xl text-center min-w-[100px]`}>
+                  <div className="text-2xl font-black italic leading-none">{format(new Date(match.date + 'T00:00:00'), 'dd')}</div>
+                  <div className="text-[10px] uppercase font-bold text-gray-500">{format(new Date(match.date + 'T00:00:00'), 'MMM', { locale: ptBR })}</div>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold flex items-center gap-2 uppercase italic tracking-tight">
+                    <MapPin className="w-4 h-4 text-[#00ff00]" /> {getLocationName(match.locationId)}
+                  </h3>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <SoccerJersey color={teams.find(t => t.id === match.teamAId)?.color || '#555'} size={16} />
+                      <span className="text-sm font-black uppercase italic tracking-tight">
+                        {teams.find(t => t.id === match.teamAId)?.name || 'Time não definido'}
                       </span>
-                    )}
+                      {match.goalkeeperAId && (
+                        <span className="text-[8px] bg-white/5 px-1.5 py-0.5 rounded text-gray-400 font-bold">
+                          GOL: {players.find(p => p.id === match.goalkeeperAId)?.nickname || players.find(p => p.id === match.goalkeeperAId)?.name}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <SoccerJersey color={teams.find(t => t.id === match.teamBId)?.color || '#555'} size={16} />
+                      <span className="text-sm font-black uppercase italic tracking-tight">
+                        {teams.find(t => t.id === match.teamBId)?.name || 'Time não definido'}
+                      </span>
+                      {match.goalkeeperBId && (
+                        <span className="text-[8px] bg-white/5 px-1.5 py-0.5 rounded text-gray-400 font-bold">
+                          GOL: {players.find(p => p.id === match.goalkeeperBId)?.nickname || players.find(p => p.id === match.goalkeeperBId)?.name}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <SoccerJersey color={teams.find(t => t.id === match.teamBId)?.color || '#555'} size={16} />
-                    <span className="text-sm font-black uppercase italic tracking-tight">
-                      {teams.find(t => t.id === match.teamBId)?.name || 'Time não definido'}
-                    </span>
-                    {match.goalkeeperBId && (
-                      <span className="text-[8px] bg-white/5 px-1.5 py-0.5 rounded text-gray-400 font-bold">
-                        GOL: {players.find(p => p.id === match.goalkeeperBId)?.nickname || players.find(p => p.id === match.goalkeeperBId)?.name}
-                      </span>
+                  <div className="flex items-center gap-4 text-[10px] text-gray-500 mt-2 font-bold uppercase tracking-widest">
+                    <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-[#00ff00]" /> {match.time}</span>
+                    {match.confirmedPlayers && match.confirmedPlayers.length > (match.teamA.length + match.teamB.length) ? (
+                      <>
+                        <span className="flex items-center gap-1"><Users className="w-3 h-3 text-orange-500" /> {match.confirmedPlayers.length} Selecionados</span>
+                        <span className="flex items-center gap-1 text-gray-700">•</span>
+                        <span className="flex items-center gap-1"><Users className="w-3 h-3 text-[#00ff00]" /> {match.teamA.length + match.teamB.length} Em Campo</span>
+                      </>
+                    ) : (
+                      <span className="flex items-center gap-1"><Users className="w-3 h-3 text-[#00ff00]" /> {match.confirmedPlayers?.length || match.teamA.length + match.teamB.length} Atletas</span>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-4 text-[10px] text-gray-500 mt-2 font-bold uppercase tracking-widest">
-                  <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-[#00ff00]" /> {match.time}</span>
-                  {match.confirmedPlayers && match.confirmedPlayers.length > (match.teamA.length + match.teamB.length) ? (
+              </div>
+
+              <div className="flex items-center gap-4 md:gap-8">
+                <div className="text-center">
+                  <div className="text-3xl font-black italic">{match.scoreA} <span className="text-xs text-[#00ff00] mx-1">X</span> {match.scoreB}</div>
+                  <div className={`text-[10px] uppercase font-black tracking-widest mt-1 ${
+                    match.status === 'finished' ? 'text-gray-500' : 
+                    match.status === 'live' ? 'text-[#00ff00] animate-pulse' : 'text-blue-500'
+                  }`}>
+                    {match.status === 'finished' ? 'Finalizado' : match.status === 'live' ? 'Ao Vivo' : 'Em Aberto'}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {(match.status === 'scheduled' || match.status === 'live') && (
                     <>
-                      <span className="flex items-center gap-1"><Users className="w-3 h-3 text-orange-500" /> {match.confirmedPlayers.length} Selecionados</span>
-                      <span className="flex items-center gap-1 text-gray-700">•</span>
-                      <span className="flex items-center gap-1"><Users className="w-3 h-3 text-[#00ff00]" /> {match.teamA.length + match.teamB.length} Em Campo</span>
+                      <button 
+                        onClick={() => setMatchForLineup(match)}
+                        className="bg-white/5 hover:bg-[#00ff00]/20 hover:text-[#00ff00] p-3 rounded-xl transition-all"
+                        title="Ver Escalação"
+                      >
+                        <Layout className="w-6 h-6" />
+                      </button>
+                      <button 
+                        onClick={() => startMatch(match)}
+                        className={`p-3 rounded-xl transition-all ${match.status === 'live' ? 'bg-[#00ff00]/20 text-[#00ff00]' : 'bg-white/5 hover:bg-[#00ff00]/20 hover:text-[#00ff00]'}`}
+                        title={match.status === 'live' ? "Continuar Partida" : "Iniciar Partida"}
+                      >
+                        <CheckCircle2 className="w-6 h-6" />
+                      </button>
                     </>
-                  ) : (
-                    <span className="flex items-center gap-1"><Users className="w-3 h-3 text-[#00ff00]" /> {match.confirmedPlayers?.length || match.teamA.length + match.teamB.length} Atletas</span>
                   )}
+                  <button 
+                    onClick={() => {
+                      setEditingMatch(match);
+                      setDate(match.date);
+                      setTime(match.time);
+                      setLocationId(match.locationId);
+                      setTeamAIdInput(match.teamAId || '');
+                      setTeamBIdInput(match.teamBId || '');
+                      setConfirmedPlayersForCreation(match.confirmedPlayers || []);
+                      setMatchSubstitutesCount(match.substitutesCount || 0);
+                      setIsModalOpen(true);
+                    }}
+                    className="bg-white/5 hover:bg-blue-500/20 hover:text-blue-500 p-3 rounded-xl transition-all"
+                    title="Editar Partida"
+                  >
+                    <Pencil className="w-6 h-6" />
+                  </button>
+                  <button 
+                    onClick={() => setMatchToDelete(match)}
+                    className="bg-white/5 hover:bg-red-500/20 hover:text-red-500 p-3 rounded-xl transition-all"
+                    title="Excluir Partida"
+                  >
+                    <Trash2 className="w-6 h-6" />
+                  </button>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-4 md:gap-8">
-              <div className="text-center">
-                <div className="text-3xl font-black italic">{match.scoreA} X {match.scoreB}</div>
-                <div className={`text-[10px] uppercase font-black tracking-widest mt-1 ${
-                  match.status === 'finished' ? 'text-gray-500' : 
-                  match.status === 'live' ? 'text-[#00ff00] animate-pulse' : 'text-blue-500'
-                }`}>
-                  {match.status === 'finished' ? 'Finalizado' : match.status === 'live' ? 'Ao Vivo' : 'Em Aberto'}
+            {match.status === 'finished' && match.events && match.events.length > 0 && (
+              <div className="border-t border-white/5 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <h4 className="text-[10px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-2">
+                    <SoccerBall size={10} className="text-[#00ff00]" /> Gols
+                  </h4>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    {Object.entries(
+                      match.events.filter(e => e.type === 'goal').reduce((acc, e) => {
+                        acc[e.playerId] = (acc[e.playerId] || 0) + 1;
+                        return acc;
+                      }, {} as Record<string, number>)
+                    ).map(([pid, count]) => {
+                      const p = pid.startsWith('unidentified_') ? { nickname: 'Gol Não Identificado', name: 'Gol Não Identificado' } : players.find(x => x.id === pid);
+                      return <span key={pid} className="bg-white/5 px-2 py-1 rounded">{p ? (p.nickname || p.name) : 'Jogador Não Encontrado'} ({count})</span>
+                    })}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <h4 className="text-[10px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-2">
+                    <SoccerCleat size={10} className="text-blue-500" /> Assistências
+                  </h4>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    {Object.entries(
+                      match.events.filter(e => e.type === 'assist').reduce((acc, e) => {
+                        acc[e.playerId] = (acc[e.playerId] || 0) + 1;
+                        return acc;
+                      }, {} as Record<string, number>)
+                    ).map(([pid, count]) => {
+                      const p = pid.startsWith('unidentified_') ? { nickname: 'Assist. Não Identificada', name: 'Assist. Não Identificada' } : players.find(x => x.id === pid);
+                      return <span key={pid} className="bg-white/5 px-2 py-1 rounded">{p ? (p.nickname || p.name) : 'Jogador Não Encontrado'} ({count})</span>
+                    })}
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                {(match.status === 'scheduled' || match.status === 'live') && (
-                  <>
-                    <button 
-                      onClick={() => setMatchForLineup(match)}
-                      className="bg-white/5 hover:bg-[#00ff00]/20 hover:text-[#00ff00] p-3 rounded-xl transition-all"
-                      title="Ver Escalação"
-                    >
-                      <Layout className="w-6 h-6" />
-                    </button>
-                    <button 
-                      onClick={() => startMatch(match)}
-                      className={`p-3 rounded-xl transition-all ${match.status === 'live' ? 'bg-[#00ff00]/20 text-[#00ff00]' : 'bg-white/5 hover:bg-[#00ff00]/20 hover:text-[#00ff00]'}`}
-                      title={match.status === 'live' ? "Continuar Partida" : "Iniciar Partida"}
-                    >
-                      <CheckCircle2 className="w-6 h-6" />
-                    </button>
-                  </>
-                )}
-                <button 
-                  onClick={() => {
-                    setEditingMatch(match);
-                    setDate(match.date);
-                    setTime(match.time);
-                    setLocationId(match.locationId);
-                    setTeamAIdInput(match.teamAId || '');
-                    setTeamBIdInput(match.teamBId || '');
-                    setConfirmedPlayersForCreation(match.confirmedPlayers || []);
-                    setMatchSubstitutesCount(match.substitutesCount || 0);
-                    setIsModalOpen(true);
-                  }}
-                  className="bg-white/5 hover:bg-blue-500/20 hover:text-blue-500 p-3 rounded-xl transition-all"
-                  title="Editar Partida"
-                >
-                  <Pencil className="w-6 h-6" />
-                </button>
-                <button 
-                  onClick={() => setMatchToDelete(match)}
-                  className="bg-white/5 hover:bg-red-500/20 hover:text-red-500 p-3 rounded-xl transition-all"
-                  title="Excluir Partida"
-                >
-                  <Trash2 className="w-6 h-6" />
-                </button>
-              </div>
-            </div>
+            )}
           </div>
         ))}
       </div>

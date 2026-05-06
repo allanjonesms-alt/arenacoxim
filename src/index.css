@@ -1,1 +1,16 @@
 @import "tailwindcss";
+
+@theme {
+  --color-primary-blue: #0047AB;
+  --color-primary-yellow: #F9D423;
+  --color-app-bg: #F8FAFC;
+  --color-app-card: #FFFFFF;
+  --color-app-text: #1E293B;
+  --color-accent-green: #22C55E;
+}
+
+@layer base {
+  body {
+    @apply bg-app-bg text-app-text;
+  }
+}
