@@ -230,7 +230,13 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={onClose} />
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-black/60 backdrop-blur-md" 
+      />
       
       <RandomSelectionModal
         isOpen={isRandomSelectionOpen}
@@ -244,72 +250,79 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
       />
       
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative bg-[#111] w-full max-w-2xl rounded-3xl border border-white/10 overflow-hidden flex flex-col max-h-[90vh]"
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="relative bg-white w-full max-w-2xl rounded-2xl md:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh]"
       >
         {/* Header */}
-        <div className="p-6 border-bottom border-white/5 bg-[#1a1a1a] flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="bg-[#00ff00]/10 p-3 rounded-2xl">
-              <Users className="w-6 h-6 text-[#00ff00]" />
+        <div className="p-5 md:p-8 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+          <div className="flex items-center gap-3 md:gap-5">
+            <div className="bg-primary-blue/5 p-3 md:p-4 rounded-xl md:rounded-2xl border border-primary-blue/10">
+              <Users className="w-5 h-5 md:w-6 md:h-6 text-primary-blue" />
             </div>
             <div>
-              <h3 className="text-xl font-black uppercase italic tracking-tight">
+              <h3 className="text-lg md:text-2xl font-black uppercase italic tracking-tighter text-primary-blue leading-tight">
                 {stepTitle}
               </h3>
-              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
-                {step === 0 ? 'Passo 1: Times' : step === 1 ? 'Passo 2: Presença' : step === 2 ? 'Passo 3: Suplentes' : step === 3 ? 'Passo 4: Modo' : `Passo ${step + 1} de 8 • ${step <= 5 ? 'Primeiro Time' : 'Segundo Time'}`}
-              </p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[8px] md:text-[10px] font-black text-primary-yellow uppercase tracking-widest bg-primary-blue px-2 py-0.5 md:px-3 md:py-1 rounded-md md:rounded-lg">
+                  {step === 0 ? 'Equipes' : step === 1 ? 'Presença' : step === 2 ? 'Reservas' : step === 3 ? 'Escalamento' : `Etapa ${step + 1}`}
+                </span>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 md:gap-6">
             {step === 1 && (
               <div className="flex flex-col items-end">
-                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest leading-none">Confirmados</span>
-                <span className="text-xl font-black text-[#00ff00] italic leading-none">{presentPlayers.length}</span>
+                <span className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Confirmados</span>
+                <span className="text-xl md:text-2xl font-black text-primary-blue italic leading-none">{presentPlayers.length}</span>
               </div>
             )}
-            <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
-              <X size={24} />
+            <button onClick={onClose} className="bg-gray-100 hover:bg-gray-200 p-2 md:p-3 rounded-full transition-all active:scale-95 text-gray-400 hover:text-gray-600">
+              <X className="w-5 h-5 md:w-6 md:h-6" />
             </button>
           </div>
         </div>
 
         {/* Team Selection Step */}
         {step === 0 && (
-          <div className="flex-1 p-8 space-y-8 overflow-y-auto">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-4">
-                <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest block">Time A</label>
-                <div className="grid grid-cols-1 gap-2">
+          <div className="flex-1 p-5 md:p-10 space-y-6 md:space-y-10 overflow-y-auto bg-white">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10">
+              <div className="space-y-4 md:space-y-5">
+                <label className="text-[10px] md:text-[11px] uppercase font-black text-primary-blue tracking-[0.2em] block px-2 opacity-50 italic">Mandante</label>
+                <div className="grid grid-cols-1 gap-2 md:gap-3">
                   {teamsInLocation.map(t => (
                     <button
                       key={t.id}
                       onClick={() => setTeamAId(t.id)}
-                      className={`p-4 rounded-2xl border transition-all flex items-center gap-4 ${
-                        teamAId === t.id ? 'bg-[#00ff00]/10 border-[#00ff00] text-[#00ff00]' : 'bg-white/5 border-white/5 text-gray-400 hover:border-white/20'
+                      className={`p-4 md:p-5 rounded-xl md:rounded-2xl border-2 transition-all flex items-center gap-3 md:gap-4 group ${
+                        teamAId === t.id 
+                          ? 'bg-blue-50/50 border-primary-blue text-primary-blue shadow-lg shadow-blue-100/50' 
+                          : 'bg-gray-50 border-gray-100 text-gray-400 hover:border-blue-200 hover:bg-white'
                       }`}
                     >
-                      <SoccerJersey color={t.color} size={24} />
-                      <span className="font-black uppercase italic tracking-tight">{t.name}</span>
+                      < SoccerJersey color={t.color} size={24} />
+                      <span className="font-black uppercase italic tracking-tight text-base md:text-lg truncate">{t.name}</span>
                     </button>
                   ))}
                 </div>
               </div>
-              <div className="space-y-4">
-                <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest block">Time B</label>
-                <div className="grid grid-cols-1 gap-2">
+              <div className="space-y-4 md:space-y-5">
+                <label className="text-[10px] md:text-[11px] uppercase font-black text-primary-blue tracking-[0.2em] block px-2 opacity-50 italic">Visitante</label>
+                <div className="grid grid-cols-1 gap-2 md:gap-3">
                   {teamsInLocation.map(t => (
                     <button
                       key={t.id}
                       onClick={() => setTeamBId(t.id)}
-                      className={`p-4 rounded-2xl border transition-all flex items-center gap-4 ${
-                        teamBId === t.id ? 'bg-blue-500/10 border-blue-500 text-blue-500' : 'bg-white/5 border-white/5 text-gray-400 hover:border-white/20'
+                      className={`p-4 md:p-5 rounded-xl md:rounded-2xl border-2 transition-all flex items-center gap-3 md:gap-4 group ${
+                        teamBId === t.id 
+                          ? 'bg-yellow-50/50 border-primary-yellow text-primary-blue shadow-lg shadow-yellow-100/50' 
+                          : 'bg-gray-50 border-gray-100 text-gray-400 hover:border-yellow-200 hover:bg-white'
                       }`}
                     >
                       <SoccerJersey color={t.color} size={24} />
-                      <span className="font-black uppercase italic tracking-tight">{t.name}</span>
+                      <span className="font-black uppercase italic tracking-tight text-base md:text-lg truncate">{t.name}</span>
                     </button>
                   ))}
                 </div>
@@ -320,21 +333,23 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
 
         {/* Team Indicator (only for manual steps) */}
         {step >= 4 && (
-          <div className="px-6 py-4 bg-black/40 flex items-center justify-between border-b border-white/5">
-            <div className="flex items-center gap-3">
-              <SoccerJersey color={currentTeam?.color || '#555'} size={32} />
+          <div className="px-5 md:px-10 py-4 md:py-6 bg-gray-50 flex items-center justify-between border-b border-gray-100 shadow-inner">
+            <div className="flex items-center gap-3 md:gap-4">
+              <div className="p-2 md:p-3 bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-100">
+                <SoccerJersey color={currentTeam?.color || '#555'} size={28} />
+              </div>
               <div>
-                <span className="text-xs font-black text-gray-500 uppercase tracking-widest block">Escalando</span>
-                <span className="text-lg font-black uppercase italic text-[#00ff00]">
-                  {currentTeam?.name || 'Time não definido'}
+                <span className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-0.5">Escalando o time</span>
+                <span className="text-base md:text-xl font-black uppercase italic text-primary-blue leading-tight truncate block max-w-[120px] md:max-w-none">
+                  {currentTeam?.name || 'Não selecionado'}
                 </span>
               </div>
             </div>
             <div className="text-right">
-              <span className="text-xs font-black text-gray-500 uppercase tracking-widest block">
-                {isGoalkeeperStep ? 'Status' : 'Selecionados'}
+              <span className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-0.5">
+                {isGoalkeeperStep ? 'Proteção' : 'Plantel'}
               </span>
-              <span className="text-2xl font-black italic text-white">
+              <span className="text-lg md:text-2xl font-black italic text-primary-blue tabular-nums">
                 {isGoalkeeperStep ? (currentGoalkeeper ? '1/1' : '0/1') : `${currentSelection.length} / ${requiredPerTeam}`}
               </span>
             </div>
@@ -343,17 +358,17 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
 
         {/* Substitutes Step */}
         {step === 2 && (
-          <div className="flex-1 p-8 flex flex-col items-center justify-center gap-8">
-            <div className="text-center">
-              <h3 className="text-2xl font-black uppercase italic tracking-tight mb-2">Suplentes</h3>
-              <p className="text-gray-500 text-sm">Deseja adicionar reservas para este jogo?</p>
+          <div className="flex-1 p-10 flex flex-col items-center justify-center gap-10 bg-white">
+            <div className="text-center max-w-xs">
+              <h3 className="text-3xl font-black uppercase italic tracking-tighter text-primary-blue mb-3">Reservas</h3>
+              <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest leading-relaxed">Defina se haverá atletas de suplência para cada equipe hoje.</p>
             </div>
 
-            <div className="p-8 bg-white/5 rounded-3xl border border-white/10 w-full max-w-md space-y-8">
+            <div className="p-10 bg-gray-50 rounded-[2.5rem] border border-gray-100 w-full max-w-sm space-y-10 shadow-xl shadow-gray-100/50">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="text-base font-black uppercase tracking-widest">Habilitar Suplentes</h4>
-                  <p className="text-[10px] text-gray-500 uppercase font-bold mt-1">Jogadores extras por time</p>
+                  <h4 className="text-lg font-black uppercase italic tracking-tight text-primary-blue">Suplência</h4>
+                  <p className="text-[10px] text-primary-yellow font-black uppercase tracking-widest mt-1">Habilitar reservas</p>
                 </div>
                 <button
                   type="button"
@@ -361,11 +376,11 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
                     const newValue = matchSubstitutesCount > 0 ? 0 : 1;
                     setMatchSubstitutesCount(newValue);
                   }}
-                  className={`w-16 h-8 rounded-full transition-all relative ${matchSubstitutesCount > 0 ? 'bg-[#00ff00]' : 'bg-white/10'}`}
+                  className={`w-16 h-9 rounded-full transition-all relative ${matchSubstitutesCount > 0 ? 'bg-primary-blue' : 'bg-gray-200'}`}
                 >
                   <motion.div 
-                    className={`absolute top-1 w-6 h-6 rounded-full bg-white`}
-                    animate={{ left: matchSubstitutesCount > 0 ? 'calc(100% - 28px)' : '4px' }}
+                    className={`absolute top-1.5 w-6 h-6 rounded-full bg-white shadow-md`}
+                    animate={{ left: matchSubstitutesCount > 0 ? 'calc(100% - 30px)' : '6px' }}
                   />
                 </button>
               </div>
@@ -374,11 +389,11 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
                 <motion.div 
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
-                  className="pt-8 border-t border-white/5 space-y-6"
+                  className="pt-10 border-t border-gray-200 space-y-8"
                 >
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest">Quantidade de Suplentes</label>
-                    <span className="text-4xl font-black italic text-[#00ff00] tabular-nums">{matchSubstitutesCount}</span>
+                    <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest italic">Qtd por equipe</label>
+                    <span className="text-5xl font-black italic text-primary-blue tabular-nums">{matchSubstitutesCount}</span>
                   </div>
                   <input 
                     type="range" 
@@ -386,11 +401,14 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
                     max="10" 
                     value={matchSubstitutesCount}
                     onChange={(e) => setMatchSubstitutesCount(parseInt(e.target.value))}
-                    className="w-full accent-[#00ff00]"
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-blue"
                   />
-                  <p className="text-[10px] text-gray-400 font-bold uppercase text-center bg-black/40 py-3 rounded-xl">
-                    Total de <span className="text-[#00ff00]">{(allLocations.find(l => l.id === locationId)?.playerCount || 5) + matchSubstitutesCount}</span> atletas por time
-                  </p>
+                  <div className="p-4 bg-primary-blue/5 rounded-2xl border border-primary-blue/10 flex items-center justify-center gap-3">
+                    <Users size={14} className="text-primary-blue opacity-30" />
+                    <p className="text-[11px] text-primary-blue font-black uppercase">
+                      Total de <span className="text-primary-blue px-2 py-0.5 bg-primary-yellow rounded-lg">{(allLocations.find(l => l.id === locationId)?.playerCount || 5) + matchSubstitutesCount}</span> atletas por time
+                    </p>
+                  </div>
                 </motion.div>
               )}
             </div>
@@ -399,35 +417,40 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
 
         {/* Division Mode Selection */}
         {step === 3 && (
-          <div className="flex-1 p-4 md:p-8 flex flex-col items-center justify-center gap-4 md:gap-6">
-            <div className="text-center mb-2">
-              <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px] mb-1">Atletas Confirmados</p>
-              <div className="text-3xl md:text-4xl font-black text-[#00ff00] italic">{presentPlayers.length}</div>
+          <div className="flex-1 p-4 md:p-10 flex flex-col items-center justify-center gap-8 bg-white">
+            <div className="text-center mb-4">
+              <p className="text-gray-400 font-black uppercase tracking-[0.2em] text-[10px] mb-2 opacity-50">Atletas à Disposição</p>
+              <div className="text-6xl font-black text-primary-blue italic tabular-nums group">
+                {presentPlayers.length}
+                <div className="w-12 h-1.5 bg-primary-yellow mx-auto mt-2 rounded-full transition-all group-hover:w-24" />
+              </div>
             </div>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 w-full max-w-md">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full max-w-lg">
               <button
                 onClick={() => setDivisionMode('manual')}
-                className={`p-4 md:p-8 rounded-2xl md:rounded-3xl border-2 transition-all flex flex-col items-center gap-2 md:gap-4 ${
+                className={`p-8 md:p-12 rounded-[2.5rem] border-4 transition-all flex flex-col items-center gap-5 group relative overflow-hidden ${
                   divisionMode === 'manual' 
-                    ? 'bg-[#00ff00]/10 border-[#00ff00] text-[#00ff00]' 
-                    : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/30'
+                    ? 'bg-blue-50/50 border-primary-blue text-primary-blue shadow-2xl shadow-blue-100' 
+                    : 'bg-gray-50 border-gray-100 text-gray-400 hover:border-blue-100 hover:bg-white'
                 }`}
               >
-                <Users size={32} className="md:w-12 md:h-12" />
-                <span className="font-black uppercase italic tracking-tight text-sm md:text-base">Manual</span>
+                <Users size={48} className="md:w-16 md:h-16 transition-transform group-hover:scale-110" />
+                <span className="font-black uppercase italic tracking-tighter text-lg md:text-xl">Manual</span>
+                <span className="text-[10px] font-black opacity-40 uppercase tracking-widest">Escalação Livre</span>
               </button>
               
               <button
                 onClick={() => setDivisionMode('random')}
-                className={`p-4 md:p-8 rounded-2xl md:rounded-3xl border-2 transition-all flex flex-col items-center gap-2 md:gap-4 ${
+                className={`p-8 md:p-12 rounded-[2.5rem] border-4 transition-all flex flex-col items-center gap-5 group relative overflow-hidden ${
                   divisionMode === 'random' 
-                    ? 'bg-[#00ff00]/10 border-[#00ff00] text-[#00ff00]' 
-                    : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/30'
+                    ? 'bg-yellow-50/50 border-primary-yellow text-primary-blue shadow-2xl shadow-yellow-100' 
+                    : 'bg-gray-50 border-gray-100 text-gray-400 hover:border-yellow-100 hover:bg-white'
                 }`}
               >
-                <Trophy size={32} className="md:w-12 md:h-12" />
-                <span className="font-black uppercase italic tracking-tight text-sm md:text-base">Sorteio</span>
+                <Trophy size={48} className="md:w-16 md:h-16 transition-transform group-hover:scale-110" />
+                <span className="font-black uppercase italic tracking-tighter text-lg md:text-xl">Sorteio</span>
+                <span className="text-[10px] font-black opacity-40 uppercase tracking-widest">Equilíbrio Automático</span>
               </button>
             </div>
           </div>
@@ -435,15 +458,15 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
 
         {/* Search Bar (only for selection steps) */}
         {(step === 1 || (step >= 4 && !isGoalkeeperStep)) && (
-          <div className="px-6 py-3 bg-[#1a1a1a] border-b border-white/5 flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
+          <div className="px-5 md:px-10 py-4 md:py-5 bg-gray-50 border-b border-gray-100 flex flex-col sm:flex-row gap-3 md:gap-4">
+            <div className="relative flex-1 group">
+              <Search className="absolute left-5 md:left-6 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-blue transition-colors w-4 h-4 md:w-5 md:h-5" />
               <input 
                 type="text" 
-                placeholder={step === 1 ? "Buscar atleta para confirmar presença..." : "Buscar atleta selecionado..."}
+                placeholder={step === 1 ? "Localizar atleta..." : "Filtrar por nome..."}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:border-[#00ff00] transition-colors text-white"
+                className="w-full bg-white border-2 border-gray-100 rounded-xl md:rounded-2xl py-3 md:py-4 pl-12 md:pl-14 pr-4 md:pr-6 text-xs md:text-sm focus:outline-none focus:border-primary-blue transition-all text-primary-blue font-bold placeholder:text-gray-300 shadow-sm"
               />
             </div>
             {(step === 1 || step === 4 || step === 6) && (
@@ -456,13 +479,10 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
                   const allVisibleSelected = visibleIds.every(id => currentList.includes(id));
                   
                   if (allVisibleSelected) {
-                    // Deselect all visible
                     setList(currentList.filter(id => !visibleIds.includes(id)));
                   } else {
-                    // Select all visible (preserving others)
                     const newList = [...new Set([...currentList, ...visibleIds])];
                     if (step === 4 || step === 6) {
-                      // Ensure they are not in the other team
                       const otherSetList = step === 4 ? setSelectedB : setSelectedA;
                       const otherList = step === 4 ? selectedB : selectedA;
                       otherSetList(otherList.filter(id => !visibleIds.includes(id)));
@@ -470,11 +490,11 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
                     setList(newList);
                   }
                 }}
-                className="bg-[#00ff00]/10 hover:bg-[#00ff00]/20 text-[#00ff00] px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors border border-[#00ff00]/20 whitespace-nowrap"
+                className="bg-white hover:bg-gray-50 text-primary-blue px-4 md:px-6 py-3 md:py-4 rounded-xl md:rounded-2xl text-[9px] md:text-[11px] font-black uppercase tracking-widest transition-all border-2 border-gray-100 hover:border-primary-blue shadow-sm"
               >
                 {visiblePlayers.every(p => (step === 1 ? presentPlayers : (step === 4 ? selectedA : selectedB)).includes(p.id)) 
-                  ? 'Desmarcar Todos' 
-                  : 'Selecionar Todos'}
+                  ? 'Limpar' 
+                  : 'Marcar Todos'}
               </button>
             )}
           </div>
@@ -482,7 +502,7 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
 
         {/* Player List (only for selection steps) */}
         {(step === 1 || step >= 4) && (
-          <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="flex-1 overflow-y-auto p-4 md:p-10 grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6 bg-gray-50/30">
             {visiblePlayers.map(p => {
                 const isSelected = step === 1 
                   ? presentPlayers.includes(p.id)
@@ -492,89 +512,91 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
                   <button
                     key={p.id}
                     onClick={() => togglePlayer(p.id)}
-                    className={`group relative flex flex-col items-center p-4 rounded-2xl border transition-all ${
+                    className={`group relative flex flex-col items-center p-3 md:p-6 rounded-2xl md:rounded-3xl border-2 transition-all shadow-sm ${
                       isSelected
-                        ? 'text-white'
-                        : 'bg-white/5 border-transparent text-gray-400 hover:bg-white/10'
+                        ? 'bg-white shadow-xl'
+                        : 'bg-white/50 border-transparent text-gray-400 hover:bg-white hover:border-gray-200'
                     }`}
                     style={isSelected ? { 
-                      backgroundColor: step === 1 ? '#00ff0020' : `${currentTeam?.color}20`,
-                      borderColor: step === 1 ? '#00ff00' : currentTeam?.color,
-                      color: step === 1 ? '#00ff00' : (currentTeam?.color === '#ffffff' ? '#ffffff' : currentTeam?.color)
+                      borderColor: step === 1 ? '#eab308' : (currentTeam?.color || '#3b82f6')
                     } : {}}
                   >
-                    <div className="relative mb-3">
+                    <div className="relative mb-3 md:mb-5">
                       {p.photoUrl ? (
-                        <img
-                          src={p.photoUrl}
-                          className="w-16 h-16 rounded-full border-2 object-cover transition-all"
-                          style={{ borderColor: isSelected ? (step === 1 ? '#00ff00' : currentTeam?.color) : 'transparent' }}
-                        />
+                        <div className="relative p-0.5 md:p-1 rounded-full border-2 border-dashed border-gray-200 group-hover:border-primary-blue transition-colors">
+                          <img
+                            src={p.photoUrl}
+                            className="w-12 h-12 md:w-20 md:h-20 rounded-full object-cover shadow-lg"
+                          />
+                        </div>
                       ) : (
                         <div 
-                          className="w-16 h-16 rounded-full border-2 bg-white/5 flex items-center justify-center transition-all"
-                          style={{ borderColor: isSelected ? (step === 1 ? '#00ff00' : currentTeam?.color) : 'transparent' }}
+                          className="w-12 h-12 md:w-20 md:h-20 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-200 group-hover:border-primary-blue transition-all"
                         >
-                          <User size={32} className="text-gray-600" />
+                          <User className="w-6 h-6 md:w-9 md:h-9 text-gray-300" />
                         </div>
                       )}
                       {isSelected && (
                         <div 
-                          className="absolute -top-1 -right-1 text-black rounded-full p-1 shadow-lg"
-                          style={{ backgroundColor: step === 1 ? '#00ff00' : currentTeam?.color }}
+                          className="absolute -top-1 -right-1 md:-top-2 md:-right-2 text-white rounded-full p-1.5 md:p-2 shadow-xl border-2 border-white scale-100 md:scale-110"
+                          style={{ backgroundColor: step === 1 ? '#eab308' : (currentTeam?.color || '#3b82f6') }}
                         >
-                          <CheckCircle2 size={12} />
+                          <CheckCircle2 className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" />
                         </div>
                       )}
                     </div>
-                    <span className="text-[10px] font-black uppercase tracking-tight text-center line-clamp-1">
+                    <span className="text-[10px] md:text-xs font-black uppercase italic tracking-tight text-center line-clamp-1 text-primary-blue">
                       {p.nickname || p.name}
                     </span>
-                    <span className="text-[8px] font-bold text-gray-500 uppercase mt-1">
+                    <span className="text-[8px] md:text-[9px] font-bold text-gray-400 uppercase mt-1 md:mt-1.5 tracking-widest">
                       {p.position || 'Jogador'}
                     </span>
                   </button>
                 );
               })}
             {filteredPlayers.length === 0 && (
-              <div className="col-span-full py-12 text-center">
-                <p className="text-gray-500 font-bold italic">Nenhum atleta disponível.</p>
+              <div className="col-span-full py-20 text-center flex flex-col items-center opacity-30">
+                <Users size={48} className="text-gray-400 mb-4" />
+                <p className="text-gray-400 font-black uppercase tracking-[0.3em] italic">Lista Vazia</p>
               </div>
             )}
           </div>
         )}
 
         {/* Footer Actions */}
-        <div className="p-6 bg-[#1a1a1a] border-t border-white/5 flex flex-wrap gap-4">
-          <div className="flex-[2] flex gap-4 w-full sm:w-auto order-2 sm:order-1">
+        <div className="p-5 md:p-10 bg-gray-50 border-t border-gray-100 flex flex-wrap gap-3 md:gap-5 shadow-inner">
+          <div className="flex-[2] flex gap-3 md:gap-5 w-full sm:w-auto order-2 sm:order-1">
             {step > 0 && (
               <button
                 onClick={handleBack}
-                className="flex-1 bg-white/5 text-white py-4 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-white/10 transition-colors"
+                className="flex-1 bg-white text-gray-400 border-2 border-gray-100 py-3 md:py-5 rounded-xl md:rounded-3xl font-black uppercase tracking-widest flex items-center justify-center gap-2 md:gap-3 hover:bg-gray-50 transition-all active:scale-95 text-[10px] md:text-sm shadow-sm"
               >
-                <ArrowLeft size={18} /> Voltar
+                <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" /> Voltar
               </button>
             )}
             {onSaveDraft && (
               <button
                 onClick={() => onSaveDraft(teamAId, teamBId, selectedA, selectedB, goalkeeperA, goalkeeperB, presentPlayers, matchSubstitutesCount)}
-                className="flex-1 bg-orange-500/10 text-orange-500 border border-orange-500/20 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-orange-500/20 transition-colors"
+                className="flex-1 bg-white text-primary-yellow border-2 border-gray-100 py-3 md:py-5 rounded-xl md:rounded-3xl font-black uppercase tracking-widest hover:bg-yellow-50 hover:border-primary-yellow/30 transition-all active:scale-95 text-[10px] md:text-sm shadow-sm"
               >
-                Salvar Progresso
+                Draft
               </button>
             )}
           </div>
           <button
             onClick={handleNext}
             disabled={!canProceed}
-            className={`flex-[2] py-4 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all order-1 sm:order-2 w-full sm:w-auto ${
+            className={`flex-[3] py-4 md:py-5 rounded-xl md:rounded-3xl font-black uppercase tracking-widest flex items-center justify-center gap-2 md:gap-3 transition-all order-1 sm:order-2 w-full sm:w-auto shadow-xl active:scale-95 text-xs md:text-base ${
               canProceed
-                ? 'text-black hover:brightness-90'
-                : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                ? 'text-white hover:brightness-110 shadow-blue-200'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
             }`}
-            style={canProceed ? { backgroundColor: step === 0 ? '#00ff00' : currentTeam?.color } : {}}
+            style={canProceed ? { 
+                backgroundColor: step === 0 ? '#3b82f6' : (currentTeam?.color || '#3b82f6'),
+                color: (currentTeam?.color === '#ffffff' ? '#1e3a8a' : '#ffffff')
+            } : {}}
           >
-            {nextButtonText} <ArrowRight size={18} />
+            <span className="truncate">{nextButtonText}</span> <ArrowRight className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
           </button>
         </div>
       </motion.div>

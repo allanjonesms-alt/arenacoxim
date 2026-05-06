@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, addDoc, onSnapshot, doc, deleteDoc, query, orderBy, updateDoc } from 'firebase/firestore';
 import { Admin, Location, AdminData } from '../types';
-import { Plus, Trash2, ShieldCheck, Mail, User, MapPin, Loader2, Search, Edit2 } from 'lucide-react';
+import { Plus, Trash2, ShieldCheck, Mail, User, MapPin, Loader2, Search, Edit2, X, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../App';
 
@@ -142,200 +142,229 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-[#00ff00]" />
+        <Loader2 className="w-10 h-10 animate-spin text-primary-blue" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h2 className="text-3xl font-black uppercase italic tracking-tight">Gestão de Administradores</h2>
-          <p className="text-gray-500 text-sm">Cadastre e gerencie os responsáveis pelos locais.</p>
+          <h2 className="text-4xl font-black uppercase italic tracking-tighter text-primary-blue">Staff</h2>
+          <p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1 shadow-sm px-2 bg-gray-50 rounded-full inline-block">Administração de Sedes</p>
         </div>
         <button 
           onClick={() => setIsModalOpen(true)}
-          className="bg-[#00ff00] text-black px-6 py-3 rounded-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-[#00cc00] transition-all shadow-[0_0_20px_rgba(0,255,0,0.2)]"
+          className="bg-primary-blue text-white px-10 py-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 active:scale-95 group"
         >
-          <Plus className="w-5 h-5" /> Novo Administrador
+          <Plus className="w-5 h-5 text-primary-yellow transition-transform group-hover:rotate-12" /> Novo Admin
         </button>
       </div>
 
       {/* Search Bar */}
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
+      <div className="relative group">
+        <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-blue transition-colors w-6 h-6" />
         <input 
           type="text" 
-          placeholder="Buscar por nome ou e-mail..."
+          placeholder="Pesquisar administrador pelo nome ou e-mail..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-[#1a1a1a] border border-white/10 rounded-2xl py-4 pl-12 pr-4 focus:border-[#00ff00] outline-none transition-all text-white"
+          className="w-full bg-white border-2 border-gray-100 rounded-3xl py-6 pl-16 pr-8 focus:outline-none focus:border-primary-blue transition-all text-primary-blue font-bold placeholder:text-gray-300 shadow-sm"
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredAdmins.map((admin, i) => (
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05 }}
-            key={admin.id} 
-            className="bg-[#1a1a1a] p-6 rounded-2xl border border-white/5 hover:border-[#00ff00]/30 transition-all group"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex gap-2">
-                <div className="bg-white/5 p-3 rounded-xl text-[#00ff00]">
-                  <ShieldCheck className="w-6 h-6" />
-                </div>
-                {admin.updatedAt ? (
-                  <div className="bg-[#00ff00]/10 text-[#00ff00] text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-full h-fit mt-1 border border-[#00ff00]/20">
-                    Ativo
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {filteredAdmins.length === 0 ? (
+          <div className="col-span-full py-32 bg-white rounded-[3rem] border-2 border-dashed border-gray-100 text-center flex flex-col items-center opacity-30">
+            <ShieldCheck className="w-20 h-20 text-gray-400 mb-6" />
+            <p className="text-gray-500 font-black uppercase tracking-[0.3em] italic">Nenhum administrador encontrado</p>
+          </div>
+        ) : (
+          filteredAdmins.map((admin, i) => (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+              key={admin.id} 
+              className="bg-white rounded-[2.5rem] border-2 border-gray-100 overflow-hidden group hover:border-primary-blue/30 hover:shadow-2xl transition-all shadow-sm relative"
+            >
+              <div className="p-10">
+                <div className="flex items-start justify-between mb-8">
+                  <div className="flex gap-4">
+                    <div className="bg-primary-blue/5 p-4 rounded-2xl text-primary-blue shadow-inner border border-primary-blue/10">
+                      <ShieldCheck className="w-8 h-8" />
+                    </div>
+                    <div>
+                      {admin.updatedAt ? (
+                        <div className="bg-green-50 text-green-600 text-[8px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full border border-green-100 w-fit drop-shadow-sm flex items-center gap-1.5">
+                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" /> Ativo
+                        </div>
+                      ) : (
+                        <div className="bg-orange-50 text-orange-600 text-[8px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full border border-orange-100 w-fit drop-shadow-sm flex items-center gap-1.5">
+                          <div className="w-1.5 h-1.5 bg-orange-500 rounded-full" /> Pendente
+                        </div>
+                      )}
+                    </div>
                   </div>
-                ) : (
-                  <div className="bg-orange-500/10 text-orange-500 text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-full h-fit mt-1 border border-orange-500/20">
-                    Pendente
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => handleEditAdmin(admin)}
+                      className="p-3 bg-white hover:bg-primary-blue text-primary-blue hover:text-white rounded-xl transition-all border-2 border-primary-blue/10 shadow-sm group/btn active:scale-95"
+                    >
+                      <Edit2 className="w-4 h-4 group-hover/btn:text-primary-yellow transition-colors" />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteAdmin(admin.id)}
+                      className="p-3 bg-red-50 hover:bg-red-500 text-red-500 hover:text-white rounded-xl transition-all border border-red-100 shadow-sm active:scale-95"
+                      title="Remover Administrador"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
-                )}
-              </div>
-              <div className="flex gap-1">
-                <button 
-                  onClick={() => handleEditAdmin(admin)}
-                  className="p-2 text-gray-600 hover:text-[#00ff00] transition-colors"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => handleDeleteAdmin(admin.id)}
-                  className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
-                  title="Remover Administrador"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-            
-            <div className="space-y-3">
-              <div>
-                <h3 className="text-lg font-black uppercase italic tracking-tight">{admin.name}</h3>
-                <div className="flex items-center gap-2 text-gray-500 text-xs mt-1">
-                  <Mail className="w-3 h-3" />
-                  <span>{admin.email}</span>
+                </div>
+                
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-2xl font-black uppercase italic tracking-tighter text-primary-gray group-hover:text-primary-blue transition-colors truncate">{admin.name}</h3>
+                    <div className="flex items-center gap-2 text-gray-400 font-bold text-[10px] mt-2 uppercase tracking-widest italic bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100 w-fit">
+                      <Mail className="w-3.5 h-3.5 text-primary-blue/40" />
+                      <span>{admin.email}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="pt-6 border-t-2 border-dashed border-gray-100">
+                    <div className="flex items-center gap-3 text-primary-blue mb-2">
+                      <div className="bg-primary-blue p-1.5 rounded-lg">
+                        <MapPin className="w-3.5 h-3.5 text-primary-yellow" />
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em]">Responsável por</span>
+                    </div>
+                    <div className="text-sm font-black uppercase italic text-gray-500 bg-gray-50 p-4 rounded-2xl border border-gray-100 shadow-inner group-hover:bg-white transition-colors">
+                      {getLocationName(admin.locationId)}
+                    </div>
+                  </div>
                 </div>
               </div>
-              
-              <div className="pt-4 border-t border-white/5">
-                <div className="flex items-center gap-2 text-[#00ff00]">
-                  <MapPin className="w-4 h-4" />
-                  <span className="text-xs font-bold uppercase tracking-widest">Responsável por:</span>
-                </div>
-                <div className="text-sm font-bold mt-1 text-gray-300">
-                  {getLocationName(admin.locationId)}
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        ))}
+            </motion.div>
+          ))
+        )}
       </div>
 
       {/* Add Admin Modal */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => {
-              setIsModalOpen(false);
-              setEditingAdmin(null);
-              setName('');
-              setEmail('');
-              setLocationId('');
-            }} />
             <motion.div 
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="relative bg-[#1a1a1a] w-full max-w-md rounded-3xl border border-white/10 overflow-hidden"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setIsModalOpen(false);
+                setEditingAdmin(null);
+                setName('');
+                setEmail('');
+                setLocationId('');
+              }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm" 
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden"
             >
-              <form onSubmit={handleAddAdmin} className="p-8 space-y-6">
-                <div className="text-center">
-                  <div className="bg-[#00ff00]/10 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                    <ShieldCheck className="w-8 h-8 text-[#00ff00]" />
+              <div className="bg-primary-blue p-8 flex items-center justify-between text-white">
+                <div className="flex items-center gap-4">
+                  <div className="bg-white/10 p-3 rounded-2xl">
+                    <ShieldCheck className="w-8 h-8 text-primary-yellow" />
                   </div>
-                  <h3 className="text-2xl font-black uppercase italic tracking-tight">
-                    {editingAdmin ? 'Editar Administrador' : 'Novo Administrador'}
-                  </h3>
-                  <p className="text-gray-500 text-sm mt-1">
-                    {editingAdmin ? 'Alterando os dados do responsável.' : 'Cadastre um novo responsável por local.'}
-                  </p>
+                  <div>
+                    <h3 className="text-2xl font-black uppercase italic tracking-tighter">
+                      {editingAdmin ? 'Editar Admin' : 'Novo Staff'}
+                    </h3>
+                    <p className="text-white/60 text-[10px] font-black uppercase tracking-widest mt-0.5 whitespace-nowrap">
+                      Gestão de acesso por arena
+                    </p>
+                  </div>
                 </div>
+                <button 
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setEditingAdmin(null);
+                    setName('');
+                    setEmail('');
+                    setLocationId('');
+                  }}
+                  className="p-3 hover:bg-white/10 rounded-2xl transition-colors text-white/50 hover:text-white"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
 
-                <div className="space-y-4">
+              <form onSubmit={handleAddAdmin} className="p-8 space-y-6">
+                <div className="space-y-5">
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest flex items-center gap-2">
-                      <User className="w-3 h-3" /> Nome Completo
+                    <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest pl-1 flex items-center gap-2">
+                      <User className="w-3.5 h-3.5 text-primary-blue" /> Nome do Responsável
                     </label>
                     <input 
                       required 
                       type="text" 
                       value={name}
                       onChange={e => setName(e.target.value)}
-                      placeholder="Ex: João Silva"
-                      className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 focus:border-[#00ff00] outline-none transition-all text-white"
+                      placeholder="NOME COMPLETO"
+                      className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-5 px-6 focus:outline-none focus:border-primary-blue transition-all font-black uppercase italic text-primary-blue placeholder:text-gray-300"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest flex items-center gap-2">
-                      <Mail className="w-3 h-3" /> E-mail (Gmail)
+                    <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest pl-1 flex items-center gap-2">
+                      <Mail className="w-3.5 h-3.5 text-primary-blue" /> E-mail Institucional (Google)
                     </label>
                     <input 
                       required 
                       type="email" 
                       value={email}
                       onChange={e => setEmail(e.target.value)}
-                      placeholder="usuario@gmail.com"
-                      className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 focus:border-[#00ff00] outline-none transition-all text-white"
+                      placeholder="USUARIO@GMAIL.COM"
+                      className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-5 px-6 focus:outline-none focus:border-primary-blue transition-all font-black uppercase italic text-primary-blue placeholder:text-gray-300"
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest flex items-center gap-2">
-                      <MapPin className="w-3 h-3" /> Local Responsável
+                  <div className="space-y-2 relative">
+                    <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest pl-1 flex items-center gap-2">
+                      <MapPin className="w-3.5 h-3.5 text-primary-yellow" /> Unidade Vinculada
                     </label>
-                    <select 
-                      required
-                      value={locationId}
-                      onChange={e => setLocationId(e.target.value)}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 focus:border-[#00ff00] outline-none transition-all appearance-none text-white"
-                    >
-                      <option value="" disabled className="bg-[#1a1a1a] text-white">Selecione um local</option>
-                      {locations.map(loc => (
-                        <option key={loc.id} value={loc.id} className="bg-[#1a1a1a] text-white">{loc.name}</option>
-                      ))}
-                    </select>
+                    <div className="relative group/select">
+                      <select 
+                        required
+                        value={locationId}
+                        onChange={e => setLocationId(e.target.value)}
+                        className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-5 px-6 focus:outline-none focus:border-primary-blue transition-all appearance-none font-black uppercase italic text-primary-blue cursor-pointer"
+                      >
+                        <option value="" disabled>SELECIONE A ARENA</option>
+                        {locations.map(loc => (
+                          <option key={loc.id} value={loc.id}>{loc.name.toUpperCase()}</option>
+                        ))}
+                      </select>
+                      <Plus className="absolute right-6 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300 pointer-events-none group-focus-within/select:text-primary-blue transition-colors" />
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex gap-3 pt-4">
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      setIsModalOpen(false);
-                      setEditingAdmin(null);
-                      setName('');
-                      setEmail('');
-                      setLocationId('');
-                    }}
-                    className="flex-1 px-6 py-3 rounded-xl font-bold uppercase tracking-widest text-gray-500 hover:bg-white/5 transition-all"
-                  >
-                    Cancelar
-                  </button>
+                <div className="flex gap-4 pt-6">
                   <button 
                     type="submit"
                     disabled={saving}
-                    className="flex-1 bg-[#00ff00] text-black px-6 py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-[#00cc00] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="flex-1 bg-primary-blue text-white py-6 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 disabled:opacity-50 flex items-center justify-center gap-3 active:scale-95 transition-all group"
                   >
-                    {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : (editingAdmin ? <ShieldCheck className="w-5 h-5" /> : <Plus className="w-5 h-5" />)}
-                    {saving ? 'Salvando...' : (editingAdmin ? 'Salvar' : 'Cadastrar')}
+                    {saving ? (
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="w-6 h-6 text-primary-yellow group-hover:scale-110 transition-transform" />
+                    )}
+                    {saving ? 'PROCESSANDO...' : (editingAdmin ? 'ATUALIZAR ACESSO' : 'LIBERAR ACESSO')}
                   </button>
                 </div>
               </form>

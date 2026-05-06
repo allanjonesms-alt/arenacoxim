@@ -6,7 +6,7 @@ interface SoccerJerseyProps {
   size?: number;
 }
 
-export const SoccerJersey: React.FC<SoccerJerseyProps> = ({ color, className = "", size = 100 }) => {
+export const SoccerJersey: React.FC<SoccerJerseyProps> = ({ color, className = "", size }) => {
   return (
     <svg 
       width={size} 
@@ -14,7 +14,7 @@ export const SoccerJersey: React.FC<SoccerJerseyProps> = ({ color, className = "
       viewBox="0 0 100 100" 
       fill="none" 
       xmlns="http://www.w3.org/2000/svg"
-      className={`${className} drop-shadow-xl`}
+      className={`${className} drop-shadow-xl ${!size ? 'w-full h-full' : ''}`}
     >
       {/* Jersey Body */}
       <path 

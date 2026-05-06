@@ -97,6 +97,7 @@
       "properties": {
         "name": { "type": "string", "description": "Name of the location" },
         "address": { "type": "string", "description": "Full address of the location" },
+        "logoUrl": { "type": "string", "description": "URL or base64 of the location logo" },
         "playerCount": { "type": "integer", "description": "Players per team in a match" },
         "gameDuration": { "type": "integer", "description": "Duration in minutes" },
         "allowSubstitutes": { "type": "boolean" },

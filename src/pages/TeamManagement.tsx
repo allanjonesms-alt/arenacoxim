@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { Team, Location, AdminData } from '../types';
-import { Shield, Plus, Trash2, Edit2, MapPin, X, Search, Palette, Map, AlertTriangle } from 'lucide-react';
+import { Shield, Plus, Trash2, Edit2, MapPin, X, Search, Palette, Map, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SoccerJersey } from '../components/SoccerJersey';
 import { handleFirestoreError, OperationType } from '../App';
@@ -154,25 +154,27 @@ export default function TeamManagement({ adminData }: TeamManagementProps) {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex flex-col md:flex-row md:items-center gap-4">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex flex-col md:flex-row md:items-center gap-8">
           <div>
-            <h2 className="text-3xl font-black uppercase italic tracking-tight">Gestão de Times</h2>
-            <p className="text-gray-500 text-sm">Cadastre os times, locais e uniformes.</p>
+            <h2 className="text-4xl font-black uppercase italic tracking-tighter text-primary-blue">Equipes</h2>
+            <p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1 shadow-sm px-2 bg-gray-50 rounded-full inline-block">Gestão de Times e Cores</p>
           </div>
 
           {adminData?.role === 'master' && (
-            <div className="flex items-center gap-2 bg-[#1a1a1a] p-1 rounded-xl border border-white/5">
-              <MapPin className="w-4 h-4 text-[#00ff00] ml-2" />
+            <div className="flex items-center gap-3 bg-white p-1 rounded-[1.25rem] border border-gray-100 shadow-sm">
+              <div className="bg-primary-blue/5 p-2 rounded-xl ml-1">
+                <MapPin className="w-4 h-4 text-primary-blue" />
+              </div>
               <select
                 value={selectedLocationId}
                 onChange={(e) => setSelectedLocationId(e.target.value)}
-                className="bg-transparent text-white text-xs font-bold uppercase tracking-widest py-2 px-3 outline-none border-none focus:ring-0"
+                className="bg-transparent text-primary-blue text-[10px] font-black uppercase tracking-widest py-3 px-4 outline-none border-none focus:ring-0 cursor-pointer"
               >
-                <option value="all" className="bg-[#1a1a1a] text-white">Todos os Locais</option>
+                <option value="all">Todas as Arenas</option>
                 {locations.map(loc => (
-                  <option key={loc.id} value={loc.id} className="bg-[#1a1a1a] text-white">{loc.name}</option>
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
                 ))}
               </select>
             </div>
@@ -180,22 +182,27 @@ export default function TeamManagement({ adminData }: TeamManagementProps) {
         </div>
         <button 
           onClick={() => setIsModalOpen(true)}
-          className="bg-[#00ff00] text-black px-6 py-3 rounded-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-[#00cc00] transition-all hover:scale-105"
+          className="bg-primary-blue text-white px-10 py-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 active:scale-95 group"
         >
-          <Plus className="w-5 h-5" /> Novo Time
+          <Plus className="w-5 h-5 text-primary-yellow transition-transform group-hover:rotate-12" /> Novo Time
         </button>
       </div>
 
       {/* Bulk Actions */}
       {teams.some(t => t.name.toUpperCase() === 'GENERICO') && (
-        <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl flex items-center justify-between">
-          <div className="flex items-center gap-3 text-red-500">
-            <AlertTriangle className="w-5 h-5" />
-            <span className="text-sm font-bold uppercase tracking-tight">Existem times genéricos detectados</span>
+        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="bg-red-50 border-2 border-dashed border-red-100 p-6 rounded-[2rem] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm group hover:border-red-200 transition-all">
+          <div className="flex items-center gap-4 text-red-600">
+            <div className="p-3 bg-red-100 rounded-2xl animate-pulse">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+              <span className="text-sm font-black uppercase italic tracking-tight block">Times Genéricos Detectados</span>
+              <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest leading-none mt-1">Saneamento de dados necessário</p>
+            </div>
           </div>
           <button 
             onClick={async () => {
-              if (window.confirm('Deseja excluir TODOS os times com o nome "GENERICO"?')) {
+              if (confirm("ATENÇÃO: Deseja apagar todos os times genéricos do sistema?")) {
                 const genericTeams = teams.filter(t => t.name.toUpperCase() === 'GENERICO');
                 for (const team of genericTeams) {
                   try {
@@ -206,66 +213,76 @@ export default function TeamManagement({ adminData }: TeamManagementProps) {
                 }
               }
             }}
-            className="bg-red-500 text-white px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-red-600 transition-colors"
+            className="bg-red-600 text-white px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-red-700 transition-all shadow-xl shadow-red-100 active:scale-95 shrink-0"
           >
-            Excluir todos "GENERICO"
+            Limpar Registros
           </button>
-        </div>
+        </motion.div>
       )}
 
       {/* Search Bar */}
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
+      <div className="relative group">
+        <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-blue transition-colors w-6 h-6" />
         <input 
           type="text" 
-          placeholder="Buscar time ou local..."
+          placeholder="Pesquisar equipe pelo nome ou arena..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl py-4 pl-12 pr-4 focus:outline-none focus:border-[#00ff00] transition-colors text-white"
+          className="w-full bg-white border-2 border-gray-100 rounded-3xl py-6 pl-16 pr-8 focus:outline-none focus:border-primary-blue transition-all text-primary-blue font-bold placeholder:text-gray-300 shadow-sm"
         />
       </div>
 
       {/* Teams Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredTeams.map((team) => (
-          <motion.div 
-            layout
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            key={team.id} 
-            className="bg-[#1a1a1a] rounded-2xl border border-white/5 overflow-hidden group hover:border-[#00ff00]/30 transition-all"
-          >
-            <div className="p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="relative group-hover:scale-110 transition-transform duration-300">
-                  <SoccerJersey color={team.color} size={60} />
-                </div>
-                  <div>
-                    <h3 className="text-xl font-bold truncate">{team.name}</h3>
-                    <div className="flex items-center gap-1 text-gray-500 text-xs">
-                      <MapPin className="w-3 h-3 text-[#00ff00]" /> 
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+        {filteredTeams.length === 0 ? (
+          <div className="col-span-full py-32 bg-white rounded-[3rem] border-2 border-dashed border-gray-100 text-center flex flex-col items-center opacity-30">
+            <Shield className="w-20 h-20 text-gray-400 mb-6" />
+            <p className="text-gray-500 font-black uppercase tracking-[0.3em] italic">Nenhum time encontrado</p>
+          </div>
+        ) : (
+          filteredTeams.map((team) => (
+            <motion.div 
+              layout
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              key={team.id} 
+              className="bg-white rounded-[2.5rem] border-2 border-gray-100 overflow-hidden group hover:border-primary-blue/30 hover:shadow-2xl transition-all shadow-sm relative"
+            >
+              <div className="p-10">
+                <div className="flex flex-col items-center text-center mb-8">
+                  <div className="relative group-hover:scale-110 transition-transform duration-500 drop-shadow-2xl mb-6">
+                    <SoccerJersey color={team.color} size={100} />
+                    <div className="absolute -bottom-2 -right-2 bg-white p-2 rounded-xl shadow-xl border border-gray-100">
+                      <Palette size={14} className="text-primary-blue" style={{ color: team.color }} />
+                    </div>
+                  </div>
+                  <div className="w-full px-2">
+                    <h3 className="text-2xl font-black italic uppercase text-primary-gray truncate leading-tight transition-colors group-hover:text-primary-blue">{team.name}</h3>
+                    <div className="flex items-center justify-center gap-2 mt-2 text-[10px] font-black uppercase tracking-widest text-gray-400 bg-gray-50 px-4 py-2 rounded-full border border-gray-100 w-fit mx-auto">
+                      <MapPin className="w-3.5 h-3.5 text-primary-blue" /> 
                       {getLocationName(team.locationId)}
                     </div>
                   </div>
-              </div>
+                </div>
 
-              <div className="flex items-center gap-2 mt-6">
-                <button 
-                  onClick={() => handleEdit(team)}
-                  className="flex-1 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
-                >
-                  <Edit2 className="w-3 h-3" /> Editar
-                </button>
-                <button 
-                  onClick={() => handleDelete(team.id)}
-                  className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-lg transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => handleEdit(team)}
+                    className="flex-1 bg-white hover:bg-primary-blue text-primary-blue hover:text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 border-2 border-primary-blue/10 active:scale-95 group/edit"
+                  >
+                    <Edit2 className="w-4 h-4 group-hover/edit:text-primary-yellow transition-colors" /> Detalhes
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(team.id)}
+                    className="p-4 bg-gray-50 hover:bg-red-500 text-gray-400 hover:text-white rounded-2xl transition-all border border-gray-100 shadow-sm active:scale-95"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
-            </div>
-          </motion.div>
-        ))}
+            </motion.div>
+          ))
+        )}
       </div>
 
       {/* Modal */}
@@ -277,89 +294,97 @@ export default function TeamManagement({ adminData }: TeamManagementProps) {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={resetForm}
-              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative bg-[#1a1a1a] w-full max-w-md rounded-2xl md:rounded-3xl border border-white/10 shadow-2xl overflow-hidden"
+              className="relative bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden"
             >
-              <div className="p-5 md:p-6">
-                <div className="flex items-center justify-between mb-4 md:mb-5">
-                  <h3 className="text-xl md:text-2xl font-black uppercase italic tracking-tight">
-                    {editingTeam ? 'Editar Time' : 'Novo Time'}
-                  </h3>
-                  <button onClick={resetForm} className="p-2 hover:bg-white/5 rounded-full"><X /></button>
+              <div className="bg-primary-blue p-6 md:p-8 flex items-center justify-between text-white">
+                <h3 className="text-xl md:text-2xl font-black uppercase italic tracking-tighter">
+                  {editingTeam ? 'Configurar Time' : 'Novo Time'}
+                </h3>
+                <button onClick={resetForm} className="p-2.5 hover:bg-white/10 rounded-xl transition-colors text-white/70 hover:text-white">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="p-6 md:p-8 space-y-6">
+                <div className="flex justify-center p-6 bg-gray-50 rounded-3xl border border-gray-50 shadow-inner">
+                  <SoccerJersey color={color} size={100} className="drop-shadow-2xl" />
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-3 md:space-y-4">
-                  <div className="flex justify-center py-2">
-                    <SoccerJersey color={color} size={80} className="animate-pulse" />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest">Nome do Time</label>
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest pl-1">Identificação da Equipe</label>
                     <input 
                       required
                       type="text" 
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 px-4 focus:outline-none focus:border-[#00ff00] text-white"
-                      placeholder="Ex: Real Madruga"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest flex items-center justify-between">
-                      Local de Jogo
-                      {adminData?.role === 'master' && (
-                        <Link to="/admin/locations" className="text-[#00ff00] hover:underline normal-case font-bold flex items-center gap-1">
-                          <Plus className="w-2 h-2" /> Novo
-                        </Link>
-                      )}
-                    </label>
-                    <select 
-                      required
-                      value={locationId}
-                      onChange={(e) => setLocationId(e.target.value)}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 px-4 focus:outline-none focus:border-[#00ff00] appearance-none text-white"
-                    >
-                      <option value="" disabled className="bg-[#1a1a1a] text-white">Selecione um local</option>
-                      {locations.map(loc => (
-                        <option key={loc.id} value={loc.id} className="bg-[#1a1a1a] text-white">{loc.name}</option>
-                      ))}
-                    </select>
-                    {locations.length === 0 && (
-                      <p className="text-[10px] text-red-400 italic">Nenhum local cadastrado.</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest">Jogadores por Partida</label>
-                    <input 
-                      required
-                      type="number" 
-                      min="1"
-                      max="20"
-                      value={playerCount}
-                      onChange={(e) => setPlayerCount(Number(e.target.value))}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 px-4 focus:outline-none focus:border-[#00ff00] text-white"
-                      placeholder="Ex: 5"
+                      className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 px-5 outline-none focus:ring-4 focus:ring-primary-blue/5 focus:border-primary-blue/20 transition-all font-medium text-primary-gray placeholder:text-gray-300 uppercase italic"
+                      placeholder="EX: REAL MADRUGA"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest flex items-center gap-2">
-                      <Palette className="w-3 h-3" /> Cor do Uniforme
+                    <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest flex items-center justify-between pl-1">
+                      Arena de Origem
+                      {adminData?.role === 'master' && (
+                        <Link to="/admin/locations" className="text-primary-blue hover:text-blue-700 normal-case font-black text-[9px] uppercase tracking-widest flex items-center gap-1">
+                          <Plus className="w-3 h-3" /> Gerenciar Arenas
+                        </Link>
+                      )}
                     </label>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="relative">
+                      <select 
+                        required
+                        value={locationId}
+                        onChange={(e) => setLocationId(e.target.value)}
+                        className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 px-5 outline-none focus:ring-4 focus:ring-primary-blue/5 focus:border-primary-blue/20 transition-all font-medium text-primary-gray appearance-none cursor-pointer"
+                      >
+                        <option value="" disabled>Selecione a arena oficial</option>
+                        {locations.map(loc => (
+                          <option key={loc.id} value={loc.id}>{loc.name}</option>
+                        ))}
+                      </select>
+                      <MapPin className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none w-5 h-5" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest pl-1">Atletas/Time</label>
+                      <input 
+                        required
+                        type="number" 
+                        min="1"
+                        max="20"
+                        value={playerCount}
+                        onChange={(e) => setPlayerCount(Number(e.target.value))}
+                        className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 px-5 outline-none focus:ring-4 focus:ring-primary-blue/5 focus:border-primary-blue/20 transition-all font-medium text-primary-gray"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest pl-1">Paleta Oficial</label>
+                      <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-100 rounded-2x">
+                        <div className="w-8 h-8 rounded-lg shadow-sm border border-white" style={{ backgroundColor: color }} />
+                        <span className="text-[10px] font-black uppercase text-gray-500 font-mono">{color}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest pl-1">Selecione a Cor do Manto</label>
+                    <div className="grid grid-cols-8 gap-2">
                       {JERSEY_COLORS.map((c) => (
                         <button
                           key={c.hex}
                           type="button"
                           onClick={() => setColor(c.hex)}
-                          className={`h-8 rounded-lg border-2 transition-all ${color === c.hex ? 'border-[#00ff00] scale-110 shadow-[0_0_10px_rgba(0,255,0,0.3)]' : 'border-transparent hover:scale-105'}`}
+                          className={`h-8 rounded-xl border-2 transition-all ${color === c.hex ? 'border-primary-blue scale-110 shadow-lg' : 'border-white shadow-sm hover:scale-105'}`}
                           style={{ backgroundColor: c.hex }}
                           title={c.name}
                         />
@@ -367,12 +392,15 @@ export default function TeamManagement({ adminData }: TeamManagementProps) {
                     </div>
                   </div>
 
-                  <button 
-                    type="submit"
-                    className="w-full bg-[#00ff00] text-black py-3 rounded-xl font-black uppercase tracking-widest hover:bg-[#00cc00] transition-colors mt-2"
-                  >
-                    {editingTeam ? 'Salvar Alterações' : 'Cadastrar Time'}
-                  </button>
+                  <div className="pt-4">
+                    <button 
+                      type="submit"
+                      className="w-full bg-primary-blue text-white py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 active:scale-95 flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle2 className="w-5 h-5 text-primary-yellow" />
+                      {editingTeam ? 'Salvar Uniforme' : 'Fundar Equipe'}
+                    </button>
+                  </div>
                 </form>
               </div>
             </motion.div>

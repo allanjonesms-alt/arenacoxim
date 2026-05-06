@@ -68,6 +68,7 @@ export interface Location {
   id: string;
   name: string;
   address?: string;
+  logoUrl?: string;
   playerCount?: number; // Players per team in a match (e.g., 5 for 5x5)
   gameDuration?: number; // Duration in minutes
   allowSubstitutes?: boolean;

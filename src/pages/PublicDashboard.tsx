@@ -174,40 +174,51 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
         className="relative bg-[#1a1a1a] w-full max-w-2xl rounded-3xl border border-white/10 overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
       >
         {/* Modal Header */}
-        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <h3 className="text-xl font-black uppercase italic tracking-tight text-primary-blue">Resumo da Partida</h3>
-            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1 flex items-center gap-2">
-              <MapPin className="w-3 h-3 text-primary-yellow" /> {location?.name} • <CalendarIcon className="w-3 h-3 text-primary-yellow" /> {format(new Date(match.date + 'T00:00:00'), 'dd MMM yyyy', { locale: ptBR })}
-            </p>
+        <div className="p-4 md:p-6 border-b border-gray-100 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 md:gap-4 overflow-hidden">
+            {location?.logoUrl && (
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl border border-gray-100 overflow-hidden flex-shrink-0 bg-gray-50 p-1">
+                <img src={location.logoUrl} alt="" className="w-full h-full object-contain" />
+              </div>
+            )}
+            <div className="min-w-0">
+              <h3 className="text-lg md:text-xl font-black uppercase italic tracking-tight text-primary-blue truncate">Resumo da Partida</h3>
+              <p className="text-[9px] md:text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5 md:mt-1 flex items-center gap-1.5 truncate">
+                <MapPin className="w-2.5 h-2.5 md:w-3 md:h-3 text-primary-yellow flex-shrink-0" /> <span className="truncate">{location?.name}</span> • <CalendarIcon className="w-2.5 h-2.5 md:w-3 md:h-3 text-primary-yellow flex-shrink-0" /> {format(new Date(match.date + 'T00:00:00'), 'dd MMM yyyy', { locale: ptBR })}
+              </p>
+            </div>
           </div>
-          <button type="button" onClick={onClose} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">
+          <button type="button" onClick={onClose} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors flex-shrink-0">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-8">
+        <div className="p-4 md:p-6 overflow-y-auto space-y-6 md:space-y-8">
           {/* Scoreboard */}
-          <div className="flex items-center justify-between bg-gray-50 p-6 rounded-3xl border border-gray-100 shadow-inner">
-            <div className="flex-1 text-center cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setIsEditingLineup(!isEditingLineup)}>
+          <div className="flex items-center justify-between bg-gray-50 p-4 md:p-6 rounded-2xl md:rounded-3xl border border-gray-100 shadow-inner gap-2">
+            <div className="flex-1 text-center cursor-pointer hover:opacity-80 transition-opacity min-w-0" onClick={() => setIsEditingLineup(!isEditingLineup)}>
               <div className="flex flex-col items-center gap-2 mb-2">
-                <SoccerJersey color={teamAEntity?.color || '#555'} size={32} />
-                <div className="font-black uppercase tracking-tight text-sm" style={{ color: teamAEntity?.color }}>{teamAEntity?.name}</div>
+                <div className="w-7 h-7 md:w-8 md:h-8">
+                  <SoccerJersey color={teamAEntity?.color || '#555'} />
+                </div>
+                <div className="font-black uppercase tracking-tight text-[10px] md:text-sm truncate w-full px-1" style={{ color: teamAEntity?.color }}>{teamAEntity?.name}</div>
               </div>
-              <div className="text-4xl font-black italic text-primary-blue">{goalsA}</div>
+              <div className="text-3xl md:text-4xl font-black italic text-primary-blue tabular-nums">{goalsA}</div>
             </div>
             
-            <div className="px-6">
-              <div className="text-xs font-black text-primary-yellow italic">X</div>
+            <div className="px-2 md:px-6">
+              <div className="text-[10px] md:text-xs font-black text-primary-yellow italic opacity-30">X</div>
             </div>
 
-            <div className="flex-1 text-center cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setIsEditingLineup(!isEditingLineup)}>
+            <div className="flex-1 text-center cursor-pointer hover:opacity-80 transition-opacity min-w-0" onClick={() => setIsEditingLineup(!isEditingLineup)}>
               <div className="flex flex-col items-center gap-2 mb-2">
-                <SoccerJersey color={teamBEntity?.color || '#555'} size={32} />
-                <div className="font-black uppercase tracking-tight text-sm" style={{ color: teamBEntity?.color }}>{teamBEntity?.name}</div>
+                <div className="w-7 h-7 md:w-8 md:h-8">
+                  <SoccerJersey color={teamBEntity?.color || '#555'} />
+                </div>
+                <div className="font-black uppercase tracking-tight text-[10px] md:text-sm truncate w-full px-1" style={{ color: teamBEntity?.color }}>{teamBEntity?.name}</div>
               </div>
-              <div className="text-4xl font-black italic text-primary-blue">{goalsB}</div>
+              <div className="text-3xl md:text-4xl font-black italic text-primary-blue tabular-nums">{goalsB}</div>
             </div>
           </div>
 
@@ -608,45 +619,49 @@ export default function PublicDashboard({ adminData }: PublicDashboardProps) {
                   match.status === 'finished' ? 'bg-gray-50' : 
                   match.status === 'scheduled' ? 'bg-blue-100/50' :
                   'bg-gray-50'
-                } px-5 py-2.5 flex items-center justify-between text-[10px] uppercase tracking-widest font-black text-gray-400 border-b border-gray-100`}>
-                  <div className="flex items-center gap-4">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3 text-primary-blue" /> 
-                      {getLocationName(match.locationId)}
+                } px-4 md:px-5 py-2 md:py-2.5 flex items-center justify-between text-[9px] md:text-[10px] uppercase tracking-widest font-black text-gray-400 border-b border-gray-100`}>
+                  <div className="flex items-center gap-3 md:gap-4 overflow-hidden">
+                    <span className="flex items-center gap-1 truncate">
+                      <MapPin className="w-2.5 h-2.5 md:w-3 md:h-3 text-primary-blue flex-shrink-0" /> 
+                      <span className="truncate">{getLocationName(match.locationId)}</span>
                     </span>
-                    <span className="flex items-center gap-1"><CalendarIcon className="w-3 h-3 text-primary-blue" /> {format(new Date(match.date + 'T00:00:00'), 'dd MMM yyyy', { locale: ptBR })}</span>
+                    <span className="flex items-center gap-1 flex-shrink-0"><CalendarIcon className="w-2.5 h-2.5 md:w-3 md:h-3 text-primary-blue" /> {format(new Date(match.date + 'T00:00:00'), 'dd MMM yyyy', { locale: ptBR })}</span>
                   </div>
-                  <span className={`px-2 py-0.5 rounded-full text-[9px] ${
+                  <span className={`px-2 py-0.5 rounded-full text-[8px] md:text-[9px] flex-shrink-0 ${
                     match.status === 'finished' ? 'bg-gray-200 text-gray-600' : 
                     match.status === 'live' ? 'bg-red-500 text-white animate-pulse font-black' : 
                     'bg-primary-blue/10 text-primary-blue'
                   }`}>
-                    {match.status === 'finished' ? 'Encerrado' : match.status === 'live' ? 'AO VIVO' : 'Agendado'}
+                    {match.status === 'finished' ? 'Fim' : match.status === 'live' ? 'VIVO' : 'Agend'}
                   </span>
                 </div>
 
                 {/* Scoreboard Area */}
-                <div className="p-8 flex items-center justify-between">
-                  <div className="flex-1 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <SoccerJersey color={teams.find(t => t.id === match.teamAId)?.color || '#555'} size={40} />
-                      <div className="text-sm md:text-lg font-black uppercase tracking-tight text-primary-blue">
-                        {teams.find(t => t.id === match.teamAId)?.name || 'Time não definido'}
+                <div className="p-4 md:p-8 flex items-center justify-between gap-2">
+                  <div className="flex-1 text-center min-w-0">
+                    <div className="flex flex-col items-center gap-2 md:gap-3">
+                      <div className="w-8 h-8 md:w-10 md:h-10">
+                        <SoccerJersey color={teams.find(t => t.id === match.teamAId)?.color || '#555'} />
+                      </div>
+                      <div className="text-xs md:text-lg font-black uppercase tracking-tight text-primary-blue truncate w-full px-1">
+                        {teams.find(t => t.id === match.teamAId)?.name || 'Time A'}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-6 md:gap-10 px-4 md:px-8">
-                    <div className="text-4xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm">{match.scoreA}</div>
-                    <div className="text-xs md:text-sm font-black text-primary-yellow">X</div>
-                    <div className="text-4xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm">{match.scoreB}</div>
+                  <div className="flex items-center gap-3 md:gap-10 px-2 md:px-8">
+                    <div className="text-3xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm">{match.scoreA}</div>
+                    <div className="text-[10px] md:text-sm font-black text-primary-yellow opacity-30 italic">X</div>
+                    <div className="text-3xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm">{match.scoreB}</div>
                   </div>
 
-                  <div className="flex-1 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <SoccerJersey color={teams.find(t => t.id === match.teamBId)?.color || '#555'} size={40} />
-                      <div className="text-sm md:text-lg font-black uppercase tracking-tight text-primary-blue">
-                        {teams.find(t => t.id === match.teamBId)?.name || 'Time não definido'}
+                  <div className="flex-1 text-center min-w-0">
+                    <div className="flex flex-col items-center gap-2 md:gap-3">
+                      <div className="w-8 h-8 md:w-10 md:h-10">
+                        <SoccerJersey color={teams.find(t => t.id === match.teamBId)?.color || '#555'} />
+                      </div>
+                      <div className="text-xs md:text-lg font-black uppercase tracking-tight text-primary-blue truncate w-full px-1">
+                        {teams.find(t => t.id === match.teamBId)?.name || 'Time B'}
                       </div>
                     </div>
                   </div>
