@@ -66,31 +66,31 @@ export default function Tabelas() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-[#00ff00]" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary-blue" />
       </div>
     );
   }
 
   const ruleFields = [
-    { key: 'win', label: 'Vitória', icon: Trophy, color: 'text-yellow-500', description: 'Pontos por vitória na partida' },
-    { key: 'draw', label: 'Empate', icon: Info, color: 'text-blue-500', description: 'Pontos por empate na partida' },
-    { key: 'goal', label: 'Gol', icon: SoccerBall, color: 'text-red-500', description: 'Pontos por cada gol marcado' },
-    { key: 'assist', label: 'Assistência', icon: SoccerCleat, color: 'text-[#00ff00]', description: 'Pontos por cada assistência' },
-    { key: 'cleanSheet', label: 'Defesa Invicta', icon: Shield, color: 'text-cyan-500', description: 'Pontos por não sofrer gols (Goleiros/Zagueiros/Laterais)' },
-    { key: 'mvp', label: 'Craque do Jogo', icon: Star, color: 'text-purple-500', description: 'Pontos extras para o melhor da partida' },
+    { key: 'win', label: 'Vitória', icon: Trophy, color: 'text-yellow-500', bgColor: 'bg-yellow-50', description: 'Pontos por vitória na partida' },
+    { key: 'draw', label: 'Empate', icon: Info, color: 'text-blue-500', bgColor: 'bg-blue-50', description: 'Pontos por empate na partida' },
+    { key: 'goal', label: 'Gol', icon: SoccerBall, color: 'text-red-500', bgColor: 'bg-red-50', description: 'Pontos por cada gol marcado' },
+    { key: 'assist', label: 'Assistência', icon: SoccerCleat, color: 'text-green-500', bgColor: 'bg-green-50', description: 'Pontos por cada assistência' },
+    { key: 'cleanSheet', label: 'Defesa Invicta', icon: Shield, color: 'text-cyan-500', bgColor: 'bg-cyan-50', description: 'Pontos por não sofrer gols' },
+    { key: 'mvp', label: 'Craque do Jogo', icon: Star, color: 'text-purple-500', bgColor: 'bg-purple-50', description: 'Pontos extras para o melhor da partida' },
   ];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-6 md:space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-black uppercase italic tracking-tight">Engine de Pontuação</h2>
+          <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tight text-primary-blue">Engine de Pontuação</h2>
           <p className="text-gray-500 text-sm">Configure quanto vale cada ação dos jogadores para o ranking.</p>
         </div>
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center justify-center gap-2 bg-[#00ff00] text-black px-6 py-3 rounded-xl font-black uppercase tracking-widest hover:bg-[#00cc00] transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(0,255,0,0.2)]"
+          className="flex items-center justify-center gap-2 bg-primary-blue text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest hover:brightness-110 transition-all disabled:opacity-50 shadow-lg shadow-blue-100"
         >
           {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
           {saving ? 'Salvando...' : 'Salvar Regras'}
@@ -101,30 +101,30 @@ export default function Tabelas() {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-[#00ff00]/10 border border-[#00ff00]/50 text-[#00ff00] p-4 rounded-xl flex items-center gap-3"
+          className="bg-green-50 border border-green-100 text-green-600 p-4 rounded-xl flex items-center gap-3"
         >
           <Info className="w-5 h-5" />
-          <span className="text-sm font-bold uppercase tracking-wider">Regras atualizadas com sucesso!</span>
+          <span className="text-xs md:text-sm font-bold uppercase tracking-wider">Regras atualizadas com sucesso!</span>
         </motion.div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         {ruleFields.map((field, i) => (
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.05 }}
             key={field.key}
-            className="bg-[#1a1a1a] p-6 rounded-2xl border border-white/5 hover:border-[#00ff00]/30 transition-colors group"
+            className="bg-white p-5 md:p-6 rounded-2xl border border-gray-100 hover:border-primary-blue/20 transition-all group shadow-sm hover:shadow-md"
           >
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className={`p-3 rounded-xl bg-white/5 ${field.color} group-hover:scale-110 transition-transform`}>
-                  <field.icon className="w-6 h-6" />
+                <div className={`p-3 rounded-xl ${field.bgColor} ${field.color} group-hover:scale-110 transition-transform`}>
+                  <field.icon className="w-5 h-5 md:w-6 md:h-6" />
                 </div>
                 <div>
-                  <h3 className="font-black uppercase italic tracking-wider">{field.label}</h3>
-                  <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">{field.description}</p>
+                  <h3 className="font-black uppercase italic tracking-wider text-primary-blue text-sm md:text-base">{field.label}</h3>
+                  <p className="text-[9px] md:text-[10px] text-gray-400 uppercase font-bold tracking-widest">{field.description}</p>
                 </div>
               </div>
             </div>
@@ -134,9 +134,9 @@ export default function Tabelas() {
                 type="number"
                 value={rules[field.key as keyof ScoringRules] as number}
                 onChange={(e) => setRules({ ...rules, [field.key]: parseInt(e.target.value) || 0 })}
-                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-2xl font-black italic focus:border-[#00ff00] focus:ring-1 focus:ring-[#00ff00] outline-none transition-all"
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-xl md:text-2xl font-black italic focus:border-primary-blue focus:ring-1 focus:ring-primary-blue outline-none transition-all text-primary-blue"
               />
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black uppercase text-gray-500 tracking-widest">
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] md:text-[10px] font-black uppercase text-gray-400 tracking-widest">
                 Pontos
               </div>
             </div>
@@ -144,49 +144,61 @@ export default function Tabelas() {
         ))}
       </div>
 
-      <div className="bg-[#1a1a1a] p-8 rounded-3xl border border-white/5 space-y-6">
-        <div className="flex items-center gap-6">
-          <div className="bg-[#00ff00]/10 p-4 rounded-2xl">
-            <Calculator className="w-10 h-10 text-[#00ff00]" />
+      <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-gray-100 shadow-sm space-y-6">
+        <div className="flex items-center gap-4 md:gap-6">
+          <div className="bg-primary-blue/5 p-3 md:p-4 rounded-2xl">
+            <Calculator className="w-8 h-8 md:w-10 md:h-10 text-primary-blue" />
           </div>
           <div>
-            <h3 className="text-lg font-black uppercase italic mb-1">Como funciona o cálculo?</h3>
-            <p className="text-gray-500 text-sm leading-relaxed">
+            <h3 className="text-base md:text-lg font-black uppercase italic mb-1 text-primary-blue">Como funciona o cálculo?</h3>
+            <p className="text-gray-400 text-xs md:text-sm leading-relaxed">
               As pontuações são aplicadas automaticamente ao finalizar uma partida seguindo o regulamento da Liga Society.
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-white/5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 pt-6 border-t border-gray-100">
           <div className="space-y-4">
-            <h4 className="text-[#00ff00] font-black uppercase italic text-sm">1. Resultado e Participação</h4>
-            <ul className="text-xs text-gray-400 space-y-2 list-disc pl-4">
-              <li><strong className="text-white">Vitória:</strong> +3 pontos para todos do time.</li>
-              <li><strong className="text-white">Empate:</strong> +1 ponto para todos.</li>
-              <li><strong className="text-white">Gol Marcado:</strong> +2 pontos por gol.</li>
-              <li><strong className="text-white">Assistência:</strong> +1 ponto por assistência.</li>
+            <h4 className="text-primary-blue font-black uppercase italic text-xs md:text-sm flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary-yellow" />
+              1. Resultado e Participação
+            </h4>
+            <ul className="text-[11px] md:text-xs text-gray-400 space-y-2 list-none pl-3">
+              <li><strong className="text-gray-600">Vitória:</strong> +{rules.win} pontos para todos do time.</li>
+              <li><strong className="text-gray-600">Empate:</strong> +{rules.draw} pontos para todos.</li>
+              <li><strong className="text-gray-600">Gol Marcado:</strong> +{rules.goal} pontos por gol.</li>
+              <li><strong className="text-gray-600">Assistência:</strong> +{rules.assist} pontos por assistência.</li>
             </ul>
 
-            <h4 className="text-[#00ff00] font-black uppercase italic text-sm">2. Goleiros</h4>
-            <ul className="text-xs text-gray-400 space-y-2 list-disc pl-4">
-              <li><strong className="text-white">Clean Sheet:</strong> +3 pontos se não sofrer gols.</li>
-              <li><strong className="text-white">Bônus de Vitória:</strong> Se vencer, ganha (3 - gols sofridos). Ex: Vitória de 4x1 rende +2 pontos de bônus.</li>
-              <li><strong className="text-white">Bônus Base:</strong> Começa com +3 pontos (mantido em caso de empate/derrota).</li>
+            <h4 className="text-primary-blue font-black uppercase italic text-xs md:text-sm flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary-yellow" />
+              2. Goleiros
+            </h4>
+            <ul className="text-[11px] md:text-xs text-gray-400 space-y-2 list-none pl-3">
+              <li><strong className="text-gray-600">Clean Sheet:</strong> +{rules.cleanSheet} pontos se não sofrer gols.</li>
+              <li><strong className="text-gray-600">Bônus de Vitória:</strong> Se vencer, ganha ({rules.win} - gols sofridos).</li>
+              <li><strong className="text-gray-600">Bônus Base:</strong> Começa com +{rules.win} pontos (mantido em caso de empate/derrota).</li>
             </ul>
           </div>
 
           <div className="space-y-4">
-            <h4 className="text-[#00ff00] font-black uppercase italic text-sm">3. Saldo de Gols</h4>
-            <ul className="text-xs text-gray-400 space-y-2 list-disc pl-4">
-              <li><strong className="text-white">Time Vencedor:</strong> Todos ganham pontos iguais ao saldo de gols (Ex: 4x2 = +2 pontos).</li>
-              <li><strong className="text-white">Time Perdedor:</strong> Todos perdem pontos iguais ao saldo negativo (Ex: 2x5 = -3 pontos).</li>
+            <h4 className="text-primary-blue font-black uppercase italic text-xs md:text-sm flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary-yellow" />
+              3. Saldo de Gols
+            </h4>
+            <ul className="text-[11px] md:text-xs text-gray-400 space-y-2 list-none pl-3">
+              <li><strong className="text-gray-600">Time Vencedor:</strong> Ganha pontos iguais ao saldo de gols.</li>
+              <li><strong className="text-gray-600">Time Perdedor:</strong> Perde pontos iguais ao saldo negativo.</li>
             </ul>
 
-            <h4 className="text-[#00ff00] font-black uppercase italic text-sm">4. Craque da Partida</h4>
-            <ul className="text-xs text-gray-400 space-y-2 list-disc pl-4">
-              <li><strong className="text-white">Bônus MVP:</strong> +2 pontos para o melhor da partida.</li>
-              <li><strong className="text-white">Critério:</strong> Maior pontuação total na partida.</li>
-              <li><strong className="text-white">Desempate:</strong> 1º Time vencedor, 2º Média na temporada, 3º Menor overall.</li>
+            <h4 className="text-primary-blue font-black uppercase italic text-xs md:text-sm flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary-yellow" />
+              4. Craque da Partida
+            </h4>
+            <ul className="text-[11px] md:text-xs text-gray-400 space-y-2 list-none pl-3">
+              <li><strong className="text-gray-600">Bônus MVP:</strong> +{rules.mvp} pontos para o melhor da partida.</li>
+              <li><strong className="text-gray-600">Critério:</strong> Maior pontuação total na partida.</li>
+              <li><strong className="text-gray-600">Desempate:</strong> Time vencedor &gt; Média temporada &gt; Menor overall.</li>
             </ul>
           </div>
         </div>
