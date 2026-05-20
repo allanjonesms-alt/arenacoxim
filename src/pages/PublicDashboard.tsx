@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, writeBatch, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, writeBatch, getDoc, where, limit, getDocs } from 'firebase/firestore';
 import { Player, Match, Location, Team, AdminData, ScoringRules } from '../types';
 import { getPositionAbbr, getPositionColor } from '../utils/playerUtils';
 import { format } from 'date-fns';
@@ -9,12 +9,18 @@ import { Trophy, Star, MapPin, Calendar as CalendarIcon, ChevronRight, TrendingU
 import { motion, AnimatePresence } from 'motion/react';
 import { SoccerJersey } from '../components/SoccerJersey';
 import { SoccerBall, SoccerCleat } from '../components/Icons';
+import { SoccerPitch } from '../components/SoccerPitch';
 import { handleFirestoreError, OperationType } from '../App';
 import { calculateMatchPoints } from '../utils/scoringEngine';
+import { calculateGrade } from '../utils/gradeUtils';
 import { PlayerSummaryModal } from '../components/PlayerSummaryModal';
+import { useNavigate } from 'react-router-dom';
 
 interface PublicDashboardProps {
   adminData?: AdminData | null;
+  sharedLocations: Location[];
+  sharedTeams: Team[];
+  sharedScoringRules: ScoringRules | null;
 }
 
 function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose, onPlayerClick }: { 
@@ -32,6 +38,7 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
   const [substitutesA, setSubstitutesA] = useState(match.substitutesA || []);
   const [substitutesB, setSubstitutesB] = useState(match.substitutesB || []);
   const [isEditingLineup, setIsEditingLineup] = useState(false);
+  const [activeTab, setActiveTab] = useState<'events' | 'pitch'>('events');
 
   const [events, setEvents] = useState(match.events || []);
   const [isSaving, setIsSaving] = useState(false);
@@ -71,6 +78,7 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
   const goalsB = events.filter(e => e.type === 'goal' && (teamB.includes(e.playerId) || e.playerId === 'unidentified_B')).length;
 
   const handleSaveEvents = async () => {
+    if (!isAdmin) return;
     setIsSaving(true);
     console.log('Saving events:', events, 'GoalsA:', goalsA, 'GoalsB:', goalsB);
     const batch = writeBatch(db);
@@ -164,14 +172,14 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="absolute inset-0 bg-black/90 backdrop-blur-md" 
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm" 
         onClick={onClose} 
       />
       <motion.div 
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        className="relative bg-[#1a1a1a] w-full max-w-2xl rounded-3xl border border-white/10 overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+        className="relative bg-white w-full max-w-2xl rounded-3xl border border-gray-100 overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
       >
         {/* Modal Header */}
         <div className="p-4 md:p-6 border-b border-gray-100 flex items-center justify-between gap-4">
@@ -196,34 +204,70 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
         {/* Modal Body */}
         <div className="p-4 md:p-6 overflow-y-auto space-y-6 md:space-y-8">
           {/* Scoreboard */}
-          <div className="flex items-center justify-between bg-gray-50 p-4 md:p-6 rounded-2xl md:rounded-3xl border border-gray-100 shadow-inner gap-2">
-            <div className="flex-1 text-center cursor-pointer hover:opacity-80 transition-opacity min-w-0" onClick={() => setIsEditingLineup(!isEditingLineup)}>
-              <div className="flex flex-col items-center gap-2 mb-2">
-                <div className="w-7 h-7 md:w-8 md:h-8">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between bg-gray-50 p-4 md:p-6 rounded-2xl md:rounded-3xl border border-gray-100 shadow-inner">
+              <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0" onClick={() => { setActiveTab('pitch'); setIsEditingLineup(false); }}>
+                <div className="w-8 h-8 md:w-10 md:h-10 flex-shrink-0">
                   <SoccerJersey color={teamAEntity?.color || '#555'} />
                 </div>
-                <div className="font-black uppercase tracking-tight text-[10px] md:text-sm truncate w-full px-1" style={{ color: teamAEntity?.color }}>{teamAEntity?.name}</div>
+                <div className="font-black uppercase tracking-tight text-[10px] md:text-sm truncate w-full" style={{ color: teamAEntity?.color }}>{teamAEntity?.name}</div>
               </div>
-              <div className="text-3xl md:text-4xl font-black italic text-primary-blue tabular-nums">{goalsA}</div>
-            </div>
-            
-            <div className="px-2 md:px-6">
-              <div className="text-[10px] md:text-xs font-black text-primary-yellow italic opacity-30">X</div>
-            </div>
+              
+              <div className="text-2xl md:text-4xl font-black italic text-primary-blue tabular-nums px-2 md:px-4">
+                {goalsA} - {goalsB}
+              </div>
 
-            <div className="flex-1 text-center cursor-pointer hover:opacity-80 transition-opacity min-w-0" onClick={() => setIsEditingLineup(!isEditingLineup)}>
-              <div className="flex flex-col items-center gap-2 mb-2">
-                <div className="w-7 h-7 md:w-8 md:h-8">
+              <div className="flex items-center justify-end gap-2 md:gap-4 flex-1 min-w-0" onClick={() => { setActiveTab('pitch'); setIsEditingLineup(false); }}>
+                <div className="font-black uppercase tracking-tight text-[10px] md:text-sm truncate w-full text-right" style={{ color: teamBEntity?.color }}>{teamBEntity?.name}</div>
+                <div className="w-8 h-8 md:w-10 md:h-10 flex-shrink-0">
                   <SoccerJersey color={teamBEntity?.color || '#555'} />
                 </div>
-                <div className="font-black uppercase tracking-tight text-[10px] md:text-sm truncate w-full px-1" style={{ color: teamBEntity?.color }}>{teamBEntity?.name}</div>
               </div>
-              <div className="text-3xl md:text-4xl font-black italic text-primary-blue tabular-nums">{goalsB}</div>
             </div>
+            
+            {!isAdmin && (
+              <div className="grid grid-cols-2 gap-4 text-[10px] md:text-xs font-bold text-gray-500">
+                <div className="flex flex-col gap-1 items-center">
+                    {events.filter(e => (teamA.includes(e.playerId) || e.playerId === 'unidentified_A') && e.type === 'goal').map((e, idx) => {
+                      const p = players.find(x => x.id === e.playerId);
+                      return <div key={idx} className="bg-blue-50 text-blue-800 text-[8px] px-2 py-0.5 rounded-full">{(p?.nickname || '').toUpperCase() || p?.name || '---'}</div>
+                    })}
+                </div>
+                <div className="flex flex-col gap-1 items-center">
+                    {events.filter(e => (teamB.includes(e.playerId) || e.playerId === 'unidentified_B') && e.type === 'goal').map((e, idx) => {
+                      const p = players.find(x => x.id === e.playerId);
+                      return <div key={idx} className="bg-blue-50 text-blue-800 text-[8px] px-2 py-0.5 rounded-full">{(p?.nickname || '').toUpperCase() || p?.name || '---'}</div>
+                    })}
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Events Section */}
-          {/* Content Section: Events or Lineup */}
+          {/* Tab Switcher */}
+          <div className="flex p-1 bg-gray-100 rounded-2xl">
+            <button 
+              onClick={() => { setActiveTab('events'); setIsEditingLineup(false); }}
+              className={`flex-1 py-3 text-[10px] md:text-xs font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'events' && !isEditingLineup ? 'bg-white text-primary-blue shadow-sm' : 'text-gray-400'}`}
+            >
+              Eventos
+            </button>
+            <button 
+              onClick={() => { setActiveTab('pitch'); setIsEditingLineup(false); }}
+              className={`flex-1 py-3 text-[10px] md:text-xs font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'pitch' ? 'bg-white text-primary-blue shadow-sm' : 'text-gray-400'}`}
+            >
+              Campo
+            </button>
+            {isAdmin && (
+              <button 
+                onClick={() => setIsEditingLineup(true)}
+                className={`flex-1 py-3 text-[10px] md:text-xs font-black uppercase tracking-widest rounded-xl transition-all ${isEditingLineup ? 'bg-primary-blue text-white shadow-sm' : 'text-gray-400'}`}
+              >
+                Escalação
+              </button>
+            )}
+          </div>
+
+          {/* Content Section: Events, Pitch or Editor */}
           {isEditingLineup ? (
             <div className="space-y-6 text-primary-gray">
               <h4 className="font-black uppercase tracking-widest text-center text-primary-blue">Editar Escalação</h4>
@@ -286,6 +330,18 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
                 </div>
               </div>
             </div>
+          ) : activeTab === 'pitch' ? (
+            <SoccerPitch 
+              teamA={teamA}
+              teamB={teamB}
+              goalkeeperAId={match.goalkeeperAId}
+              goalkeeperBId={match.goalkeeperBId}
+              teamAColor={teamAEntity?.color}
+              teamBColor={teamBEntity?.color}
+              players={players}
+              matchDate={match.date}
+              matchTime={match.time}
+            />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-primary-gray">
               {/* Team A Events */}
@@ -301,14 +357,16 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
                     {events.filter(e => (teamA.includes(e.playerId) || e.playerId === 'unidentified_A') && e.type === 'goal').map((e, idx) => {
                       const p = players.find(x => x.id === e.playerId);
                       return (
-                        <div key={idx} className="flex justify-between text-xs p-3 bg-blue-50 rounded-xl border border-blue-100 font-bold group/player">
+                        <div key={idx} className={`${isAdmin ? 'flex justify-between' : ''} text-xs p-3 bg-blue-50 rounded-xl border border-blue-100 font-bold group/player`}>
                           <span 
                             className={p ? "cursor-pointer hover:text-primary-blue transition-colors" : ""}
                             onClick={() => p && onPlayerClick?.(p)}
                           >
-                            {p?.nickname || p?.name || '---'}
+                            {(p?.nickname || '').toUpperCase() || p?.name || '---'}
                           </span>
-                          <button onClick={() => removeEvent(events.indexOf(e))} className="text-red-500 hover:scale-110 transition-transform"><Trash2 size={14} /></button>
+                          {isAdmin && (
+                            <button onClick={() => removeEvent(events.indexOf(e))} className="text-red-500 hover:scale-110 transition-transform"><Trash2 size={14} /></button>
+                          )}
                         </div>
                       );
                     })}
@@ -319,14 +377,13 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
                     {events.filter(e => (teamA.includes(e.playerId) || e.playerId === 'unidentified_A') && e.type === 'assist').map((e, idx) => {
                       const p = players.find(x => x.id === e.playerId);
                       return (
-                        <div key={idx} className="flex justify-between text-xs p-3 bg-yellow-50 rounded-xl border border-yellow-100 font-bold group/player">
+                        <div key={idx} className="text-xs p-3 bg-yellow-50 rounded-xl border border-yellow-100 font-bold group/player">
                           <span 
                             className={p ? "cursor-pointer hover:text-primary-blue transition-colors" : ""}
                             onClick={() => p && onPlayerClick?.(p)}
                           >
-                            {p?.nickname || p?.name || '---'}
+                            {(p?.nickname || '').toUpperCase() || p?.name || '---'}
                           </span>
-                          <button onClick={() => removeEvent(events.indexOf(e))} className="text-red-500 hover:scale-110 transition-transform"><Trash2 size={14} /></button>
                         </div>
                       );
                     })}
@@ -347,14 +404,16 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
                     {events.filter(e => (teamB.includes(e.playerId) || e.playerId === 'unidentified_B') && e.type === 'goal').map((e, idx) => {
                       const p = players.find(x => x.id === e.playerId);
                       return (
-                        <div key={idx} className="flex justify-between text-xs p-3 bg-blue-50 rounded-xl border border-blue-100 font-bold group/player">
+                        <div key={idx} className={`${isAdmin ? 'flex justify-between' : ''} text-xs p-3 bg-blue-50 rounded-xl border border-blue-100 font-bold group/player`}>
                           <span 
                             className={p ? "cursor-pointer hover:text-primary-blue transition-colors" : ""}
                             onClick={() => p && onPlayerClick?.(p)}
                           >
-                            {p?.nickname || p?.name || '---'}
+                            {(p?.nickname || '').toUpperCase() || p?.name || '---'}
                           </span>
-                          <button onClick={() => removeEvent(events.indexOf(e))} className="text-red-500 hover:scale-110 transition-transform"><Trash2 size={14} /></button>
+                          {isAdmin && (
+                            <button onClick={() => removeEvent(events.indexOf(e))} className="text-red-500 hover:scale-110 transition-transform"><Trash2 size={14} /></button>
+                          )}
                         </div>
                       );
                     })}
@@ -365,14 +424,13 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
                     {events.filter(e => (teamB.includes(e.playerId) || e.playerId === 'unidentified_B') && e.type === 'assist').map((e, idx) => {
                       const p = players.find(x => x.id === e.playerId);
                       return (
-                        <div key={idx} className="flex justify-between text-xs p-3 bg-yellow-50 rounded-xl border border-yellow-100 font-bold group/player">
+                        <div key={idx} className="text-xs p-3 bg-yellow-50 rounded-xl border border-yellow-100 font-bold group/player">
                           <span 
                             className={p ? "cursor-pointer hover:text-primary-blue transition-colors" : ""}
                             onClick={() => p && onPlayerClick?.(p)}
                           >
-                            {p?.nickname || p?.name || '---'}
+                            {(p?.nickname || '').toUpperCase() || p?.name || '---'}
                           </span>
-                          <button onClick={() => removeEvent(events.indexOf(e))} className="text-red-500 hover:scale-110 transition-transform"><Trash2 size={14} /></button>
                         </div>
                       );
                     })}
@@ -404,7 +462,7 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
               </div>
               <div>
                 <div className="text-[10px] font-black uppercase tracking-widest text-primary-yellow italic mb-1">Craque da Partida</div>
-                <div className="text-xl font-black uppercase italic leading-none text-white tracking-tight">{mvp.nickname || mvp.name}</div>
+                <div className="text-xl font-black uppercase italic leading-none text-white tracking-tight">{(mvp.nickname || '').toUpperCase() || mvp.name}</div>
               </div>
             </div>
           )}
@@ -432,7 +490,7 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
                       className="flex justify-between items-center text-xs p-4 bg-white rounded-2xl border border-gray-100 shadow-sm cursor-pointer hover:border-primary-blue/30 transition-all group/score"
                       onClick={() => p && onPlayerClick?.(p)}
                     >
-                      <span className="font-bold text-primary-gray group-hover/score:text-primary-blue transition-colors">{p.nickname || p.name}</span>
+                      <span className="font-bold text-primary-gray group-hover/score:text-primary-blue transition-colors">{(p.nickname || '').toUpperCase() || p.name}</span>
                       <div className="flex gap-4">
                         <span className="text-gray-400 font-bold">{res.breakdown.goalsCount} <span className="text-[9px] uppercase tracking-wider">Gol</span></span>
                         <span className="text-gray-400 font-bold">{res.breakdown.assistsCount} <span className="text-[9px] uppercase tracking-wider">Ass</span></span>
@@ -465,41 +523,53 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
   );
 }
 
-export default function PublicDashboard({ adminData }: PublicDashboardProps) {
+export default function PublicDashboard({ adminData, sharedLocations, sharedTeams, sharedScoringRules }: PublicDashboardProps) {
   const [matches, setMatches] = useState<Match[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
+  const [locations, setLocations] = useState<Location[]>(sharedLocations);
+  const [teams, setTeams] = useState<Team[]>(sharedTeams);
   const [loading, setLoading] = useState(true);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+  const navigate = useNavigate();
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
-  const [scoringRules, setScoringRules] = useState<ScoringRules | null>(null);
+  const [scoringRules, setScoringRules] = useState<ScoringRules | null>(sharedScoringRules);
   const [showAllPoints, setShowAllPoints] = useState(false);
   const [showAllScorers, setShowAllScorers] = useState(false);
 
   useEffect(() => {
-    const fetchScoringRules = async () => {
-      try {
-        const docSnap = await getDoc(doc(db, 'settings', 'scoring'));
-        if (docSnap.exists()) {
-          setScoringRules(docSnap.data() as ScoringRules);
-        }
-      } catch (error) {
-        console.error("Failed to fetch scoring rules:", error);
-      }
-    };
-    fetchScoringRules();
-  }, []);
+    setLocations(sharedLocations);
+  }, [sharedLocations]);
 
   useEffect(() => {
-    const qMatches = query(collection(db, 'matches'), orderBy('date', 'desc'), orderBy('time', 'desc'));
-    const unsubscribeMatches = onSnapshot(qMatches, (snapshot) => {
+    setTeams(sharedTeams);
+  }, [sharedTeams]);
+
+  useEffect(() => {
+    setScoringRules(sharedScoringRules);
+  }, [sharedScoringRules]);
+
+  useEffect(() => {
+    let qMatches = query(collection(db, 'matches'), orderBy('date', 'desc'), limit(25));
+    
+    // Server-side filtering by location if not master admin
+    if (adminData && adminData.role !== 'master' && adminData.locationId) {
+      qMatches = query(
+        collection(db, 'matches'), 
+        where('locationId', '==', adminData.locationId),
+        orderBy('date', 'desc'),
+        limit(25)
+      );
+    }
+
+    const unsubscribeMatches = onSnapshot(qMatches, async (snapshot) => {
       let matchesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match));
       
-      if (adminData && adminData.role !== 'master' && adminData.locationId) {
-        matchesData = matchesData.filter(m => m.locationId === adminData.locationId);
-      }
-      
+      // Memory sort by time to avoid composite index requirement
+      matchesData.sort((a, b) => {
+        if (a.date !== b.date) return b.date.localeCompare(a.date);
+        return (b.time || '').localeCompare(a.time || '');
+      });
+
       setMatches(matchesData);
       
       // Update selected match if it exists in the new list to reflect changes
@@ -507,39 +577,52 @@ export default function PublicDashboard({ adminData }: PublicDashboardProps) {
         const updated = matchesData.find(m => m.id === selectedMatch.id);
         if (updated) setSelectedMatch(updated);
       }
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'matches'));
+    }, async (err) => {
+      if (err.message?.includes('index') || err.code === 'failed-precondition') {
+        console.warn("Secondary fallback triggered for index issue.");
+        const qFallback = query(collection(db, 'matches'), limit(25));
+        const snap = await getDocs(qFallback);
+        setMatches(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match)));
+      } else {
+        handleFirestoreError(err, OperationType.LIST, 'matches');
+      }
+    });
 
-    const qPlayers = query(collection(db, 'players'));
-    const unsubscribePlayers = onSnapshot(qPlayers, (snapshot) => {
+    let qPlayers = query(collection(db, 'players'), orderBy('overallValue', 'desc'), limit(100));
+    if (adminData && adminData.role !== 'master' && adminData.locationId) {
+      qPlayers = query(
+        collection(db, 'players'), 
+        where('locationId', '==', adminData.locationId),
+        orderBy('overallValue', 'desc'),
+        limit(100)
+      );
+    }
+    const unsubscribePlayers = onSnapshot(qPlayers, async (snapshot) => {
       let playersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
-      
-      if (adminData && adminData.role !== 'master' && adminData.locationId) {
-        playersData = playersData.filter(p => p.locationId === adminData.locationId);
+      if (playersData.length === 0) {
+         // Fallback if no overallValue yet
+         setPlayers([]);
+      } else {
+         setPlayers(playersData);
       }
-      
-      setPlayers(playersData);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'players'));
-
-    const unsubscribeLocations = onSnapshot(collection(db, 'locations'), (snapshot) => {
-      setLocations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location)));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'locations'));
-
-    const unsubscribeTeams = onSnapshot(collection(db, 'teams'), (snapshot) => {
-      let teamsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team));
-      
-      if (adminData && adminData.role !== 'master' && adminData.locationId) {
-        teamsData = teamsData.filter(t => t.locationId === adminData.locationId);
-      }
-      
-      setTeams(teamsData);
       setLoading(false);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'teams'));
+    }, async (err) => {
+      if (err.message?.includes('index') || err.code === 'failed-precondition') {
+        const snap = await getDocs(collection(db, 'players'));
+        let playersData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
+        if (adminData && adminData.role !== 'master' && adminData.locationId) {
+          playersData = playersData.filter(p => p.locationId === adminData.locationId);
+        }
+        setPlayers(playersData);
+        setLoading(false);
+      } else {
+        handleFirestoreError(err, OperationType.LIST, 'players');
+      }
+    });
 
     return () => {
       unsubscribeMatches();
       unsubscribePlayers();
-      unsubscribeLocations();
-      unsubscribeTeams();
     };
   }, [adminData]);
 
@@ -551,7 +634,13 @@ export default function PublicDashboard({ adminData }: PublicDashboardProps) {
   const topScorers = [...players].sort((a, b) => b.stats.goals - a.stats.goals).slice(0, 5);
   const topPoints = [...players]
     .filter(p => p.stats.matches > 0)
-    .sort((a, b) => getAveragePoints(b) - getAveragePoints(a))
+    .sort((a, b) => {
+      const avgA = (a.stats.points || 0) / (a.stats.matches || 1);
+      const avgB = (b.stats.points || 0) / (b.stats.matches || 1);
+      const numA = parseInt(calculateGrade(a.overallStats, avgA).grade) || 0;
+      const numB = parseInt(calculateGrade(b.overallStats, avgB).grade) || 0;
+      return numB - numA;
+    })
     .slice(0, 5);
 
   const getLocationName = (locId: string) => {
@@ -571,7 +660,13 @@ export default function PublicDashboard({ adminData }: PublicDashboardProps) {
 
   const allPoints = [...players]
     .filter(p => p.stats.matches > 0)
-    .sort((a, b) => getAveragePoints(b) - getAveragePoints(a));
+    .sort((a, b) => {
+      const avgA = (a.stats.points || 0) / (a.stats.matches || 1);
+      const avgB = (b.stats.points || 0) / (b.stats.matches || 1);
+      const numA = parseInt(calculateGrade(a.overallStats, avgA).grade) || 0;
+      const numB = parseInt(calculateGrade(b.overallStats, avgB).grade) || 0;
+      return numB - numA;
+    });
 
   const allScorers = [...players]
     .filter(p => p.stats.goals > 0)
@@ -602,86 +697,112 @@ export default function PublicDashboard({ adminData }: PublicDashboardProps) {
               <p className="text-gray-400 font-medium">Nenhuma partida registrada ainda.</p>
             </div>
           ) : (
-            matches.map((match, idx) => (
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                key={match.id} 
-                className={`${
-                  match.status === 'finished' ? 'bg-app-card' : 
-                  match.status === 'scheduled' ? 'bg-blue-50' :
-                  'bg-app-card'
-                } rounded-3xl border ${match.status === 'scheduled' ? 'border-blue-100' : 'border-gray-100'} overflow-hidden hover:border-primary-blue/30 transition-all group shadow-sm hover:shadow-md`}
-              >
-                {/* Match Header */}
-                <div className={`${
-                  match.status === 'finished' ? 'bg-gray-50' : 
-                  match.status === 'scheduled' ? 'bg-blue-100/50' :
-                  'bg-gray-50'
-                } px-4 md:px-5 py-2 md:py-2.5 flex items-center justify-between text-[9px] md:text-[10px] uppercase tracking-widest font-black text-gray-400 border-b border-gray-100`}>
-                  <div className="flex items-center gap-3 md:gap-4 overflow-hidden">
-                    <span className="flex items-center gap-1 truncate">
-                      <MapPin className="w-2.5 h-2.5 md:w-3 md:h-3 text-primary-blue flex-shrink-0" /> 
-                      <span className="truncate">{getLocationName(match.locationId)}</span>
-                    </span>
-                    <span className="flex items-center gap-1 flex-shrink-0"><CalendarIcon className="w-2.5 h-2.5 md:w-3 md:h-3 text-primary-blue" /> {format(new Date(match.date + 'T00:00:00'), 'dd MMM yyyy', { locale: ptBR })}</span>
-                  </div>
-                  <span className={`px-2 py-0.5 rounded-full text-[8px] md:text-[9px] flex-shrink-0 ${
-                    match.status === 'finished' ? 'bg-gray-200 text-gray-600' : 
-                    match.status === 'live' ? 'bg-red-500 text-white animate-pulse font-black' : 
-                    'bg-primary-blue/10 text-primary-blue'
-                  }`}>
-                    {match.status === 'finished' ? 'Fim' : match.status === 'live' ? 'VIVO' : 'Agend'}
-                  </span>
-                </div>
-
-                {/* Scoreboard Area */}
-                <div className="p-4 md:p-8 flex items-center justify-between gap-2">
-                  <div className="flex-1 text-center min-w-0">
-                    <div className="flex flex-col items-center gap-2 md:gap-3">
-                      <div className="w-8 h-8 md:w-10 md:h-10">
-                        <SoccerJersey color={teams.find(t => t.id === match.teamAId)?.color || '#555'} />
-                      </div>
-                      <div className="text-xs md:text-lg font-black uppercase tracking-tight text-primary-blue truncate w-full px-1">
-                        {teams.find(t => t.id === match.teamAId)?.name || 'Time A'}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 md:gap-10 px-2 md:px-8">
-                    <div className="text-3xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm">{match.scoreA}</div>
-                    <div className="text-[10px] md:text-sm font-black text-primary-yellow opacity-30 italic">X</div>
-                    <div className="text-3xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm">{match.scoreB}</div>
-                  </div>
-
-                  <div className="flex-1 text-center min-w-0">
-                    <div className="flex flex-col items-center gap-2 md:gap-3">
-                      <div className="w-8 h-8 md:w-10 md:h-10">
-                        <SoccerJersey color={teams.find(t => t.id === match.teamBId)?.color || '#555'} />
-                      </div>
-                      <div className="text-xs md:text-lg font-black uppercase tracking-tight text-primary-blue truncate w-full px-1">
-                        {teams.find(t => t.id === match.teamBId)?.name || 'Time B'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Match Footer / Action */}
-                <div 
-                  onClick={() => setSelectedMatch(match)}
+            <>
+              {matches.slice(0, 6).map((match, idx) => (
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.1 }}
+                  key={match.id} 
                   className={`${
-                    match.status === 'finished' ? 'bg-gray-50/50' : 
-                    match.status === 'scheduled' ? 'bg-blue-50/50' :
-                    'bg-gray-50/50'
-                  } px-4 py-4 flex items-center justify-center border-t border-gray-100 group-hover:bg-primary-blue/5 transition-colors cursor-pointer`}
+                    match.status === 'finished' ? 'bg-app-card' : 
+                    match.status === 'scheduled' ? 'bg-blue-50' :
+                    'bg-app-card'
+                  } rounded-3xl border ${match.status === 'scheduled' ? 'border-blue-100' : 'border-gray-100'} overflow-hidden hover:border-primary-blue/30 transition-all group shadow-sm hover:shadow-md`}
                 >
-                  <span className="text-[10px] font-black uppercase tracking-widest text-primary-blue flex items-center gap-2 group-hover:translate-x-1 transition-transform">
-                    Ver Detalhes da Partida <ChevronRight className="w-4 h-4" />
-                  </span>
-                </div>
-              </motion.div>
-            ))
+                  <div className="flex flex-row">
+                    {/* Location Logo - Left Side */}
+                    {(() => {
+                      const loc = locations.find(l => l.id === match.locationId);
+                      return loc?.logoUrl ? (
+                        <div className="w-16 md:w-24 bg-gray-50/50 flex items-center justify-center p-2 border-r border-gray-100 flex-shrink-0">
+                          <img src={loc.logoUrl} alt="" className="w-full h-full object-contain drop-shadow-sm" />
+                        </div>
+                      ) : null;
+                    })()}
+
+                    <div className="flex-1 min-w-0">
+                      {/* Match Header */}
+                      <div className={`${
+                        match.status === 'finished' ? 'bg-gray-50' : 
+                        match.status === 'scheduled' ? 'bg-blue-100/50' :
+                        'bg-gray-50'
+                      } px-4 md:px-5 py-2 md:py-2.5 flex items-center justify-between text-[9px] md:text-[10px] uppercase tracking-widest font-black text-gray-400 border-b border-gray-100`}>
+                        <div className="flex items-center gap-3 md:gap-4 overflow-hidden font-bold">
+                          <span className="flex items-center gap-1.5 truncate">
+                            <MapPin className="w-2.5 h-2.5 md:w-3 md:h-3 text-primary-blue flex-shrink-0" /> 
+                            <span className="truncate">{getLocationName(match.locationId)}</span>
+                          </span>
+                          <span className="flex items-center gap-1.5 flex-shrink-0"><CalendarIcon className="w-2.5 h-2.5 md:w-3 md:h-3 text-primary-blue" /> {format(new Date(match.date + 'T00:00:00'), 'dd MMM yyyy', { locale: ptBR })}</span>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[8px] md:text-[9px] flex-shrink-0 ${
+                          match.status === 'finished' ? 'bg-gray-200 text-gray-600' : 
+                          match.status === 'live' ? 'bg-red-500 text-white animate-pulse font-black' : 
+                          'bg-primary-blue/10 text-primary-blue'
+                        }`}>
+                          {match.status === 'finished' ? 'Fim' : match.status === 'live' ? 'VIVO' : 'Agend'}
+                        </span>
+                      </div>
+
+                      {/* Scoreboard Area */}
+                      <div className="p-4 md:p-8 flex items-center justify-between gap-2">
+                        <div className="flex-1 text-center min-w-0">
+                          <div className="flex flex-col items-center gap-2 md:gap-3">
+                            <div className="w-8 h-8 md:w-10 md:h-10">
+                              <SoccerJersey color={teams.find(t => t.id === match.teamAId)?.color || '#555'} />
+                            </div>
+                            <div className="text-xs md:text-lg font-black uppercase tracking-tight text-primary-blue truncate w-full px-1">
+                              {teams.find(t => t.id === match.teamAId)?.name || 'Time A'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 md:gap-10 px-2 md:px-8">
+                          <div className="text-3xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm">{match.scoreA}</div>
+                          <div className="text-[10px] md:text-sm font-black text-primary-yellow opacity-30 italic">X</div>
+                          <div className="text-3xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm">{match.scoreB}</div>
+                        </div>
+
+                        <div className="flex-1 text-center min-w-0">
+                          <div className="flex flex-col items-center gap-2 md:gap-3">
+                            <div className="w-8 h-8 md:w-10 md:h-10">
+                              <SoccerJersey color={teams.find(t => t.id === match.teamBId)?.color || '#555'} />
+                            </div>
+                            <div className="text-xs md:text-lg font-black uppercase tracking-tight text-primary-blue truncate w-full px-1">
+                              {teams.find(t => t.id === match.teamBId)?.name || 'Time B'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Match Footer / Action */}
+                      <div 
+                        onClick={() => setSelectedMatch(match)}
+                        className={`${
+                          match.status === 'finished' ? 'bg-gray-50/50' : 
+                          match.status === 'scheduled' ? 'bg-blue-50/50' :
+                          'bg-gray-50/50'
+                        } px-4 py-3 md:py-4 flex items-center justify-center border-t border-gray-100 group-hover:bg-primary-blue/5 transition-colors cursor-pointer`}
+                      >
+                        <span className="text-[10px] font-black uppercase tracking-widest text-primary-blue flex items-center gap-2 group-hover:translate-x-1 transition-transform">
+                          Ver Detalhes da Partida <ChevronRight className="w-4 h-4" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+
+              {matches.length > 6 && (
+                <button 
+                  onClick={() => navigate('/resultados')}
+                  className="w-full bg-white border-2 border-primary-blue text-primary-blue py-5 rounded-3xl font-black uppercase tracking-widest hover:bg-primary-blue hover:text-white transition-all shadow-sm active:scale-95 group flex items-center justify-center gap-3"
+                >
+                  Ver Todas as Partidas
+                  <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -752,6 +873,9 @@ export default function PublicDashboard({ adminData }: PublicDashboardProps) {
                   <div>
                     <div className="flex items-center gap-2">
                       <div className="text-sm font-black leading-tight text-primary-blue">{player.nickname || player.name}</div>
+                      <span className={`text-[9px] font-black italic ${calculateGrade(player.overallStats, (player.stats.points || 0) / (player.stats.matches || 1)).color} bg-gray-50 px-1.5 rounded-md border border-gray-100`}>
+                        {calculateGrade(player.overallStats, (player.stats.points || 0) / (player.stats.matches || 1)).grade}
+                      </span>
                     </div>
                     <div className={`text-[10px] uppercase font-black tracking-tighter ${getPositionColor(player.position)}`}>
                       {getPositionAbbr(player.position)} • <span className="text-gray-400">{player.stats.matches} Partidas</span>
@@ -798,6 +922,9 @@ export default function PublicDashboard({ adminData }: PublicDashboardProps) {
                   <div>
                     <div className="flex items-center gap-2">
                       <div className="text-sm font-black leading-tight text-primary-blue">{player.nickname || player.name}</div>
+                      <span className={`text-[9px] font-black italic ${calculateGrade(player.overallStats, (player.stats.points || 0) / (player.stats.matches || 1)).color} bg-gray-50 px-1.5 rounded-md border border-gray-100`}>
+                        {calculateGrade(player.overallStats, (player.stats.points || 0) / (player.stats.matches || 1)).grade}
+                      </span>
                     </div>
                     <div className="text-[10px] uppercase text-gray-400 font-bold tracking-tighter">{player.stats.matches} Partidas</div>
                   </div>
@@ -882,7 +1009,12 @@ export default function PublicDashboard({ adminData }: PublicDashboardProps) {
                         )}
                       </div>
                       <div>
-                        <div className="text-sm font-black text-primary-blue leading-tight">{player.nickname || player.name}</div>
+                        <div className="flex items-center gap-2 text-sm font-black text-primary-blue leading-tight">
+                          {player.nickname || player.name}
+                          <span className={`text-[9px] font-black italic ${calculateGrade(player.overallStats, (player.stats.points || 0) / (player.stats.matches || 1)).color} bg-white px-1.5 rounded-md border border-gray-100 shadow-sm`}>
+                            {calculateGrade(player.overallStats, (player.stats.points || 0) / (player.stats.matches || 1)).grade}
+                          </span>
+                        </div>
                         <div className={`text-[10px] uppercase font-bold tracking-tighter ${getPositionColor(player.position)}`}>
                           {getPositionAbbr(player.position)} • <span className="text-gray-400">{player.stats.matches} jogos</span>
                         </div>

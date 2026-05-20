@@ -1,11 +1,19 @@
 import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { Routes, Route, Link, useNavigate } from 'react-router-dom';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
+import { 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut, 
+  User, 
+  signInWithEmailAndPassword,
+  updatePassword
+} from 'firebase/auth';
 import { auth, db } from './firebase';
-import { doc, getDoc, setDoc, getDocFromServer, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
-import { Trophy, Users, Calendar, LayoutDashboard, LogIn, LogOut, Menu, X, ShieldCheck, MapPin, TrendingUp, User as UserIcon } from 'lucide-react';
+import { doc, getDoc, setDoc, getDocFromServer, collection, query, where, getDocs, deleteDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { Trophy, Users, Calendar, LayoutDashboard, LogIn, LogOut, Menu, X, ShieldCheck, MapPin, TrendingUp, User as UserIcon, Lock, Key, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AdminData } from './types';
+import { AdminData, Location, Team, ScoringRules } from './types';
 
 // Pages
 import PublicDashboard from './pages/PublicDashboard';
@@ -16,6 +24,8 @@ import TeamManagement from './pages/TeamManagement';
 import LocationManagement from './pages/LocationManagement';
 import AdminManagement from './pages/AdminManagement';
 import Tabelas from './pages/Tabelas';
+import MatchHistory from './pages/MatchHistory';
+import Resenha from './pages/Resenha';
 
 export enum OperationType {
   CREATE = 'create',
@@ -26,11 +36,51 @@ export enum OperationType {
   WRITE = 'write',
 }
 
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const message = error instanceof Error ? error.message : String(error);
-  // Log simplified error for developers, but keep it clean
-  console.error(`Error: ${operationType} on ${path} failed.`);
-  throw new Error(message);
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  
+  // Show an alert for write operations so the user gets UI feedback
+  if (operationType === OperationType.CREATE || 
+      operationType === OperationType.UPDATE || 
+      operationType === OperationType.DELETE || 
+      operationType === OperationType.WRITE) {
+    alert(`Erro ao salvar dados: ${errInfo.error}`);
+    throw new Error(JSON.stringify(errInfo));
+  }
 }
 
 export default function App() {
@@ -39,24 +89,47 @@ export default function App() {
   const [adminData, setAdminData] = useState<AdminData | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [scoringRules, setScoringRules] = useState<ScoringRules | null>(null);
+  
   const navigate = useNavigate();
 
   const MASTER_EMAIL = 'allanjonesms@gmail.com';
 
   useEffect(() => {
-    // Test connection to Firestore
-    const testConnection = async () => {
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration. The client is offline.");
-        }
+    // Listen to common data in real-time (centralized to avoid multiple listeners in pages)
+    const unsubscribeLocations = onSnapshot(collection(db, 'locations'), (snapshot) => {
+      setLocations(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Location)));
+    }, async (err) => {
+      if (err.message?.includes('index') || err.code === 'failed-precondition') {
+        const snap = await getDocs(collection(db, 'locations'));
+        setLocations(snap.docs.map(d => ({ id: d.id, ...d.data() } as Location)));
+      } else {
+        handleFirestoreError(err, OperationType.LIST, 'locations');
       }
-    };
-    testConnection();
+    });
 
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribeTeams = onSnapshot(collection(db, 'teams'), (snapshot) => {
+      setTeams(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Team)));
+    }, async (err) => {
+      if (err.message?.includes('index') || err.code === 'failed-precondition') {
+        const snap = await getDocs(collection(db, 'teams'));
+        setTeams(snap.docs.map(d => ({ id: d.id, ...d.data() } as Team)));
+      } else {
+        handleFirestoreError(err, OperationType.LIST, 'teams');
+      }
+    });
+
+    const unsubscribeScoring = onSnapshot(doc(db, 'settings', 'scoring'), (snapshot) => {
+      if (snapshot.exists()) {
+        setScoringRules(snapshot.data() as ScoringRules);
+      }
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'settings/scoring'));
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       console.log("Current user:", currentUser?.email, currentUser?.uid);
       if (currentUser) {
@@ -73,49 +146,52 @@ export default function App() {
           // If not found by UID, check by email (for admins added via AdminManagement)
           if (!adminDataFromDoc && currentUser.email) {
             const normalizedEmail = currentUser.email.toLowerCase().trim();
-            console.log("Checking by email:", normalizedEmail);
+            console.log("Admin detection: Checking Firestore for email:", normalizedEmail);
+            
             const adminsQuery = query(
-              collection(db, 'admins')
+              collection(db, 'admins'),
+              where('email', '==', normalizedEmail)
             );
+            
             const querySnapshot = await getDocs(adminsQuery);
-            const allAdmins = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-            console.log("All admins in DB:");
-            console.table(allAdmins);
+            console.log("Admin detection: Query results count:", querySnapshot.size);
             
-            const filteredAdmins = querySnapshot.docs.filter(d => {
-              const data = d.data();
-              return data.email?.toLowerCase().trim() === normalizedEmail;
-            });
-            
-            console.log("Filtered admins by email:", filteredAdmins.map(d => d.data()));
-            
-            if (filteredAdmins.length > 0) {
-              const docData = filteredAdmins[0].data() as AdminData;
+            if (!querySnapshot.empty) {
+              const adminDoc = querySnapshot.docs[0];
+              const docData = adminDoc.data() as AdminData;
               adminDataFromDoc = docData;
-              console.log("Found admin by email (manual filter):", docData);
+              console.log("Admin detection: Found admin by email query:", docData);
               
-              // Optional: Migrate to UID-based document for faster lookups
+              // CRITICAL: Migrate to UID-based document for faster lookups and better security
               try {
-                const oldDocId = filteredAdmins[0].id;
+                const oldDocId = adminDoc.id;
+                console.log("Admin detection: Migrating admin from doc", oldDocId, "to UID doc", currentUser.uid);
+                
                 await setDoc(adminRef, {
                   ...docData,
                   updatedAt: Date.now()
                 });
                 
-                // Delete the old email-based document to prevent duplicates
-                try {
-                  if (oldDocId !== currentUser.uid) {
-                    console.log("Attempting to delete old admin doc:", oldDocId);
-                    await deleteDoc(doc(db, 'admins', oldDocId));
-                    console.log("Deleted legacy record");
-                  }
-                } catch (deleteError) {
-                  console.error("Failed to delete legacy admin record:", deleteError);
+                if (oldDocId !== currentUser.uid) {
+                  await deleteDoc(doc(db, 'admins', oldDocId));
+                  console.log("Admin detection: Legacy record deleted.");
                 }
-                
-                console.log("Migrated admin to UID-based doc and deleted legacy record");
-              } catch (e) {
-                console.error("Failed to migrate admin to UID-based doc:", e);
+              } catch (migrateError) {
+                console.error("Admin detection: Migration failed (continuing anyway):", migrateError);
+              }
+            } else {
+              // Fallback: search all admins if the exact match fails (case sensitivity issues in DB)
+              console.log("Admin detection: No exact match, trying case-insensitive search...");
+              const allAdminsSnap = await getDocs(collection(db, 'admins'));
+              const fuzzyMatch = allAdminsSnap.docs.find(d => 
+                d.data().email?.toLowerCase().trim() === normalizedEmail
+              );
+              
+              if (fuzzyMatch) {
+                adminDataFromDoc = fuzzyMatch.data() as AdminData;
+                console.log("Admin detection: Found admin via fuzzy match:", adminDataFromDoc);
+              } else {
+                console.warn("Admin detection: User not found in 'admins' collection.");
               }
             }
           }
@@ -159,13 +235,19 @@ export default function App() {
       }
       setLoading(false);
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribeLocations();
+      unsubscribeTeams();
+      unsubscribeScoring();
+      unsubscribeAuth();
+    };
   }, []);
 
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
+      setShowLoginModal(false);
     } catch (error) {
       console.error("Login failed:", error);
     }
@@ -206,6 +288,16 @@ export default function App() {
                 <Link to="/" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
                   <TrendingUp className="w-4 h-4" /> Resultados
                 </Link>
+                {!isAdmin && (
+                  <>
+                    <Link to="/players" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
+                      <Users className="w-4 h-4" /> Atletas
+                    </Link>
+                    <Link to="/resenha" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
+                      <Trophy className="w-4 h-4" /> Resenha
+                    </Link>
+                  </>
+                )}
                 {isAdmin && (
                   <>
                     <Link to="/admin" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
@@ -245,7 +337,7 @@ export default function App() {
                           <UserIcon size={16} className="text-white" />
                         </div>
                       )}
-                      <span className="text-xs font-bold truncate max-w-[100px]">{user.displayName}</span>
+                      <span className="text-xs font-bold truncate max-w-[100px]">{user.displayName || user.email?.split('@')[0]}</span>
                     </div>
                     <button onClick={handleLogout} className="p-2 hover:bg-white/10 rounded-full transition-colors text-red-200">
                       <LogOut className="w-5 h-5" />
@@ -253,10 +345,10 @@ export default function App() {
                   </div>
                 ) : (
                   <button 
-                    onClick={handleLogin}
+                    onClick={() => setShowLoginModal(true)}
                     className="flex items-center gap-2 bg-primary-yellow text-primary-blue px-4 py-2 rounded-lg font-black text-xs uppercase tracking-wider hover:bg-yellow-400 transition-all shadow-md active:scale-95"
                   >
-                    <LogIn className="w-4 h-4" /> Entrar
+                    <LogIn className="w-4 h-4" /> Login
                   </button>
                 )}
               </div>
@@ -283,6 +375,16 @@ export default function App() {
                   <Link to="/" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
                     <TrendingUp className="w-4 h-4 text-primary-yellow" /> Resultados
                   </Link>
+                  {!isAdmin && (
+                    <>
+                      <Link to="/players" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
+                        <Users className="w-4 h-4 text-primary-yellow" /> Atletas
+                      </Link>
+                      <Link to="/resenha" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
+                        <Trophy className="w-4 h-4 text-primary-yellow" /> Resenha
+                      </Link>
+                    </>
+                  )}
                   {isAdmin && (
                     <>
                       <Link to="/admin" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
@@ -317,7 +419,7 @@ export default function App() {
                   {user ? (
                     <button onClick={handleLogout} className="w-full text-left px-3 py-2 rounded-md text-base font-bold text-red-200 hover:bg-white/5">Sair</button>
                   ) : (
-                    <button onClick={handleLogin} className="w-full text-left px-3 py-2 rounded-md text-base font-bold text-primary-yellow hover:bg-white/5">Entrar</button>
+                    <button onClick={handleLogin} className="w-full text-left px-3 py-2 rounded-md text-base font-bold text-primary-yellow hover:bg-white/5">Login</button>
                   )}
                 </div>
               </motion.div>
@@ -328,27 +430,94 @@ export default function App() {
         {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Routes>
-            <Route path="/" element={<PublicDashboard adminData={adminData} />} />
+            <Route path="/" element={<PublicDashboard adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
+            <Route path="/players" element={<PlayerManagement adminData={adminData} adminId={user?.uid} sharedLocations={locations} />} />
+            <Route path="/resenha" element={<Resenha locations={locations} />} />
             {isAdmin && (
               <>
                 <Route path="/admin" element={<AdminPanel adminData={adminData} />} />
-                <Route path="/admin/players" element={<PlayerManagement adminData={adminData} adminId={user?.uid} />} />
-                <Route path="/admin/teams" element={<TeamManagement adminData={adminData} />} />
+                <Route path="/admin/players" element={<PlayerManagement adminData={adminData} adminId={user?.uid} sharedLocations={locations} />} />
+                <Route path="/admin/teams" element={<TeamManagement adminData={adminData} sharedLocations={locations} />} />
                 {adminData?.role === 'master' && (
                   <>
                     <Route path="/admin/locations" element={<LocationManagement />} />
-                    <Route path="/admin/admins" element={<AdminManagement adminData={adminData} />} />
+                    <Route path="/admin/admins" element={<AdminManagement adminData={adminData} sharedLocations={locations} />} />
                   </>
                 )}
-                <Route path="/admin/matches" element={<MatchManagement adminData={adminData} />} />
+                <Route path="/admin/matches" element={<MatchManagement adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
                 {adminData?.role === 'master' && (
                   <Route path="/admin/scoring" element={<Tabelas />} />
                 )}
+                <Route path="/resultados" element={<MatchHistory adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
               </>
             )}
+            <Route path="/resultados" element={<MatchHistory adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
             <Route path="*" element={<div className="text-center py-20"><h1 className="text-4xl font-bold">404</h1><p className="text-gray-400">Página não encontrada ou acesso restrito.</p></div>} />
           </Routes>
         </main>
+
+        {/* Modals */}
+        <AnimatePresence>
+          {showLoginModal && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowLoginModal(false)}
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm" 
+              />
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden"
+              >
+                <div className="bg-primary-blue p-8 flex items-center justify-between text-white">
+                  <div className="flex items-center gap-4">
+                    <div className="bg-white/10 p-3 rounded-2xl">
+                      <ShieldCheck className="w-8 h-8 text-primary-yellow" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-black uppercase italic tracking-tighter">Acesso Admin</h3>
+                      <p className="text-white/60 text-[10px] font-black uppercase tracking-widest mt-0.5">Gestão Arena Coxim</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setShowLoginModal(false)} className="p-3 hover:bg-white/10 rounded-2xl transition-colors text-white/50 hover:text-white">
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="p-8 space-y-6">
+                  <div className="text-center space-y-4">
+                    <p className="text-gray-500 text-sm font-bold leading-relaxed px-4">
+                      Para sua segurança, o acesso administrativo é restrito a contas Google autorizadas.
+                    </p>
+                  </div>
+
+                  <button 
+                    onClick={handleLogin}
+                    className="w-full bg-white border-2 border-primary-blue text-primary-blue py-6 rounded-2xl font-black uppercase tracking-widest hover:bg-primary-blue hover:text-white transition-all flex items-center justify-center gap-3 active:scale-[0.98] group shadow-xl shadow-blue-50"
+                  >
+                    <svg viewBox="0 0 24 24" className="w-6 h-6 fill-current">
+                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                    </svg>
+                    Login com Google
+                  </button>
+
+                  <div className="pt-4 text-center">
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-300">
+                      Acesso monitorado • Arena Coxim
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* Footer */}
         <footer className="bg-white border-t border-gray-200 py-12 mt-20">
@@ -361,8 +530,37 @@ export default function App() {
             </div>
             <p className="text-gray-400 text-sm font-medium">© 2026 ARENA COXIM - Gestão de Futebol Amador</p>
             {user && (
-              <div className="mt-4 p-2 bg-gray-50 rounded-lg text-[10px] text-gray-400 font-mono border border-gray-100">
-                Conectado como: {user.email} ({user.uid}) | Admin: {isAdmin ? 'Sim' : 'Não'}
+              <div className="mt-4 p-4 bg-gray-50 rounded-2xl text-[10px] text-gray-500 font-mono border border-gray-100 max-w-lg mx-auto overflow-hidden">
+                <div className="flex flex-col gap-1 items-center">
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-primary-blue uppercase opacity-50">Email:</span>
+                    <span className="font-bold">{user.email}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-primary-blue uppercase opacity-50">UID:</span>
+                    <span className="font-bold">{user.uid}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="font-black text-primary-blue uppercase opacity-50">Admin:</span>
+                    <span className={`font-black uppercase italic ${isAdmin ? 'text-green-600' : 'text-red-500'}`}>
+                      {isAdmin ? 'Sim (Autorizado)' : 'Não (Acesso Restrito)'}
+                    </span>
+                  </div>
+                  {isAdmin && adminData && (
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-primary-blue uppercase opacity-50">Role:</span>
+                      <span className="font-bold uppercase">{adminData.role}</span>
+                      <span className="px-1 opacity-20">|</span>
+                      <span className="font-black text-primary-blue uppercase opacity-50">Sede:</span>
+                      <span className="font-bold uppercase truncate max-w-[150px]">{adminData.locationId || 'Todas'}</span>
+                    </div>
+                  )}
+                  {!isAdmin && (
+                    <p className="mt-2 text-[9px] text-red-400 font-black uppercase italic animate-pulse">
+                      Peça ao Master para autorizar o email "{user.email?.toLowerCase().trim()}" no menu Staff.
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>

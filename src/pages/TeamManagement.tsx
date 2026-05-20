@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, query, where, getDocs } from 'firebase/firestore';
 import { Team, Location, AdminData } from '../types';
 import { Shield, Plus, Trash2, Edit2, MapPin, X, Search, Palette, Map, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -21,11 +21,12 @@ const JERSEY_COLORS = [
 
 interface TeamManagementProps {
   adminData?: AdminData | null;
+  sharedLocations: Location[];
 }
 
-export default function TeamManagement({ adminData }: TeamManagementProps) {
+export default function TeamManagement({ adminData, sharedLocations }: TeamManagementProps) {
   const [teams, setTeams] = useState<Team[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
+  const [locations, setLocations] = useState<Location[]>(sharedLocations);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
@@ -38,31 +39,39 @@ export default function TeamManagement({ adminData }: TeamManagementProps) {
   const [playerCount, setPlayerCount] = useState<number>(5);
 
   useEffect(() => {
-    const unsubscribeTeams = onSnapshot(collection(db, 'teams'), (snapshot) => {
-      let teamsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team));
-      
-      // Filter by location if not master admin
-      if (adminData && adminData.role !== 'master' && adminData.locationId) {
-        teamsList = teamsList.filter(t => t.locationId === adminData.locationId);
-      }
-      
-      setTeams(teamsList);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'teams'));
+    let locationsList = sharedLocations;
+    // Filter locations if not master admin
+    if (adminData && adminData.role !== 'master' && adminData.locationId) {
+      locationsList = locationsList.filter(l => l.id === adminData.locationId);
+    }
+    setLocations(locationsList);
+  }, [sharedLocations, adminData]);
 
-    const unsubscribeLocations = onSnapshot(collection(db, 'locations'), (snapshot) => {
-      let locationsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location));
-      
-      // Filter locations if not master admin
-      if (adminData && adminData.role !== 'master' && adminData.locationId) {
-        locationsList = locationsList.filter(l => l.id === adminData.locationId);
+  useEffect(() => {
+    let qTeams = query(collection(db, 'teams'));
+    if (adminData && adminData.role !== 'master' && adminData.locationId) {
+      qTeams = query(collection(db, 'teams'), where('locationId', '==', adminData.locationId));
+    }
+
+    const unsubscribeTeams = onSnapshot(qTeams, (snapshot) => {
+      let teamsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team));
+      setTeams(teamsList);
+    }, async (err) => {
+      if (err.message?.includes('index') || err.code === 'failed-precondition') {
+        console.warn("Teams query failed due to missing index. Falling back to simple query.");
+        let qFallback = query(collection(db, 'teams'));
+        if (adminData && adminData.role !== 'master' && adminData.locationId) {
+          qFallback = query(collection(db, 'teams'), where('locationId', '==', adminData.locationId));
+        }
+        const snap = await getDocs(qFallback);
+        setTeams(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team)));
+      } else {
+        handleFirestoreError(err, OperationType.LIST, 'teams');
       }
-      
-      setLocations(locationsList);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'locations'));
+    });
 
     return () => {
       unsubscribeTeams();
-      unsubscribeLocations();
     };
   }, [adminData]);
 
@@ -126,6 +135,7 @@ export default function TeamManagement({ adminData }: TeamManagementProps) {
     if (window.confirm('Tem certeza que deseja remover este time?')) {
       try {
         await deleteDoc(doc(db, 'teams', id));
+        alert('Time removido com sucesso!');
       } catch (error) {
         handleFirestoreError(error, OperationType.DELETE, 'teams');
       }

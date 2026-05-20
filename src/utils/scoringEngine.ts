@@ -66,27 +66,15 @@ export const calculateMatchPoints = (
     const assistPoints = assistsMade * rules.assist;
 
     // 3. Goalkeeper/Defender Points
-    let goalkeeperBonus = 0;
     let cleanSheetPoints = 0;
     let gdPoints = 0;
 
     if (!isSubstitute) {
-      const isDefensive = ['goleiro', 'zagueiro', 'lateral'].includes(player.position);
+      const isDefensive = ['goleiro', 'zagueiro', 'lateral'].includes(player.position.toLowerCase());
 
       if (isDefensive) {
-        // Clean Sheet
-        if (teamGoalsConceded === 0) {
-          cleanSheetPoints = rules.cleanSheet;
-        }
-      }
-
-      if (player.position === 'goleiro') {
-        // Initial Bonus + Win Formula
-        if (isWin) {
-          goalkeeperBonus = rules.cleanSheet - teamGoalsConceded;
-        } else {
-          goalkeeperBonus = rules.cleanSheet; 
-        }
+        // Clean Sheet: 7 points - goals conceded
+        cleanSheetPoints = Math.max(0, rules.cleanSheet - teamGoalsConceded);
       }
 
       // 4. Goal Difference Bonus
@@ -106,7 +94,7 @@ export const calculateMatchPoints = (
         goalsCount: goalsScored,
         assists: assistPoints,
         assistsCount: assistsMade,
-        goalkeeperBonus,
+        goalkeeperBonus: 0,
         cleanSheet: cleanSheetPoints,
         goalDifference: gdPoints,
         mvp: 0 // Will set after calculating all base points

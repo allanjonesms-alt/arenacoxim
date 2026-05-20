@@ -8,37 +8,29 @@ export const calculateAverage = (stats?: OverallStats) => {
 };
 
 export const valueToLetter = (value: number) => {
-  if (value >= 90) return 'A';
-  if (value >= 80) return 'B';
-  if (value >= 70) return 'C';
-  if (value >= 60) return 'D';
-  return 'E';
+  return Math.round(value).toString().padStart(2, '0');
 };
 
 export const letterToValue = (letter: string) => {
-  switch (letter) {
-    case 'A': return 95;
-    case 'B': return 85;
-    case 'C': return 75;
-    case 'D': return 65;
-    case 'E': return 55;
-    default: return 75;
-  }
+  const val = parseInt(letter);
+  return isNaN(val) ? 75 : val;
 };
 
-export const getGradeColor = (grade: string) => {
-  switch (grade) {
-    case 'A': return 'text-yellow-400';
-    case 'B': return 'text-emerald-400';
-    case 'C': return 'text-blue-400';
-    case 'D': return 'text-orange-400';
-    case 'E': return 'text-red-400';
-    default: return 'text-gray-400';
-  }
+export const getGradeColor = (value: number | string) => {
+  const num = typeof value === 'string' ? parseInt(value) : value;
+  if (num >= 90) return 'text-yellow-400';
+  if (num >= 80) return 'text-emerald-400';
+  if (num >= 70) return 'text-blue-400';
+  if (num >= 60) return 'text-orange-400';
+  return 'text-red-400';
 };
 
-export const calculateGrade = (stats?: OverallStats) => {
+export const calculateGrade = (stats?: OverallStats, averagePoints: number = 0) => {
   const avg = calculateAverage(stats);
-  const grade = valueToLetter(avg);
-  return { grade, color: getGradeColor(grade) };
+  const safeAvgPoints = isNaN(averagePoints) ? 0 : averagePoints;
+  const performanceBonus = safeAvgPoints * 0.3;
+  const finalScore = Math.min(105, Math.round(avg + performanceBonus));
+  
+  const grade = isNaN(finalScore) ? '75' : finalScore.toString().padStart(2, '0');
+  return { grade, color: getGradeColor(isNaN(finalScore) ? 75 : finalScore) };
 };

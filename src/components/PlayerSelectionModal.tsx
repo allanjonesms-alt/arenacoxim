@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, CheckCircle2, ArrowRight, ArrowLeft, Users, User, Search, Trophy } from 'lucide-react';
 import { SoccerJersey } from './SoccerJersey';
 import { RandomSelectionModal } from './RandomSelectionModal';
+import { calculateGrade } from '../utils/gradeUtils';
 
 interface PlayerSelectionModalProps {
   isOpen: boolean;
@@ -28,6 +29,108 @@ interface PlayerSelectionModalProps {
     substitutesCount?: number;
   };
 }
+
+const AutocompletePlayer = ({ 
+  label, 
+  value, 
+  onChange, 
+  availablePlayers, 
+  teamColor, 
+  isGoalkeeper,
+  excludedIds,
+  dropdownPosition = 'bottom'
+}: { 
+  label: string, 
+  value: string, 
+  onChange: (id: string) => void, 
+  availablePlayers: Player[], 
+  teamColor?: string, 
+  isGoalkeeper?: boolean,
+  excludedIds: string[],
+  dropdownPosition?: 'top' | 'bottom'
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const selectedPlayer = availablePlayers.find(p => p.id === value);
+
+  const filtered = availablePlayers.filter(p => {
+    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || 
+                        (p.nickname && p.nickname.toLowerCase().includes(search.toLowerCase()));
+    const NotExcluded = !excludedIds.includes(p.id) || p.id === value;
+    return matchSearch && NotExcluded;
+  });
+
+  return (
+    <div className="relative flex flex-col items-center">
+       <div 
+         onClick={() => setIsOpen(!isOpen)}
+         className={`relative cursor-pointer transition-transform hover:scale-105 active:scale-95 ${value ? 'opacity-100' : 'opacity-40'}`}
+       >
+         <SoccerJersey color={isGoalkeeper ? '#111' : (teamColor || '#555')} size={40} />
+         <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded-md whitespace-nowrap border border-white/10 flex flex-col items-center shadow-lg min-w-[60px]">
+           <span className="text-[6px] font-black uppercase text-white/50 tracking-tighter">{label}</span>
+           <span className="text-[8px] font-black uppercase text-white leading-none truncate max-w-[80px]">
+             {(selectedPlayer?.nickname || selectedPlayer?.name.split(' ')[0] || '---').toUpperCase()}
+           </span>
+         </div>
+       </div>
+
+       <AnimatePresence>
+         {isOpen && (
+           <>
+             <div className="fixed inset-0 z-[120]" onClick={() => setIsOpen(false)} />
+             <motion.div 
+               initial={{ opacity: 0, scale: 0.95, y: dropdownPosition === 'bottom' ? -10 : 10 }}
+               animate={{ opacity: 1, scale: 1, y: 0 }}
+               exit={{ opacity: 0, scale: 0.95, y: dropdownPosition === 'bottom' ? -10 : 10 }}
+               className={`absolute ${dropdownPosition === 'bottom' ? 'top-16' : 'bottom-16'} left-1/2 -translate-x-1/2 w-[200px] max-w-[90vw] bg-white rounded-xl shadow-2xl border border-gray-100 z-[130] p-2 flex flex-col gap-1 max-h-48 overflow-y-auto`}
+             >
+                <div className="sticky top-0 bg-white pb-1 border-b border-gray-50 mb-1">
+                  <input 
+                    autoFocus
+                    className="w-full text-[10px] p-2 focus:outline-none font-bold uppercase tracking-widest text-primary-blue placeholder:text-gray-300"
+                    placeholder="Buscar..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                  />
+                </div>
+                <button 
+                  onClick={() => {
+                    onChange('');
+                    setIsOpen(false);
+                    setSearch('');
+                  }}
+                  className="flex items-center gap-2 p-2 hover:bg-red-50 rounded-lg text-left transition-colors text-red-500 italic text-[9px] font-bold uppercase"
+                >
+                  <X size={12} /> Remover Atleta
+                </button>
+                {filtered.map(p => (
+                  <button 
+                    key={p.id}
+                    onClick={() => {
+                      onChange(p.id);
+                      setIsOpen(false);
+                      setSearch('');
+                    }}
+                    className="flex items-center gap-2 p-2 hover:bg-blue-50 rounded-lg text-left transition-colors group"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-gray-100 overflow-hidden flex-shrink-0 border border-gray-100 group-hover:border-primary-blue/30">
+                       {p.photoUrl ? <img src={p.photoUrl} className="w-full h-full object-cover" /> : <User size={12} className="text-gray-300 m-auto" />}
+                    </div>
+                    <span className="text-[10px] font-black uppercase text-primary-gray truncate group-hover:text-primary-blue">
+                       {p.nickname || p.name}
+                    </span>
+                  </button>
+                ))}
+                {filtered.length === 0 && <span className="text-[8px] text-gray-300 p-2 text-center uppercase font-bold">Nenhum atleta</span>}
+             </motion.div>
+           </>
+         )}
+       </AnimatePresence>
+    </div>
+  );
+};
 
 export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
   isOpen,
@@ -55,6 +158,18 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
   const [selectedB, setSelectedB] = useState<string[]>(initialData?.teamBPlayers || []);
   const [goalkeeperA, setGoalkeeperA] = useState<string>(initialData?.goalkeeperAId || '');
   const [goalkeeperB, setGoalkeeperB] = useState<string>(initialData?.goalkeeperBId || '');
+  
+  // Tactical Lineup State
+  const [lineupA, setLineupA] = useState<Record<string, string>>({
+    gk: initialData?.goalkeeperAId || '',
+    ...Object.fromEntries((initialData?.teamAPlayers || []).filter(id => id !== initialData?.goalkeeperAId).slice(0, 6).map((id, i) => [`p${i+1}`, id]))
+  });
+  
+  const [lineupB, setLineupB] = useState<Record<string, string>>({
+    gk: initialData?.goalkeeperBId || '',
+    ...Object.fromEntries((initialData?.teamBPlayers || []).filter(id => id !== initialData?.goalkeeperBId).slice(0, 6).map((id, i) => [`p${i+1}`, id]))
+  });
+
   const [searchTerm, setSearchTerm] = useState('');
   const [isRandomSelectionOpen, setIsRandomSelectionOpen] = useState(false);
 
@@ -71,6 +186,17 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
       setSelectedB(initialData?.teamBPlayers || []);
       setGoalkeeperA(initialData?.goalkeeperAId || '');
       setGoalkeeperB(initialData?.goalkeeperBId || '');
+      
+      setLineupA({
+        gk: initialData?.goalkeeperAId || '',
+        ...Object.fromEntries((initialData?.teamAPlayers || []).filter(id => id !== initialData?.goalkeeperAId).slice(0, 6).map((id, i) => [`p${i+1}`, id]))
+      });
+      
+      setLineupB({
+        gk: initialData?.goalkeeperBId || '',
+        ...Object.fromEntries((initialData?.teamBPlayers || []).filter(id => id !== initialData?.goalkeeperBId).slice(0, 6).map((id, i) => [`p${i+1}`, id]))
+      });
+
       setSearchTerm('');
     }
   }, [isOpen, initialData]);
@@ -87,7 +213,6 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
   const handleNext = () => {
     if (step === 0) {
       if (teamAId && teamBId && teamAId !== teamBId) {
-        // Se já temos a presença e suplentes (vindos do wizard de criação), pula para a divisão (Passo 3)
         if (initialStep === 0 && presentPlayers.length > 0) {
           setStep(3);
         } else {
@@ -101,17 +226,36 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
     } else if (step === 3) {
       if (divisionMode === 'manual') setStep(4);
       else if (divisionMode === 'random') setIsRandomSelectionOpen(true);
-    } else if (step === 4) setStep(5);
-    else if (step === 5) setStep(6);
-    else if (step === 6) setStep(7);
-    else onConfirm(teamAId, teamBId, selectedA, selectedB, goalkeeperA, goalkeeperB, presentPlayers, matchSubstitutesCount);
+    } else if (step === 4) {
+      // Sync lineupA to selectedA and goalkeeperA
+      const teamAPlayerIds = Object.values(lineupA).filter(Boolean);
+      setSelectedA(teamAPlayerIds);
+      setGoalkeeperA(lineupA.gk || '');
+      setStep(6); // Go directly to Team 2 Tactical Selection (Step 6)
+    } else if (step === 6) {
+      // Sync lineupB to selectedB and goalkeeperB
+      const teamBPlayerIds = Object.values(lineupB).filter(Boolean);
+      setSelectedB(teamBPlayerIds);
+      setGoalkeeperB(lineupB.gk || '');
+      
+      // Final confirmation
+      onConfirm(
+        teamAId, 
+        teamBId, 
+        Object.values(lineupA).filter(Boolean), 
+        Object.values(lineupB).filter(Boolean), 
+        lineupA.gk || '', 
+        lineupB.gk || '', 
+        presentPlayers, 
+        matchSubstitutesCount
+      );
+    }
   };
 
   const handleBack = () => {
     if (step === 1) setStep(0);
     else if (step === 2) setStep(1);
     else if (step === 3) {
-      // Se pulamos a presença e suplentes na vinda, pula na volta também
       if (initialStep === 0 && (initialData?.confirmedPlayers?.length || 0) > 0) {
         setStep(0);
       } else {
@@ -119,9 +263,7 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
       }
     }
     else if (step === 4) setStep(3);
-    else if (step === 5) setStep(4);
-    else if (step === 6) setStep(5);
-    else if (step === 7) setStep(6);
+    else if (step === 6) setStep(4);
   };
 
   const handleRandomSelectionConfirm = (teamAIds: string[], teamBIds: string[], gk1: string, gk2: string) => {
@@ -196,7 +338,12 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
       (p.nickname && p.nickname.toLowerCase().includes(searchTerm.toLowerCase()))
     ) : true)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => {
+      const gA = parseInt(calculateGrade(a.overallStats, (a.stats.points || 0) / (a.stats.matches || 1)).grade);
+      const gB = parseInt(calculateGrade(b.overallStats, (b.stats.points || 0) / (b.stats.matches || 1)).grade);
+      if (gB !== gA) return gB - gA;
+      return (a.nickname || a.name).localeCompare(b.nickname || b.name);
+    });
 
   const canProceed = step === 0
     ? !!teamAId && !!teamBId && teamAId !== teamBId
@@ -206,27 +353,27 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
         ? true
       : step === 3
         ? !!divisionMode
-        : isGoalkeeperStep 
-          ? !!currentGoalkeeper 
-          : currentSelection.length > 0;
+        : (step === 4 || step === 6)
+          ? true // Allow proceeding even if not full
+          : isGoalkeeperStep 
+            ? !!currentGoalkeeper 
+            : currentSelection.length > 0;
 
   const stepTitle = step === 0 ? 'Selecionar Times'
                   : step === 1 ? 'Quem vai jogar hoje?'
                   : step === 2 ? 'Configurar Suplentes'
                   : step === 3 ? 'Divisão de Times'
-                  : step === 4 ? 'Escalar Time 1' 
-                  : step === 5 ? 'Selecionar Goleiro 1'
-                  : step === 6 ? 'Escalar Time 2'
-                  : 'Selecionar Goleiro 2';
+                  : step === 4 ? 'Tática do Time 1' 
+                  : step === 6 ? 'Tática do Time 2'
+                  : 'Escalação';
 
   const nextButtonText = step === 0 ? 'Confirmar Times'
                        : step === 1 ? 'Confirmar Presença'
                        : step === 2 ? 'Confirmar Suplentes'
                        : step === 3 ? (divisionMode === 'random' ? 'Iniciar Sorteio' : 'Próximo')
-                       : step === 4 ? 'Escalar Time'
-                       : step === 5 ? 'Confirmar Goleiro'
-                       : step === 6 ? 'Escalar Time'
-                       : 'Confirmar Partida';
+                       : step === 4 ? 'Escalar Próximo Time'
+                       : step === 6 ? 'Concluir Escalação'
+                       : 'Próximo';
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
@@ -256,7 +403,7 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
         className="relative bg-white w-full max-w-2xl rounded-2xl md:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh]"
       >
         {/* Header */}
-        <div className="p-5 md:p-8 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+        <div className="flex-none p-5 md:p-8 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
           <div className="flex items-center gap-3 md:gap-5">
             <div className="bg-primary-blue/5 p-3 md:p-4 rounded-xl md:rounded-2xl border border-primary-blue/10">
               <Users className="w-5 h-5 md:w-6 md:h-6 text-primary-blue" />
@@ -457,24 +604,23 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
         )}
 
         {/* Search Bar (only for selection steps) */}
-        {(step === 1 || (step >= 4 && !isGoalkeeperStep)) && (
+        {step === 1 && (
           <div className="px-5 md:px-10 py-4 md:py-5 bg-gray-50 border-b border-gray-100 flex flex-col sm:flex-row gap-3 md:gap-4">
             <div className="relative flex-1 group">
               <Search className="absolute left-5 md:left-6 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-blue transition-colors w-4 h-4 md:w-5 md:h-5" />
               <input 
                 type="text" 
-                placeholder={step === 1 ? "Localizar atleta..." : "Filtrar por nome..."}
+                placeholder="Localizar atleta..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full bg-white border-2 border-gray-100 rounded-xl md:rounded-2xl py-3 md:py-4 pl-12 md:pl-14 pr-4 md:pr-6 text-xs md:text-sm focus:outline-none focus:border-primary-blue transition-all text-primary-blue font-bold placeholder:text-gray-300 shadow-sm"
               />
             </div>
-            {(step === 1 || step === 4 || step === 6) && (
-              <button
+            <button
                 onClick={() => {
                   const visibleIds = visiblePlayers.map(p => p.id);
-                  const currentList = step === 1 ? presentPlayers : (step === 4 ? selectedA : selectedB);
-                  const setList = step === 1 ? setPresentPlayers : (step === 4 ? setSelectedA : setSelectedB);
+                  const currentList = presentPlayers;
+                  const setList = setPresentPlayers;
                   
                   const allVisibleSelected = visibleIds.every(id => currentList.includes(id));
                   
@@ -482,31 +628,23 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
                     setList(currentList.filter(id => !visibleIds.includes(id)));
                   } else {
                     const newList = [...new Set([...currentList, ...visibleIds])];
-                    if (step === 4 || step === 6) {
-                      const otherSetList = step === 4 ? setSelectedB : setSelectedA;
-                      const otherList = step === 4 ? selectedB : selectedA;
-                      otherSetList(otherList.filter(id => !visibleIds.includes(id)));
-                    }
                     setList(newList);
                   }
                 }}
                 className="bg-white hover:bg-gray-50 text-primary-blue px-4 md:px-6 py-3 md:py-4 rounded-xl md:rounded-2xl text-[9px] md:text-[11px] font-black uppercase tracking-widest transition-all border-2 border-gray-100 hover:border-primary-blue shadow-sm"
               >
-                {visiblePlayers.every(p => (step === 1 ? presentPlayers : (step === 4 ? selectedA : selectedB)).includes(p.id)) 
+                {visiblePlayers.every(p => presentPlayers.includes(p.id)) 
                   ? 'Limpar' 
                   : 'Marcar Todos'}
               </button>
-            )}
           </div>
         )}
 
-        {/* Player List (only for selection steps) */}
-        {(step === 1 || step >= 4) && (
+        {/* Player List (only for step 1) */}
+        {step === 1 && (
           <div className="flex-1 overflow-y-auto p-4 md:p-10 grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6 bg-gray-50/30">
             {visiblePlayers.map(p => {
-                const isSelected = step === 1 
-                  ? presentPlayers.includes(p.id)
-                  : isGoalkeeperStep ? currentGoalkeeper === p.id : currentSelection.includes(p.id);
+                const isSelected = presentPlayers.includes(p.id);
                 
                 return (
                   <button
@@ -518,7 +656,7 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
                         : 'bg-white/50 border-transparent text-gray-400 hover:bg-white hover:border-gray-200'
                     }`}
                     style={isSelected ? { 
-                      borderColor: step === 1 ? '#eab308' : (currentTeam?.color || '#3b82f6')
+                      borderColor: '#eab308'
                     } : {}}
                   >
                     <div className="relative mb-3 md:mb-5">
@@ -536,17 +674,24 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
                           <User className="w-6 h-6 md:w-9 md:h-9 text-gray-300" />
                         </div>
                       )}
+                      
+                      {/* Overall Badge */}
+                      <div className="absolute -top-3 -left-1 bg-white border border-gray-100 rounded-lg px-2 py-1 shadow-md z-10 scale-90 md:scale-100">
+                        <span className={`text-[10px] font-black italic ${calculateGrade(p.overallStats, p.stats.points / (p.stats.matches || 1)).color}`}>
+                          {calculateGrade(p.overallStats, p.stats.points / (p.stats.matches || 1)).grade}
+                        </span>
+                      </div>
+
                       {isSelected && (
                         <div 
-                          className="absolute -top-1 -right-1 md:-top-2 md:-right-2 text-white rounded-full p-1.5 md:p-2 shadow-xl border-2 border-white scale-100 md:scale-110"
-                          style={{ backgroundColor: step === 1 ? '#eab308' : (currentTeam?.color || '#3b82f6') }}
+                          className="absolute -top-1 -right-1 md:-top-2 md:-right-2 text-white rounded-full p-1.5 md:p-2 shadow-xl border-2 border-white scale-100 md:scale-110 bg-[#eab308]"
                         >
                           <CheckCircle2 className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" />
                         </div>
                       )}
                     </div>
                     <span className="text-[10px] md:text-xs font-black uppercase italic tracking-tight text-center line-clamp-1 text-primary-blue">
-                      {p.nickname || p.name}
+                      {(p.nickname || p.name).toUpperCase()}
                     </span>
                     <span className="text-[8px] md:text-[9px] font-bold text-gray-400 uppercase mt-1 md:mt-1.5 tracking-widest">
                       {p.position || 'Jogador'}
@@ -563,30 +708,149 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
           </div>
         )}
 
+        {/* Tactical Field Step */}
+        {(step === 4 || step === 6) && (
+          <div className="flex-1 flex flex-col items-center justify-center bg-white overflow-visible p-1 md:p-4">
+             <div className="w-full max-w-[280px] md:max-w-[420px] aspect-[4/5] md:aspect-[2/3] bg-green-700 rounded-[1.5rem] md:rounded-[2rem] border-4 border-white/20 relative shadow-2xl shadow-green-900/20 overflow-visible">
+                {/* Field Lines */}
+                <div className="absolute inset-x-0 top-0 h-1/2 border-white/20 border-b-2 rounded-t-[1.5rem] md:rounded-t-[2rem]" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 md:w-24 md:h-24 border-2 border-white/10 rounded-full" />
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-1/4 border-white/20 border-x-2 border-b-2 rounded-b-xl rounded-t-[1.5rem] md:rounded-t-[2rem]" />
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/4 h-1/12 border-white/20 border-x-2 border-b-2 rounded-b-lg rounded-t-[1.5rem] md:rounded-t-[2rem]" />
+                
+                {/* Tactical Layout 1-3-2-1 */}
+                <div className="absolute inset-0 p-1 md:p-6 flex flex-col justify-center gap-y-2 md:gap-y-8">
+                  {/* Position: Goalcapper */}
+                  <div className="flex justify-center scale-90 md:scale-100">
+                    <AutocompletePlayer 
+                      label="Goleiro"
+                      value={step === 4 ? lineupA.gk : lineupB.gk}
+                      onChange={(id) => {
+                        const setLineup = step === 4 ? setLineupA : setLineupB;
+                        setLineup(prev => ({ ...prev, gk: id }));
+                        
+                        // Add to present if manual
+                        if (divisionMode === 'manual' && id && !presentPlayers.includes(id)) {
+                          setPresentPlayers(prev => [...prev, id]);
+                        }
+                      }}
+                      availablePlayers={availablePlayers}
+                      teamColor={currentTeam?.color}
+                      isGoalkeeper
+                      excludedIds={Object.values(step === 4 ? lineupA : lineupB)}
+                    />
+                  </div>
+
+                  {/* Position: Defense (3) */}
+                  <div className="flex justify-around items-center gap-x-0.5">
+                    {['p1', 'p2', 'p3'].map((pos, i) => (
+                      <div key={pos} className="scale-[0.75] md:scale-100">
+                        <AutocompletePlayer 
+                          label={`Zag. ${i + 1}`}
+                          value={step === 4 ? lineupA[pos] : lineupB[pos]}
+                          onChange={(id) => {
+                            const setLineup = step === 4 ? setLineupA : setLineupB;
+                            setLineup(prev => ({ ...prev, [pos]: id }));
+                            if (divisionMode === 'manual' && id && !presentPlayers.includes(id)) {
+                               setPresentPlayers(prev => [...prev, id]);
+                            }
+                          }}
+                          availablePlayers={availablePlayers}
+                          teamColor={currentTeam?.color}
+                          excludedIds={Object.values(step === 4 ? lineupA : lineupB)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Position: Midfield (2) */}
+                  <div className="flex justify-center items-center gap-x-4 md:gap-x-12">
+                    {['p4', 'p5'].map((pos, i) => (
+                      <div key={pos} className="scale-[0.8] md:scale-115">
+                        <AutocompletePlayer 
+                          label={`Meio ${i + 1}`}
+                          value={step === 4 ? lineupA[pos] : lineupB[pos]}
+                          onChange={(id) => {
+                            const setLineup = step === 4 ? setLineupA : setLineupB;
+                            setLineup(prev => ({ ...prev, [pos]: id }));
+                            if (divisionMode === 'manual' && id && !presentPlayers.includes(id)) {
+                               setPresentPlayers(prev => [...prev, id]);
+                            }
+                          }}
+                          availablePlayers={availablePlayers}
+                          teamColor={currentTeam?.color}
+                          excludedIds={Object.values(step === 4 ? lineupA : lineupB)}
+                          dropdownPosition="top"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Position: Attack (1) */}
+                  <div className="flex justify-center">
+                    <div className="scale-90 md:scale-125">
+                      <AutocompletePlayer 
+                        label="Atacante"
+                        value={step === 4 ? lineupA.p6 : lineupB.p6}
+                        onChange={(id) => {
+                          const setLineup = step === 4 ? setLineupA : setLineupB;
+                          setLineup(prev => ({ ...prev, p6: id }));
+                          if (divisionMode === 'manual' && id && !presentPlayers.includes(id)) {
+                             setPresentPlayers(prev => [...prev, id]);
+                          }
+                        }}
+                        availablePlayers={availablePlayers}
+                        teamColor={currentTeam?.color}
+                        excludedIds={Object.values(step === 4 ? lineupA : lineupB)}
+                        dropdownPosition="top"
+                      />
+                    </div>
+                  </div>
+                </div>
+             </div>
+             <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest text-center mt-3 opacity-50">
+               Toque na camisa para selecionar o atleta
+             </p>
+          </div>
+        )}
+
         {/* Footer Actions */}
-        <div className="p-5 md:p-10 bg-gray-50 border-t border-gray-100 flex flex-wrap gap-3 md:gap-5 shadow-inner">
-          <div className="flex-[2] flex gap-3 md:gap-5 w-full sm:w-auto order-2 sm:order-1">
+        <div className="flex-none p-3 md:p-10 bg-gray-50 border-t border-gray-100 flex flex-nowrap md:flex-wrap gap-2 md:gap-5 shadow-inner">
+          <div className="flex-[2] flex gap-2 md:gap-5 w-auto order-2 sm:order-1">
             {step > 0 && (
               <button
                 onClick={handleBack}
-                className="flex-1 bg-white text-gray-400 border-2 border-gray-100 py-3 md:py-5 rounded-xl md:rounded-3xl font-black uppercase tracking-widest flex items-center justify-center gap-2 md:gap-3 hover:bg-gray-50 transition-all active:scale-95 text-[10px] md:text-sm shadow-sm"
+                className="flex-1 bg-white text-gray-400 border-2 border-gray-100 py-2.5 md:py-5 rounded-xl md:rounded-3xl font-black uppercase tracking-widest flex items-center justify-center gap-1.5 md:gap-3 hover:bg-gray-50 transition-all active:scale-95 text-[9px] md:text-sm shadow-sm"
               >
-                <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" /> Voltar
+                <ArrowLeft className="w-3.5 h-3.5 md:w-5 md:h-5" /> Voltar
               </button>
             )}
             {onSaveDraft && (
               <button
-                onClick={() => onSaveDraft(teamAId, teamBId, selectedA, selectedB, goalkeeperA, goalkeeperB, presentPlayers, matchSubstitutesCount)}
-                className="flex-1 bg-white text-primary-yellow border-2 border-gray-100 py-3 md:py-5 rounded-xl md:rounded-3xl font-black uppercase tracking-widest hover:bg-yellow-50 hover:border-primary-yellow/30 transition-all active:scale-95 text-[10px] md:text-sm shadow-sm"
+                onClick={() => {
+                   const teamAPlayerIds = Object.values(lineupA).filter(Boolean);
+                   const teamBPlayerIds = Object.values(lineupB).filter(Boolean);
+                   onSaveDraft(
+                     teamAId, 
+                     teamBId, 
+                     teamAPlayerIds, 
+                     teamBPlayerIds, 
+                     lineupA.gk || '', 
+                     lineupB.gk || '', 
+                     presentPlayers, 
+                     matchSubstitutesCount
+                   );
+                }}
+                className="flex-1 bg-white text-primary-yellow border-2 border-primary-yellow/20 py-2.5 md:py-5 rounded-xl md:rounded-3xl font-black uppercase tracking-widest hover:bg-yellow-50 transition-all active:scale-95 text-[9px] md:text-sm shadow-sm"
               >
-                Draft
+                Salvar
               </button>
             )}
           </div>
           <button
             onClick={handleNext}
             disabled={!canProceed}
-            className={`flex-[3] py-4 md:py-5 rounded-xl md:rounded-3xl font-black uppercase tracking-widest flex items-center justify-center gap-2 md:gap-3 transition-all order-1 sm:order-2 w-full sm:w-auto shadow-xl active:scale-95 text-xs md:text-base ${
+            className={`flex-[3] py-3 md:py-5 rounded-xl md:rounded-3xl font-black uppercase tracking-widest flex items-center justify-center gap-2 md:gap-3 transition-all order-1 sm:order-2 w-auto shadow-xl active:scale-95 text-[10px] md:text-base ${
               canProceed
                 ? 'text-white hover:brightness-110 shadow-blue-200'
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
@@ -596,7 +860,7 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
                 color: (currentTeam?.color === '#ffffff' ? '#1e3a8a' : '#ffffff')
             } : {}}
           >
-            <span className="truncate">{nextButtonText}</span> <ArrowRight className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
+            <span className="truncate">{nextButtonText}</span> <ArrowRight className="w-3.5 h-3.5 md:w-5 md:h-5 flex-shrink-0" />
           </button>
         </div>
       </motion.div>

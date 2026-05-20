@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Player, Team } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Users, Trophy, User, CheckCircle2 } from 'lucide-react';
-import { calculateAverage } from '../utils/gradeUtils';
+import { calculateAverage, calculateGrade } from '../utils/gradeUtils';
 
 interface RandomSelectionModalProps {
   isOpen: boolean;
@@ -290,9 +290,14 @@ export const RandomSelectionModal: React.FC<RandomSelectionModalProps> = ({
                   <h3 className="relative z-10 text-white font-black text-lg md:text-2xl uppercase italic leading-tight text-center drop-shadow-md line-clamp-1">
                     {currentSelection.nickname || currentSelection.name}
                   </h3>
-                  <p className="relative z-10 text-white/80 font-black uppercase text-[8px] md:text-[10px] tracking-[0.2em] mt-1 md:mt-2 drop-shadow-sm">
-                    {currentSelection.position === 'goleiro' ? 'GOLEIRO' : 'JOGADOR'}
-                  </p>
+                  <div className="relative z-10 flex items-center gap-2 mt-1 md:mt-2">
+                    <p className="text-white/80 font-black uppercase text-[8px] md:text-[10px] tracking-[0.2em] drop-shadow-sm">
+                      {currentSelection.position === 'goleiro' ? 'GOLEIRO' : 'JOGADOR'}
+                    </p>
+                    <span className="bg-white/20 px-2 rounded-md text-white text-[10px] font-black italic border border-white/30 backdrop-blur-sm">
+                      {calculateGrade(currentSelection.overallStats, currentSelection.stats.points / (currentSelection.stats.matches || 1)).grade}
+                    </span>
+                  </div>
                   <div className="relative z-10 mt-3 md:mt-6 px-3 md:px-5 py-1 md:py-2 rounded-lg md:rounded-xl text-[8px] md:text-[10px] font-black uppercase tracking-widest bg-white text-primary-blue shadow-lg">
                     {currentTeamName}
                   </div>

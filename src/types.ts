@@ -21,6 +21,7 @@ export interface Player {
   photoUrl?: string;
   stats: PlayerStats;
   overallStats?: OverallStats;
+  overallValue?: number; // Calculated grade value for sorting
 }
 
 export interface Match {
@@ -50,8 +51,10 @@ export interface Admin {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   locationId: string; // Associated location
   role: string;
+  mustChangePassword?: boolean;
   createdAt: number;
   updatedAt?: number;
 }

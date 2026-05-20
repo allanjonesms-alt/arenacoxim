@@ -1,18 +1,21 @@
 import { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, addDoc, onSnapshot, doc, deleteDoc, query, orderBy, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, doc, deleteDoc, query, orderBy, updateDoc, setDoc, getDocs, limit } from 'firebase/firestore';
 import { Admin, Location, AdminData } from '../types';
-import { Plus, Trash2, ShieldCheck, Mail, User, MapPin, Loader2, Search, Edit2, X, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, ShieldCheck, Mail, User, MapPin, Loader2, Search, Edit2, X, CheckCircle2, Key } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../App';
 
+import { normalizePhoneNumber } from '../utils/phoneUtils';
+
 interface AdminManagementProps {
   adminData?: AdminData | null;
+  sharedLocations: Location[];
 }
 
-export default function AdminManagement({ adminData }: AdminManagementProps) {
+export default function AdminManagement({ adminData, sharedLocations }: AdminManagementProps) {
   const [admins, setAdmins] = useState<Admin[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
+  const [locations, setLocations] = useState<Location[]>(sharedLocations);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -20,9 +23,19 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
   // Form State
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [locationId, setLocationId] = useState('');
   const [saving, setSaving] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<Admin | null>(null);
+
+  useEffect(() => {
+    let locationsList = sharedLocations;
+    // Filter locations if not master admin
+    if (adminData && adminData.role !== 'master' && adminData.locationId) {
+      locationsList = locationsList.filter(l => l.id === adminData.locationId);
+    }
+    setLocations(locationsList);
+  }, [sharedLocations, adminData]);
 
   useEffect(() => {
     const qAdmins = query(collection(db, 'admins'), orderBy('name', 'asc'));
@@ -36,22 +49,23 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
       
       setAdmins(adminsList);
       setLoading(false);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'admins'));
-
-    const unsubscribeLocations = onSnapshot(collection(db, 'locations'), (snapshot) => {
-      let locationsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location));
-      
-      // Filter locations if not master admin
-      if (adminData && adminData.role !== 'master' && adminData.locationId) {
-        locationsList = locationsList.filter(l => l.id === adminData.locationId);
+    }, async (err) => {
+      if (err.message?.includes('index') || err.code === 'failed-precondition') {
+        console.warn("Admins listing fallback: index missing.");
+        const snap = await getDocs(collection(db, 'admins'));
+        let adminsList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Admin));
+        if (adminData && adminData.role !== 'master' && adminData.locationId) {
+          adminsList = adminsList.filter(a => a.locationId === adminData.locationId);
+        }
+        setAdmins(adminsList);
+        setLoading(false);
+      } else {
+        handleFirestoreError(err, OperationType.LIST, 'admins');
       }
-      
-      setLocations(locationsList);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'locations'));
+    });
 
     return () => {
       unsubscribeAdmins();
-      unsubscribeLocations();
     };
   }, [adminData]);
 
@@ -79,18 +93,22 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
 
     try {
       if (editingAdmin) {
-        // Find if this is a UID doc or manual doc
-        // Actually updateDoc works the same for both if we have the ID
         await updateDoc(doc(db, 'admins', editingAdmin.id), {
           name,
           email: normalizedEmail,
+          phone,
           locationId,
           role: 'admin'
         });
       } else {
+        const normalizedPhone = normalizePhoneNumber(phone);
+
+        // Just create the document in Firestore. 
+        // The App.tsx logic will recognize this email on login and associate the UID.
         await addDoc(collection(db, 'admins'), {
           name,
           email: normalizedEmail,
+          phone: normalizedPhone || '',
           locationId,
           role: 'admin',
           createdAt: Date.now()
@@ -100,10 +118,12 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
       setIsModalOpen(false);
       setName('');
       setEmail('');
+      setPhone('');
       setLocationId('');
       setEditingAdmin(null);
-    } catch (error) {
-      handleFirestoreError(error, editingAdmin ? OperationType.UPDATE : OperationType.CREATE, 'admins');
+      alert(editingAdmin ? 'Administrador atualizado!' : 'Administrador autorizado! O usuário agora pode entrar usando este e-mail no login do Google.');
+    } catch (error: any) {
+      alert(error.message || 'Erro ao salvar administrador');
     } finally {
       setSaving(false);
     }
@@ -113,6 +133,7 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
     setEditingAdmin(admin);
     setName(admin.name);
     setEmail(admin.email);
+    setPhone(admin.phone || '');
     setLocationId(admin.locationId);
     setIsModalOpen(true);
   };
@@ -231,6 +252,12 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
                       <Mail className="w-3.5 h-3.5 text-primary-blue/40" />
                       <span>{admin.email}</span>
                     </div>
+                    {admin.phone && (
+                      <div className="flex items-center gap-2 text-gray-400 font-bold text-[10px] mt-1 uppercase tracking-widest italic bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100 w-fit">
+                        <Plus className="w-3.5 h-3.5 text-primary-blue/40" />
+                        <span>{admin.phone}</span>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="pt-6 border-t-2 border-dashed border-gray-100">
@@ -294,6 +321,7 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
                     setEditingAdmin(null);
                     setName('');
                     setEmail('');
+                    setPhone('');
                     setLocationId('');
                   }}
                   className="p-3 hover:bg-white/10 rounded-2xl transition-colors text-white/50 hover:text-white"
@@ -328,6 +356,19 @@ export default function AdminManagement({ adminData }: AdminManagementProps) {
                       value={email}
                       onChange={e => setEmail(e.target.value)}
                       placeholder="USUARIO@GMAIL.COM"
+                      className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-5 px-6 focus:outline-none focus:border-primary-blue transition-all font-black uppercase italic text-primary-blue placeholder:text-gray-300"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest pl-1 flex items-center gap-2">
+                      <Plus className="w-3.5 h-3.5 text-primary-blue" /> Telefone
+                    </label>
+                    <input 
+                      type="tel" 
+                      value={phone}
+                      onChange={e => setPhone(e.target.value)}
+                      placeholder="(DD) 99999-9999"
                       className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-5 px-6 focus:outline-none focus:border-primary-blue transition-all font-black uppercase italic text-primary-blue placeholder:text-gray-300"
                     />
                   </div>

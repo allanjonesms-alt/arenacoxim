@@ -4,6 +4,8 @@ import { collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc } from 'fireb
 import { Location } from '../types';
 import { MapPin, Plus, Trash2, Edit2, Search, X, Map, Users, Clock, CheckCircle2, Shield } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { storage } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { handleFirestoreError, OperationType } from '../App';
 
 export default function LocationManagement() {
@@ -78,18 +80,23 @@ export default function LocationManagement() {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 500000) { // 500KB limit for base64 storage
-        alert('Imagem muito grande. Máximo 500KB.');
+      if (file.size > 2000000) { // 2MB limit
+        alert('Imagem muito grande. Máximo 2MB.');
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setLogoUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      
+      try {
+        const storageRef = ref(storage, `locations/${Date.now()}_${file.name}`);
+        const snapshot = await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(snapshot.ref);
+        setLogoUrl(url);
+      } catch (error) {
+        console.error('Error uploading image:', error);
+        alert('Erro ao enviar imagem.');
+      }
     }
   };
 

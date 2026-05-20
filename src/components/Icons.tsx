@@ -2,25 +2,25 @@ import React from 'react';
 
 export const SoccerBall = ({ size = 16, className = "" }: { size?: number, className?: string }) => (
   <img 
-    src="https://static.vecteezy.com/ti/vetor-gratis/p1/23366192-futebol-bola-futebol-bola-icone-gratis-vetor.jpg" 
+    src="https://cdn-icons-png.flaticon.com/512/33/33736.png" 
     alt="Goal"
     width={size}
     height={size}
     referrerPolicy="no-referrer"
-    className={`${className} object-contain rounded-full bg-white p-0.5`}
-    style={{ width: size, height: size }}
+    className={`${className} object-contain rounded-full bg-white p-0.5 shadow-sm border border-gray-100`}
+    style={{ minWidth: size, minHeight: size, width: size, height: size }}
   />
 );
 
 export const SoccerCleat = ({ size = 16, className = "" }: { size?: number, className?: string }) => (
   <img 
-    src="https://static.vecteezy.com/system/resources/thumbnails/014/524/662/small/soccer-cleat-icon-outline-style-vector.jpg" 
+    src="https://cdn-icons-png.flaticon.com/512/91/91515.png" 
     alt="Assist"
     width={size}
     height={size}
     referrerPolicy="no-referrer"
-    className={`${className} object-contain rounded-lg bg-white p-0.5`}
-    style={{ width: size, height: size }}
+    className={`${className} object-contain rounded-xl bg-white p-1 shadow-sm border border-orange-100`}
+    style={{ minWidth: size, minHeight: size, width: size, height: size }}
   />
 );
 

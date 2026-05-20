@@ -2,29 +2,49 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper Functions
-    function isAuthenticated() {
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
       return request.auth != null;
     }
-    
-    function isMaster() {
-      return isAuthenticated() && 
-             (request.auth.token.email == "allanjonesms@gmail.com");
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
     }
-    
+
+    function isMaster() {
+      return isEmailVerified() && 
+             (request.auth.token.email.lower() == "allanjonesms@gmail.com");
+    }
+
     function isAdmin() {
       return isMaster() || exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // Rules
-    function isValidLocation(data) {
-      return data.keys().hasAll(['name']) &&
-             data.name is string && data.name.size() <= 100 &&
-             (data.get('address', '') is string) &&
-             (data.get('playerCount', 5) is number) &&
-             (data.get('gameDuration', 60) is number) &&
-             (data.get('allowSubstitutes', false) is bool) &&
-             (data.get('substitutesCount', 0) is number);
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entity Specific Validators ---
+
+    function isValidPlayer(data) {
+      return data.keys().hasAll(['name', 'position']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.position in ['goleiro', 'defensor', 'atacante'] &&
+             (!data.keys().contains('nickname') || (data.nickname is string && data.nickname.size() <= 100)) &&
+             (!data.keys().contains('photoUrl') || (data.photoUrl is string && data.photoUrl.size() <= 1000));
     }
 
     function isValidMatch(data) {
@@ -35,50 +55,57 @@ service cloud.firestore {
              data.createdAt is number;
     }
 
+    function isValidLocation(data) {
+      return data.keys().hasAll(['name']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 150;
+    }
+
+    function isValidAdminEntry(data) {
+      return data.keys().hasAll(['name', 'email', 'locationId', 'role']) &&
+             data.name is string && data.email is string &&
+             data.role in ['admin', 'master'];
+    }
+
+    function isValidTeam(data) {
+      return data.keys().hasAll(['name', 'locationId']) &&
+             data.name is string && data.name.size() > 0 &&
+             data.locationId is string;
+    }
+
+    // --- Routes ---
+
     match /players/{playerId} {
-      allow read: if true;
-      allow write: if isAdmin();
+      allow read, list: if true;
+      allow create, update: if isAdmin() && isValidPlayer(incoming());
+      allow delete: if isAdmin();
     }
 
     match /matches/{matchId} {
-      allow read: if true;
-      allow create, update: if isAdmin() && isValidMatch(request.resource.data);
+      allow read, list: if true;
+      allow create, update: if isAdmin() && isValidMatch(incoming());
       allow delete: if isAdmin();
     }
 
     match /teams/{teamId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    match /locations/{locationId} {
-      allow read: if true;
-      allow create, update: if isAdmin() && isValidLocation(request.resource.data);
+      allow read, list: if true;
+      allow create, update: if isAdmin() && isValidTeam(incoming());
       allow delete: if isAdmin();
     }
 
-    // Admins helper
-    function isValidAdmin(data) {
-      return data.keys().hasAll(['name', 'email', 'locationId', 'role', 'createdAt']) &&
-             data.name is string && data.name.size() <= 100 &&
-             data.email is string && data.email.size() <= 100 &&
-             data.locationId is string &&
-             data.role in ['admin', 'master'] &&
-             data.createdAt is number;
+    match /locations/{locationId} {
+      allow read, list: if true;
+      allow create, update: if isAdmin() && isValidLocation(incoming());
+      allow delete: if isAdmin();
     }
 
     match /admins/{adminId} {
-      allow get: if isAuthenticated();
+      allow get: if isSignedIn();
       allow list: if isAdmin();
-      allow create: if (isMaster() && isValidAdmin(request.resource.data)) || 
-                    (isAuthenticated() && request.auth.uid == adminId && 
-                     request.resource.data.email == request.auth.token.email &&
-                     isValidAdmin(request.resource.data));
-      allow update: if isMaster() || (isAuthenticated() && request.auth.uid == adminId);
+      allow create, update: if (isMaster() || (isSignedIn() && request.auth.uid == adminId)) && isValidAdminEntry(incoming());
       allow delete: if isMaster();
     }
 
-    match /settings/scoring {
+    match /settings/{settingId} {
       allow read: if true;
       allow write: if isAdmin();
     }
