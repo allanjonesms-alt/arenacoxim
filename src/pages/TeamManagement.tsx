@@ -117,7 +117,7 @@ export default function TeamManagement({ adminData, sharedLocations }: TeamManag
     
     // Resolve locationId: if it's a name (legacy), find the ID so the dropdown selects it
     let resolvedLocId = team.locationId || '';
-    const locByName = locations.find(l => 
+    const locByName = sharedLocations.find(l => 
       l.name?.trim().toLowerCase() === (team.locationId || '').trim().toLowerCase()
     );
     // Only use the name-match ID if the current locationId doesn't match any existing ID
@@ -144,12 +144,12 @@ export default function TeamManagement({ adminData, sharedLocations }: TeamManag
 
   const getLocationName = (locId: string) => {
     if (!locId) return 'Local não definido';
-    const loc = locations.find(l => l.id === locId);
+    const loc = sharedLocations.find(l => l.id === locId);
     if (loc) return loc.name;
     
     // Fallback: check if the locId matches a location name (for legacy data)
     const normalizedLocId = (locId || '').trim().toLowerCase();
-    const locByName = locations.find(l => (l.name || '').trim().toLowerCase() === normalizedLocId);
+    const locByName = sharedLocations.find(l => (l.name || '').trim().toLowerCase() === normalizedLocId);
     if (locByName) return locByName.name;
     
     return 'Local não definido';

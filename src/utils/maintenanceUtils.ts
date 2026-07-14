@@ -4,6 +4,12 @@ import { Match, Player, ScoringRules } from '../types';
 import { calculateMatchPoints } from './scoringEngine';
 import { calculateGrade } from './gradeUtils';
 
+export const isSgtNunes = (p: { name?: string; nickname?: string }) => {
+  const nicknameClean = (p.nickname || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const nameClean = (p.name || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return nicknameClean.includes('SGTNUNES') || nameClean.includes('SGTNUNES');
+};
+
 const DEFAULT_RULES: ScoringRules = {
   id: 'scoring',
   win: 3,
@@ -12,6 +18,8 @@ const DEFAULT_RULES: ScoringRules = {
   assist: 3,
   cleanSheet: 5,
   mvp: 10,
+  penaltySave: 5,
+  penaltyMiss: 5,
   updatedAt: Date.now()
 };
 
@@ -27,11 +35,19 @@ export const recalculateAllPlayerStats = async () => {
   const players = playersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Player));
   
   const playerStatsMap: Record<string, Player['stats']> = {};
+  const playerAbsenceTracker: Record<string, { hasPlayed: boolean; consecutiveMisses: number; penaltiesApplied: number }> = {};
+
   players.forEach(p => {
     playerStatsMap[p.id] = { points: 0, goals: 0, assists: 0, wins: 0, matches: 0 };
+    playerAbsenceTracker[p.id] = { hasPlayed: false, consecutiveMisses: 0, penaltiesApplied: 0 };
   });
   
-  const finishedMatches = matches.filter(m => m.status === 'finished');
+  const finishedMatches = matches.filter(m => m.status === 'finished').sort((a, b) => {
+    if (a.createdAt && b.createdAt) return a.createdAt - b.createdAt;
+    const dA = new Date(`${a.date || '1970-01-01'}T${a.time || '00:00'}`).getTime();
+    const dB = new Date(`${b.date || '1970-01-01'}T${b.time || '00:00'}`).getTime();
+    return dA - dB;
+  });
   
   finishedMatches.forEach(match => {
     const results = calculateMatchPoints(
@@ -46,14 +62,44 @@ export const recalculateAllPlayerStats = async () => {
     
     const winner = match.scoreA > match.scoreB ? 'A' : match.scoreB > match.scoreA ? 'B' : 'draw';
     
-    const allInvolvedPlayerIds = [...new Set([...match.teamA, ...match.teamB])];
+    const allInvolvedPlayerIds = [...new Set([
+      ...(match.teamA || []), 
+      ...(match.teamB || []), 
+      ...(match.substitutesA || []), 
+      ...(match.substitutesB || []),
+      ...(match.confirmedPlayers || [])
+    ])];
+
     allInvolvedPlayerIds.forEach(pid => {
+      if (playerAbsenceTracker[pid]) {
+        playerAbsenceTracker[pid].hasPlayed = true;
+        playerAbsenceTracker[pid].consecutiveMisses = 0;
+      }
+      
       if (playerStatsMap[pid]) {
-        playerStatsMap[pid].matches++;
-        
-        const isTeamA = match.teamA.includes(pid);
-        const isWin = (winner === 'A' && isTeamA) || (winner === 'B' && !isTeamA);
-        if (isWin) playerStatsMap[pid].wins++;
+        // Only increment matches/wins if they were actually in a team (not just confirmed)
+        const isTeamA = (match.teamA || []).includes(pid);
+        const isTeamB = (match.teamB || []).includes(pid);
+        if (isTeamA || isTeamB) {
+          playerStatsMap[pid].matches++;
+          const isWin = (winner === 'A' && isTeamA) || (winner === 'B' && !isTeamA);
+          if (isWin) playerStatsMap[pid].wins++;
+        }
+      }
+    });
+
+    // Check absences for players in this location
+    players.forEach(p => {
+      if (p.locationId === match.locationId || !p.locationId) {
+        if (playerAbsenceTracker[p.id] && playerAbsenceTracker[p.id].hasPlayed) {
+          if (!allInvolvedPlayerIds.includes(p.id)) {
+            playerAbsenceTracker[p.id].consecutiveMisses++;
+            if (playerAbsenceTracker[p.id].consecutiveMisses === 10) {
+              playerAbsenceTracker[p.id].penaltiesApplied++;
+              playerAbsenceTracker[p.id].consecutiveMisses = 0;
+            }
+          }
+        }
       }
     });
     
@@ -70,6 +116,14 @@ export const recalculateAllPlayerStats = async () => {
       }
     });
   });
+
+  // Apply absence penalties
+  players.forEach(p => {
+    if (playerAbsenceTracker[p.id] && playerAbsenceTracker[p.id].penaltiesApplied > 0) {
+      const penaltyCount = playerAbsenceTracker[p.id].penaltiesApplied;
+      playerStatsMap[p.id].points = Math.max(0, playerStatsMap[p.id].points - (penaltyCount * 5));
+    }
+  });
   
   console.log('Committing updates in chunks...');
   const CHUNK_SIZE = 450;
@@ -79,11 +133,26 @@ export const recalculateAllPlayerStats = async () => {
     
     chunk.forEach(p => {
       const stats = playerStatsMap[p.id];
-      const avgPoints = stats.points / (stats.matches || 1);
+      
+      const finalGoals = isSgtNunes(p) ? (p.stats?.goals || 0) : stats.goals;
+      const finalAssists = isSgtNunes(p) ? (p.stats?.assists || 0) : stats.assists;
+      const finalPoints = isSgtNunes(p) ? (p.stats?.points || 0) : stats.points;
+      const finalMatches = isSgtNunes(p) ? (p.stats?.matches || 0) : stats.matches;
+      const finalWins = isSgtNunes(p) ? (p.stats?.wins || 0) : stats.wins;
+
+      const finalStats = {
+        matches: finalMatches,
+        wins: finalWins,
+        goals: finalGoals,
+        assists: finalAssists,
+        points: finalPoints
+      };
+
+      const avgPoints = finalPoints / (finalMatches || 1);
       const { grade } = calculateGrade(p.overallStats, avgPoints);
       
       batch.update(doc(db, 'players', p.id), { 
-        stats,
+        stats: finalStats,
         overallValue: parseInt(grade) || 75
       });
     });
@@ -108,20 +177,62 @@ export const recalculateSpecificPlayerStats = async (playerIds: string[]) => {
   
   // Only process requested players
   const playerStatsMap: Record<string, Player['stats']> = {};
+  const playerAbsenceTracker: Record<string, { hasPlayed: boolean; consecutiveMisses: number; penaltiesApplied: number }> = {};
+  
   playerIds.forEach(pid => {
     playerStatsMap[pid] = { points: 0, goals: 0, assists: 0, wins: 0, matches: 0 };
+    playerAbsenceTracker[pid] = { hasPlayed: false, consecutiveMisses: 0, penaltiesApplied: 0 };
   });
 
-  const finishedMatches = matches.filter(m => m.status === 'finished');
+  const finishedMatches = matches.filter(m => m.status === 'finished').sort((a, b) => {
+    if (a.createdAt && b.createdAt) return a.createdAt - b.createdAt;
+    const dA = new Date(`${a.date || '1970-01-01'}T${a.time || '00:00'}`).getTime();
+    const dB = new Date(`${b.date || '1970-01-01'}T${b.time || '00:00'}`).getTime();
+    return dA - dB;
+  });
   
+  // Need ALL players to calculate points correctly (mvp determination)
+  const allPlayers = playersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Player));
+
   finishedMatches.forEach(match => {
-    // Check if any of our requested players were involved
-    const involvedInMatch = [...match.teamA, ...match.teamB].filter(pid => playerIds.includes(pid));
+    const allInvolvedPlayerIds = [...new Set([
+      ...(match.teamA || []), 
+      ...(match.teamB || []), 
+      ...(match.substitutesA || []), 
+      ...(match.substitutesB || []),
+      ...(match.confirmedPlayers || [])
+    ])];
+    
+    const matchLocationId = match.locationId;
+    
+    // Check absences for our target players *first*
+    allPlayers.filter(p => playerIds.includes(p.id)).forEach(p => {
+      if (p.locationId === matchLocationId || !p.locationId) {
+        if (playerAbsenceTracker[p.id] && playerAbsenceTracker[p.id].hasPlayed) {
+          if (!allInvolvedPlayerIds.includes(p.id)) {
+            playerAbsenceTracker[p.id].consecutiveMisses++;
+            if (playerAbsenceTracker[p.id].consecutiveMisses === 10) {
+              playerAbsenceTracker[p.id].penaltiesApplied++;
+              playerAbsenceTracker[p.id].consecutiveMisses = 0;
+            }
+          }
+        }
+      }
+    });
+
+    // Mark 'hasPlayed' for our target players involved
+    allInvolvedPlayerIds.forEach(pid => {
+      if (playerAbsenceTracker[pid]) {
+        playerAbsenceTracker[pid].hasPlayed = true;
+        playerAbsenceTracker[pid].consecutiveMisses = 0;
+      }
+    });
+    
+    // Check if any of our requested players were actually participating
+    const involvedInMatch = allInvolvedPlayerIds.filter(pid => playerIds.includes(pid));
+    
     if (involvedInMatch.length === 0) return;
 
-    // Need ALL players to calculate points correctly (mvp determination)
-    const allPlayers = playersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Player));
-    
     const results = calculateMatchPoints(
       match, 
       match.scoreA, 
@@ -136,11 +247,13 @@ export const recalculateSpecificPlayerStats = async (playerIds: string[]) => {
     
     involvedInMatch.forEach(pid => {
       if (playerStatsMap[pid]) {
-        playerStatsMap[pid].matches++;
-        
-        const isTeamA = match.teamA.includes(pid);
-        const isWin = (winner === 'A' && isTeamA) || (winner === 'B' && !isTeamA);
-        if (isWin) playerStatsMap[pid].wins++;
+        const isTeamA = (match.teamA || []).includes(pid);
+        const isTeamB = (match.teamB || []).includes(pid);
+        if (isTeamA || isTeamB) {
+          playerStatsMap[pid].matches++;
+          const isWin = (winner === 'A' && isTeamA) || (winner === 'B' && !isTeamA);
+          if (isWin) playerStatsMap[pid].wins++;
+        }
       }
     });
     
@@ -153,6 +266,14 @@ export const recalculateSpecificPlayerStats = async (playerIds: string[]) => {
       if (evt.type === 'assist') playerStatsMap[evt.playerId].assists++;
     });
   });
+
+  // Apply absence penalties
+  playerIds.forEach(pid => {
+    if (playerAbsenceTracker[pid] && playerAbsenceTracker[pid].penaltiesApplied > 0) {
+      const penaltyCount = playerAbsenceTracker[pid].penaltiesApplied;
+      playerStatsMap[pid].points = Math.max(0, playerStatsMap[pid].points - (penaltyCount * 5));
+    }
+  });
   
   console.log('Committing specific player updates in chunks...');
   const CHUNK_SIZE = 450;
@@ -163,11 +284,26 @@ export const recalculateSpecificPlayerStats = async (playerIds: string[]) => {
     chunkIds.forEach(pid => {
       const stats = playerStatsMap[pid];
       const player = playersSnap.docs.find(d => d.id === pid)?.data() as Player;
-      const avgPoints = stats.points / (stats.matches || 1);
+      
+      const finalGoals = (player && isSgtNunes(player)) ? (player.stats?.goals || 0) : stats.goals;
+      const finalAssists = (player && isSgtNunes(player)) ? (player.stats?.assists || 0) : stats.assists;
+      const finalPoints = (player && isSgtNunes(player)) ? (player.stats?.points || 0) : stats.points;
+      const finalMatches = (player && isSgtNunes(player)) ? (player.stats?.matches || 0) : stats.matches;
+      const finalWins = (player && isSgtNunes(player)) ? (player.stats?.wins || 0) : stats.wins;
+
+      const finalStats = {
+        matches: finalMatches,
+        wins: finalWins,
+        goals: finalGoals,
+        assists: finalAssists,
+        points: finalPoints
+      };
+
+      const avgPoints = finalPoints / (finalMatches || 1);
       const { grade } = calculateGrade(player?.overallStats, avgPoints);
       
       batch.update(doc(db, 'players', pid), { 
-        stats,
+        stats: finalStats,
         overallValue: parseInt(grade) || 75
       });
     });

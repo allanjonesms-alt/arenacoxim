@@ -1,0 +1,2 @@
+sed -i "s/import BannerManagement from '.\/pages\/BannerManagement';/import BannerManagement from '.\/pages\/BannerManagement';\nimport MonthlyAwardsManagement from '.\/pages\/MonthlyAwardsManagement';/g" src/App.tsx
+sed -i "s/<Route path=\"\/admin\/banners\" element={<BannerManagement \/>} \/>/<Route path=\"\/admin\/banners\" element={<BannerManagement \/>} \/>\n                <Route path=\"\/admin\/awards\" element={<MonthlyAwardsManagement adminData={adminData} locations={locations} \/>} \/>/g" src/App.tsx

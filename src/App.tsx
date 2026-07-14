@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
-import { Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
@@ -11,9 +11,9 @@ import {
 } from 'firebase/auth';
 import { auth, db } from './firebase';
 import { doc, getDoc, setDoc, getDocFromServer, collection, query, where, getDocs, deleteDoc, updateDoc, onSnapshot } from 'firebase/firestore';
-import { Trophy, Users, Calendar, LayoutDashboard, LogIn, LogOut, Menu, X, ShieldCheck, MapPin, TrendingUp, User as UserIcon, Lock, Key, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Trophy, Users, Calendar, LayoutDashboard, LogIn, LogOut, Menu, X, ShieldCheck, MapPin, TrendingUp, User as UserIcon, Lock, Key, Eye, EyeOff, Loader2, Home } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AdminData, Location, Team, ScoringRules } from './types';
+import { AdminData, Location, Team, ScoringRules, Player } from './types';
 
 // Pages
 import PublicDashboard from './pages/PublicDashboard';
@@ -26,6 +26,16 @@ import AdminManagement from './pages/AdminManagement';
 import Tabelas from './pages/Tabelas';
 import MatchHistory from './pages/MatchHistory';
 import Resenha from './pages/Resenha';
+import ScoreTable from './pages/ScoreTable';
+import HomeHub from './pages/HomeHub';
+import NewsManagement from './pages/NewsManagement';
+import CardManagement from './pages/CardManagement';
+import BannerManagement from './pages/BannerManagement';
+import MasterBank from './pages/MasterBank';
+import MonthlyAwardsManagement from './pages/MonthlyAwardsManagement';
+import Diagnostic from './pages/Diagnostic';
+import SimuladorConfrontos from './pages/SimuladorConfrontos';
+import PublicMonthlyAwards from './pages/PublicMonthlyAwards';
 
 export enum OperationType {
   CREATE = 'create',
@@ -83,6 +93,9 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   }
 }
 
+import AdminOddsEngine from './pages/AdminOddsEngine';
+import AdminBettingSettings from './pages/AdminBettingSettings';
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -90,12 +103,94 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  
+  // Onboarding states for first-time login via Google
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [isOnboardingPlayer, setIsOnboardingPlayer] = useState<boolean | null>(null);
+  const [onboardingSearch, setOnboardingSearch] = useState('');
+  const [allPlayersList, setAllPlayersList] = useState<Player[]>([]);
+  const [selectedOnboardingPlayer, setSelectedOnboardingPlayer] = useState<Player | null>(null);
+  const [onboardingSubmitting, setOnboardingSubmitting] = useState(false);
+  const [onboardingSuccess, setOnboardingSuccess] = useState(false);
+  const [onboardingError, setOnboardingError] = useState<string | null>(null);
+
+  // Check if user is linked to any player
+  useEffect(() => {
+    if (!user || !user.email || isAdmin) {
+      setShowOnboarding(false);
+      return;
+    }
+
+    const checkPlayerLink = async () => {
+      try {
+        const normalizedEmail = user.email!.toLowerCase().trim();
+        const playersRef = collection(db, 'players');
+        const q = query(playersRef, where('gmail', '==', normalizedEmail));
+        const querySnapshot = await getDocs(q);
+        
+        if (querySnapshot.empty) {
+          const dismissedKey = `dismissed_onboarding_${normalizedEmail}`;
+          const isDismissed = localStorage.getItem(dismissedKey);
+          
+          if (!isDismissed) {
+            const allPlayersSnap = await getDocs(playersRef);
+            const playersWithNoGmail = allPlayersSnap.docs
+              .map(doc => ({ id: doc.id, ...doc.data() } as Player))
+              .filter(p => !p.gmail || p.gmail.trim() === '');
+            
+            setAllPlayersList(playersWithNoGmail);
+            setShowOnboarding(true);
+            setIsOnboardingPlayer(null);
+            setOnboardingSearch('');
+            setSelectedOnboardingPlayer(null);
+            setOnboardingSuccess(false);
+            setOnboardingError(null);
+          }
+        }
+      } catch (err) {
+        console.error("Onboarding checking failed:", err);
+      }
+    };
+
+    checkPlayerLink();
+  }, [user, isAdmin]);
+
+  const handleLinkPlayer = async () => {
+    if (!selectedOnboardingPlayer || !user || !user.email) return;
+    setOnboardingSubmitting(true);
+    setOnboardingError(null);
+    try {
+      const normalizedEmail = user.email.toLowerCase().trim();
+      const playerRef = doc(db, 'players', selectedOnboardingPlayer.id);
+      await updateDoc(playerRef, { gmail: normalizedEmail });
+      setOnboardingSuccess(true);
+      setTimeout(() => {
+        setShowOnboarding(false);
+      }, 2000);
+    } catch (err: any) {
+      console.error("Failed to link player:", err);
+      setOnboardingError(err.message || "Não foi possível vincular seu e-mail. Tente novamente.");
+    } finally {
+      setOnboardingSubmitting(false);
+    }
+  };
+
+  const handleDismissOnboarding = () => {
+    if (user && user.email) {
+      const normalizedEmail = user.email.toLowerCase().trim();
+      const dismissedKey = `dismissed_onboarding_${normalizedEmail}`;
+      localStorage.setItem(dismissedKey, 'true');
+    }
+    setShowOnboarding(false);
+  };
   
   const [locations, setLocations] = useState<Location[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [scoringRules, setScoringRules] = useState<ScoringRules | null>(null);
   
   const navigate = useNavigate();
+  const routerLocation = useLocation();
 
   const MASTER_EMAIL = 'allanjonesms@gmail.com';
 
@@ -154,23 +249,40 @@ export default function App() {
             );
             
             const querySnapshot = await getDocs(adminsQuery);
-            console.log("Admin detection: Query results count:", querySnapshot.size);
+            let matchedDoc = !querySnapshot.empty ? querySnapshot.docs[0] : null;
             
-            if (!querySnapshot.empty) {
-              const adminDoc = querySnapshot.docs[0];
-              const docData = adminDoc.data() as AdminData;
-              adminDataFromDoc = docData;
-              console.log("Admin detection: Found admin by email query:", docData);
+            if (!matchedDoc) {
+              // Fallback: search all admins if the exact match fails (case sensitivity issues in DB, or matching doc ID)
+              console.log("Admin detection: No exact match, trying case-insensitive search and doc-ID match...");
+              const allAdminsSnap = await getDocs(collection(db, 'admins'));
+              const fuzzyMatch = allAdminsSnap.docs.find(d => 
+                d.data().email?.toLowerCase().trim() === normalizedEmail ||
+                d.id.toLowerCase().trim() === normalizedEmail
+              );
+              if (fuzzyMatch) {
+                matchedDoc = fuzzyMatch;
+                console.log("Admin detection: Found admin via fuzzy match:", fuzzyMatch.data());
+              }
+            }
+            
+            if (matchedDoc) {
+              const docData = matchedDoc.data() as AdminData;
+              // Normalize the email to lowercase inside the document when migrating
+              const updatedData = {
+                ...docData,
+                email: normalizedEmail,
+                updatedAt: Date.now()
+              };
+              
+              adminDataFromDoc = updatedData;
               
               // CRITICAL: Migrate to UID-based document for faster lookups and better security
               try {
-                const oldDocId = adminDoc.id;
+                const oldDocId = matchedDoc.id;
                 console.log("Admin detection: Migrating admin from doc", oldDocId, "to UID doc", currentUser.uid);
                 
-                await setDoc(adminRef, {
-                  ...docData,
-                  updatedAt: Date.now()
-                });
+                await setDoc(adminRef, updatedData);
+                console.log("Admin detection: UID-based document created/updated.");
                 
                 if (oldDocId !== currentUser.uid) {
                   await deleteDoc(doc(db, 'admins', oldDocId));
@@ -180,36 +292,30 @@ export default function App() {
                 console.error("Admin detection: Migration failed (continuing anyway):", migrateError);
               }
             } else {
-              // Fallback: search all admins if the exact match fails (case sensitivity issues in DB)
-              console.log("Admin detection: No exact match, trying case-insensitive search...");
-              const allAdminsSnap = await getDocs(collection(db, 'admins'));
-              const fuzzyMatch = allAdminsSnap.docs.find(d => 
-                d.data().email?.toLowerCase().trim() === normalizedEmail
-              );
-              
-              if (fuzzyMatch) {
-                adminDataFromDoc = fuzzyMatch.data() as AdminData;
-                console.log("Admin detection: Found admin via fuzzy match:", adminDataFromDoc);
-              } else {
-                console.warn("Admin detection: User not found in 'admins' collection.");
-              }
+              console.warn("Admin detection: User not found in 'admins' collection.");
             }
           }
           
           if (isMaster) {
             setIsAdmin(true);
-            setAdminData({ role: 'master', locationId: null });
             
-            // Bootstrap master admin if not exists
-            if (!adminDataFromDoc) {
+            // Always force master role and 'all' locations for MASTER_EMAIL to prevent lockout/filtering issues
+            const masterData = {
+              ...(adminDataFromDoc || {}),
+              name: adminDataFromDoc?.name || currentUser.displayName || 'Master Admin',
+              email: currentUser.email || MASTER_EMAIL,
+              role: 'master' as const,
+              locationId: 'all',
+              createdAt: adminDataFromDoc?.createdAt || Date.now()
+            };
+            
+            setAdminData(masterData as AdminData);
+            
+            // Bootstrap or update master admin if not matching
+            if (!adminDataFromDoc || adminDataFromDoc.role !== 'master' || adminDataFromDoc.locationId !== 'all') {
               try {
-                await setDoc(adminRef, {
-                  name: currentUser.displayName || 'Master Admin',
-                  email: currentUser.email,
-                  role: 'master',
-                  locationId: 'all',
-                  createdAt: Date.now()
-                });
+                await setDoc(adminRef, masterData);
+                console.log("Admin detection: Master admin record bootstrapped/verified in Firestore.");
               } catch (e) {
                 console.error("Failed to bootstrap master admin:", e);
               }
@@ -227,7 +333,13 @@ export default function App() {
           console.error("Admin check failed:", error);
           const isMaster = currentUser.email?.toLowerCase() === MASTER_EMAIL;
           setIsAdmin(isMaster);
-          setAdminData(isMaster ? { role: 'master', locationId: null } : null);
+          setAdminData(isMaster ? {
+            name: currentUser.displayName || 'Master Admin',
+            email: currentUser.email || MASTER_EMAIL,
+            role: 'master',
+            locationId: 'all',
+            createdAt: Date.now()
+          } as AdminData : null);
         }
       } else {
         setIsAdmin(false);
@@ -235,21 +347,42 @@ export default function App() {
       }
       setLoading(false);
     });
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (event.reason && (
+        (event.reason.message && event.reason.message.includes("Pending promise was never set")) ||
+        (event.reason.toString && event.reason.toString().includes("Pending promise was never set")) ||
+        (event.reason.code && event.reason.code.includes("auth/internal-error"))
+      )) {
+        console.warn("Caught and suppressed Firebase iframe rejection error gracefully:", event.reason);
+        event.preventDefault();
+      }
+    };
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
     return () => {
       unsubscribeLocations();
       unsubscribeTeams();
       unsubscribeScoring();
       unsubscribeAuth();
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
     };
   }, []);
 
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
+    setLoginError(null);
     try {
       await signInWithPopup(auth, provider);
       setShowLoginModal(false);
-    } catch (error) {
+      navigate('/');
+    } catch (error: any) {
       console.error("Login failed:", error);
+      let errMsg = "Erro de login do Google.";
+      if (error?.message?.includes("auth/internal-error") || error?.message?.includes("popup") || error?.code === "auth/internal-error") {
+        errMsg = "Bloqueio do navegador/iframe: por segurança, faça login abrindo o app em uma nova aba.";
+      } else if (error?.message) {
+        errMsg = error.message;
+      }
+      setLoginError(errMsg);
     }
   };
 
@@ -257,6 +390,13 @@ export default function App() {
     await signOut(auth);
     navigate('/');
   };
+
+  const filteredOnboardingPlayers = allPlayersList.filter(p => {
+    const searchLower = onboardingSearch.toLowerCase().trim();
+    if (!searchLower) return false;
+    return (p.name || '').toLowerCase().includes(searchLower) || 
+           (p.nickname || '').toLowerCase().includes(searchLower);
+  });
 
   if (loading) {
     return (
@@ -271,7 +411,7 @@ export default function App() {
     {/* Navigation */}
         <nav className="bg-primary-blue text-white shadow-lg sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
+            <div className="flex flex-col items-center justify-center py-3 gap-3">
               <div className="flex items-center gap-2">
                 <Link to="/" className="flex items-center gap-2 group">
                   <div className="bg-primary-yellow p-1.5 rounded-lg group-hover:scale-110 transition-transform shadow-md">
@@ -283,175 +423,101 @@ export default function App() {
                 </Link>
               </div>
 
-              {/* Desktop Menu */}
-              <div className="hidden md:flex items-center gap-6">
-                <Link to="/" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
-                  <TrendingUp className="w-4 h-4" /> Resultados
+              {/* Header components: profile pic, logout and home button */}
+              <div className="flex items-center gap-3 sm:gap-4">
+                <Link 
+                  to="/" 
+                  className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-black text-xs uppercase tracking-wider px-3.5 py-2 rounded-xl border border-white/10 transition-all shadow-sm active:scale-95 hover:text-primary-yellow"
+                  title="Ir para a Página Inicial"
+                >
+                  <Home className="w-4 h-4 text-primary-yellow" />
+                  <span className="hidden sm:inline">Início</span>
                 </Link>
-                {!isAdmin && (
-                  <>
-                    <Link to="/players" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
-                      <Users className="w-4 h-4" /> Atletas
-                    </Link>
-                    <Link to="/resenha" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
-                      <Trophy className="w-4 h-4" /> Resenha
-                    </Link>
-                  </>
-                )}
-                {isAdmin && (
-                  <>
-                    <Link to="/admin" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
-                      <LayoutDashboard className="w-4 h-4" /> Painel
-                    </Link>
-                    <Link to="/admin/players" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
-                      <Users className="w-4 h-4" /> Jogadores
-                    </Link>
-                    <Link to="/admin/teams" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
-                      <ShieldCheck className="w-4 h-4" /> Times
-                    </Link>
-                    {adminData?.role === 'master' && (
-                      <>
-                        <Link to="/admin/locations" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
-                          <MapPin className="w-4 h-4" /> Locais
-                        </Link>
-                      </>
-                    )}
-                    <Link to="/admin/matches" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
-                      <Calendar className="w-4 h-4" /> Partidas
-                    </Link>
-                    {adminData?.role === 'master' && (
-                      <Link to="/admin/scoring" className="hover:text-primary-yellow transition-colors font-bold text-sm uppercase tracking-wider flex items-center gap-1">
-                        <Trophy className="w-4 h-4" /> Regras
-                      </Link>
-                    )}
-                  </>
-                )}
-                
+
+
+
+
                 {user ? (
-                  <div className="flex items-center gap-4 pl-4 border-l border-white/20">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 bg-white/5 py-1 px-3 rounded-full border border-white/10">
                       {user.photoURL ? (
-                        <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full border-2 border-primary-yellow object-cover" />
+                        <img 
+                          src={user.photoURL} 
+                          alt="" 
+                          className="w-7 h-7 rounded-full border border-primary-yellow object-cover" 
+                          referrerPolicy="no-referrer"
+                        />
                       ) : (
-                        <div className="w-8 h-8 rounded-full border-2 border-primary-yellow bg-white/10 flex items-center justify-center">
-                          <UserIcon size={16} className="text-white" />
+                        <div className="w-7 h-7 rounded-full border border-primary-yellow bg-white/10 flex items-center justify-center">
+                          <UserIcon size={14} className="text-white" />
                         </div>
                       )}
-                      <span className="text-xs font-bold truncate max-w-[100px]">{user.displayName || user.email?.split('@')[0]}</span>
+                      <span className="text-xs font-black truncate max-w-[120px] hidden sm:inline">
+                        {user.displayName || user.email?.split('@')[0]}
+                      </span>
                     </div>
-                    <button onClick={handleLogout} className="p-2 hover:bg-white/10 rounded-full transition-colors text-red-200">
-                      <LogOut className="w-5 h-5" />
+                    <button 
+                      onClick={handleLogout} 
+                      className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white font-black text-[11px] uppercase tracking-widest px-4 py-2 rounded-xl transition-all shadow-md active:scale-95 animate-in fade-in"
+                    >
+                      <LogOut className="w-3.5 h-3.5" /> Sair
                     </button>
                   </div>
                 ) : (
                   <button 
                     onClick={() => setShowLoginModal(true)}
-                    className="flex items-center gap-2 bg-primary-yellow text-primary-blue px-4 py-2 rounded-lg font-black text-xs uppercase tracking-wider hover:bg-yellow-400 transition-all shadow-md active:scale-95"
+                    className="flex items-center gap-2 bg-primary-yellow text-primary-blue px-4 py-2 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-yellow-400 transition-all shadow-md active:scale-95 animate-in fade-in"
                   >
                     <LogIn className="w-4 h-4" /> Login
                   </button>
                 )}
               </div>
-
-              {/* Mobile Menu Button */}
-              <div className="md:hidden">
-                <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 text-primary-yellow">
-                  {isMenuOpen ? <X /> : <Menu />}
-                </button>
-              </div>
             </div>
           </div>
-
-          {/* Mobile Menu */}
-          <AnimatePresence>
-            {isMenuOpen && (
-              <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="md:hidden bg-primary-blue border-t border-white/10 overflow-hidden"
-              >
-                <div className="px-4 pt-2 pb-6 space-y-2">
-                  <Link to="/" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
-                    <TrendingUp className="w-4 h-4 text-primary-yellow" /> Resultados
-                  </Link>
-                  {!isAdmin && (
-                    <>
-                      <Link to="/players" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
-                        <Users className="w-4 h-4 text-primary-yellow" /> Atletas
-                      </Link>
-                      <Link to="/resenha" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
-                        <Trophy className="w-4 h-4 text-primary-yellow" /> Resenha
-                      </Link>
-                    </>
-                  )}
-                  {isAdmin && (
-                    <>
-                      <Link to="/admin" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
-                        <LayoutDashboard className="w-4 h-4 text-primary-yellow" /> Painel
-                      </Link>
-                      <Link to="/admin/players" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
-                        <Users className="w-4 h-4 text-primary-yellow" /> Jogadores
-                      </Link>
-                      <Link to="/admin/teams" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
-                        <ShieldCheck className="w-4 h-4 text-primary-yellow" /> Times
-                      </Link>
-                      {adminData?.role === 'master' && (
-                        <>
-                          <Link to="/admin/locations" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
-                            <MapPin className="w-4 h-4 text-primary-yellow" /> Locais
-                          </Link>
-                          <Link to="/admin/admins" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
-                            <UserIcon className="w-4 h-4 text-primary-yellow" /> Admins
-                          </Link>
-                        </>
-                      )}
-                      <Link to="/admin/matches" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
-                        <Calendar className="w-4 h-4 text-primary-yellow" /> Partidas
-                      </Link>
-                      {adminData?.role === 'master' && (
-                        <Link to="/admin/scoring" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-bold hover:bg-white/5">
-                          <Trophy className="w-4 h-4 text-primary-yellow" /> Regras
-                        </Link>
-                      )}
-                    </>
-                  )}
-                  {user ? (
-                    <button onClick={handleLogout} className="w-full text-left px-3 py-2 rounded-md text-base font-bold text-red-200 hover:bg-white/5">Sair</button>
-                  ) : (
-                    <button onClick={handleLogin} className="w-full text-left px-3 py-2 rounded-md text-base font-bold text-primary-yellow hover:bg-white/5">Login</button>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </nav>
 
         {/* Main Content */}
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${routerLocation.pathname === '/' ? 'pb-8 pt-0' : 'py-8'}`}>
           <Routes>
-            <Route path="/" element={<PublicDashboard adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
+            <Route path="/" element={<HomeHub user={user} isAdmin={isAdmin} adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
+            <Route path="/dashboard" element={<PublicDashboard adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
+            <Route path="/melhores-do-mes" element={<PublicMonthlyAwards />} />
             <Route path="/players" element={<PlayerManagement adminData={adminData} adminId={user?.uid} sharedLocations={locations} />} />
             <Route path="/resenha" element={<Resenha locations={locations} />} />
+            <Route path="/score-table" element={<ScoreTable adminData={adminData} sharedLocations={locations} sharedScoringRules={scoringRules} />} />
             {isAdmin && (
               <>
+                <Route path="/admin/simulador" element={<SimuladorConfrontos adminData={adminData} />} />
+                <Route path="/admin/banco" element={<MasterBank adminData={adminData} />} />
                 <Route path="/admin" element={<AdminPanel adminData={adminData} />} />
+                <Route path="/admin/score-table" element={<ScoreTable adminData={adminData} sharedLocations={locations} sharedScoringRules={scoringRules} />} />
                 <Route path="/admin/players" element={<PlayerManagement adminData={adminData} adminId={user?.uid} sharedLocations={locations} />} />
                 <Route path="/admin/teams" element={<TeamManagement adminData={adminData} sharedLocations={locations} />} />
+                
                 {adminData?.role === 'master' && (
                   <>
+                    <Route path="/admin/odds-engine" element={<AdminOddsEngine />} />
+                    <Route path="/admin/betting-settings" element={<AdminBettingSettings />} />
                     <Route path="/admin/locations" element={<LocationManagement />} />
                     <Route path="/admin/admins" element={<AdminManagement adminData={adminData} sharedLocations={locations} />} />
                   </>
                 )}
+                
                 <Route path="/admin/matches" element={<MatchManagement adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
+                <Route path="/admin/news" element={<NewsManagement />} />
+                <Route path="/admin/banners" element={<BannerManagement />} />
+                <Route path="/admin/awards" element={<MonthlyAwardsManagement adminData={adminData} locations={locations} />} />
+                <Route path="/admin/awards" element={<MonthlyAwardsManagement adminData={adminData} locations={locations} />} />
+                <Route path="/admin/cards" element={<CardManagement />} />                
                 {adminData?.role === 'master' && (
                   <Route path="/admin/scoring" element={<Tabelas />} />
                 )}
+                
                 <Route path="/resultados" element={<MatchHistory adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
               </>
             )}
             <Route path="/resultados" element={<MatchHistory adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
+            <Route path="/diagnostico" element={<Diagnostic />} />
             <Route path="*" element={<div className="text-center py-20"><h1 className="text-4xl font-bold">404</h1><p className="text-gray-400">Página não encontrada ou acesso restrito.</p></div>} />
           </Routes>
         </main>
@@ -495,6 +561,20 @@ export default function App() {
                     </p>
                   </div>
 
+                  {loginError && (
+                    <div className="bg-red-50 text-red-600 p-4 rounded-2xl border border-red-100 text-xs font-bold leading-normal text-center space-y-2">
+                      <p>{loginError}</p>
+                      <a 
+                        href={window.location.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl uppercase text-[9px] font-black tracking-widest transition-colors cursor-pointer"
+                      >
+                        Abrir em Nova Aba
+                      </a>
+                    </div>
+                  )}
+
                   <button 
                     onClick={handleLogin}
                     className="w-full bg-white border-2 border-primary-blue text-primary-blue py-6 rounded-2xl font-black uppercase tracking-widest hover:bg-primary-blue hover:text-white transition-all flex items-center justify-center gap-3 active:scale-[0.98] group shadow-xl shadow-blue-50"
@@ -513,6 +593,181 @@ export default function App() {
                       Acesso monitorado • Arena Coxim
                     </p>
                   </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showOnboarding && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                onClick={handleDismissOnboarding}
+              />
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden z-10"
+              >
+                {/* Header */}
+                <div className="bg-primary-blue p-8 flex items-center justify-between text-white">
+                  <div className="flex items-center gap-4">
+                    <div className="bg-white/10 p-3 rounded-2xl">
+                      <Trophy className="w-8 h-8 text-primary-yellow animate-bounce" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-black uppercase italic tracking-tighter">Vincular Conta</h3>
+                      <p className="text-white/60 text-[10px] font-black uppercase tracking-widest mt-0.5">Arena Coxim Onboarding</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={handleDismissOnboarding} 
+                    className="p-3 hover:bg-white/10 rounded-2xl transition-colors text-white/50 hover:text-white"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className="p-8 space-y-6">
+                  {onboardingSuccess ? (
+                    <div className="text-center py-8 space-y-4">
+                      <div className="w-16 h-16 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto border border-green-100 animate-pulse">
+                        <Trophy className="w-8 h-8" />
+                      </div>
+                      <h4 className="text-xl font-black uppercase text-green-600 italic">Conta Vinculada!</h4>
+                      <p className="text-gray-500 text-sm font-bold leading-relaxed px-4">
+                        Seu e-mail foi salvo com sucesso em seu cadastro de atleta. Agora seu perfil está oficialmente conectado!
+                      </p>
+                    </div>
+                  ) : isOnboardingPlayer === null ? (
+                    <div className="space-y-6 text-center">
+                      <p className="text-gray-600 text-sm font-bold leading-relaxed">
+                        Olá! Identificamos que você fez login com a conta <span className="text-primary-blue font-black">{user?.email}</span>.
+                      </p>
+                      <h4 className="text-lg font-black uppercase text-primary-blue italic">Você é jogador cadastrado na Arena Coxim?</h4>
+                      <div className="flex gap-4 pt-2">
+                        <button
+                          onClick={() => setIsOnboardingPlayer(true)}
+                          className="flex-1 bg-primary-blue text-white py-4 rounded-2xl font-black uppercase tracking-wider hover:bg-blue-700 transition-all shadow-lg active:scale-95 animate-pulse"
+                        >
+                          Sim, sou jogador
+                        </button>
+                        <button
+                          onClick={handleDismissOnboarding}
+                          className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-500 py-4 rounded-2xl font-black uppercase tracking-wider transition-all active:scale-95"
+                        >
+                          Não
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <p className="text-gray-500 text-xs font-bold leading-relaxed text-center">
+                        Digite seu nome para encontrar seu cadastro de atleta e vincular seu e-mail.
+                      </p>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest pl-1">Buscar Atleta</label>
+                        <div className="relative">
+                          <input 
+                            type="text" 
+                            placeholder="Digite seu nome ou apelido..."
+                            value={onboardingSearch}
+                            onChange={(e) => {
+                              setOnboardingSearch(e.target.value);
+                              setSelectedOnboardingPlayer(null);
+                            }}
+                            className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 px-5 outline-none focus:ring-4 focus:ring-primary-blue/5 focus:border-primary-blue/20 transition-all font-medium text-primary-gray"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Autocomplete List */}
+                      {onboardingSearch.trim().length > 0 && !selectedOnboardingPlayer && (
+                        <div className="max-h-48 overflow-y-auto border border-gray-100 bg-white rounded-2xl shadow-inner divide-y divide-gray-50">
+                          {filteredOnboardingPlayers.length > 0 ? (
+                            filteredOnboardingPlayers.map(p => (
+                              <button
+                                key={p.id}
+                                onClick={() => {
+                                  setSelectedOnboardingPlayer(p);
+                                  setOnboardingSearch(`${p.name} (${p.nickname || p.name})`);
+                                }}
+                                className="w-full text-left py-3 px-4 hover:bg-blue-50/50 transition-colors flex flex-col cursor-pointer"
+                              >
+                                <span className="font-black text-xs uppercase text-gray-700 tracking-wide">{p.name}</span>
+                                <span className="text-[10px] font-bold text-primary-blue uppercase tracking-widest mt-0.5">
+                                  {p.nickname ? `${p.nickname} • ` : ''}{p.position.toUpperCase()}
+                                </span>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="p-4 text-center text-xs text-gray-400 font-bold">
+                              Nenhum atleta sem e-mail encontrado com este nome.
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Selected Athlete confirmation block */}
+                      {selectedOnboardingPlayer && (
+                        <div className="bg-blue-50/50 border border-blue-100/50 rounded-2xl p-4 space-y-2">
+                          <span className="text-[9px] font-black uppercase text-primary-blue/60 tracking-wider">Atleta Selecionado:</span>
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <p className="font-black text-sm uppercase text-gray-700 leading-tight">{selectedOnboardingPlayer.name}</p>
+                              <p className="text-[10px] font-bold text-primary-blue uppercase tracking-widest mt-0.5">
+                                {selectedOnboardingPlayer.nickname ? `${selectedOnboardingPlayer.nickname} • ` : ''}{selectedOnboardingPlayer.position.toUpperCase()}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setSelectedOnboardingPlayer(null);
+                                setOnboardingSearch('');
+                              }}
+                              className="text-xs font-bold text-red-500 hover:underline"
+                            >
+                              Alterar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {onboardingError && (
+                        <p className="text-xs font-semibold text-red-500 bg-red-50 p-3 rounded-xl border border-red-100">
+                          {onboardingError}
+                        </p>
+                      )}
+
+                      <div className="flex gap-4 pt-4">
+                        <button
+                          onClick={handleLinkPlayer}
+                          disabled={!selectedOnboardingPlayer || onboardingSubmitting}
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white py-4 rounded-2xl font-black uppercase tracking-wider transition-all disabled:opacity-50 disabled:hover:bg-green-600 shadow-lg active:scale-95"
+                        >
+                          {onboardingSubmitting ? 'Salvando...' : 'Confirmar e Vincular'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsOnboardingPlayer(null);
+                            setSelectedOnboardingPlayer(null);
+                            setOnboardingSearch('');
+                          }}
+                          disabled={onboardingSubmitting}
+                          className="bg-gray-100 hover:bg-gray-200 text-gray-500 px-6 py-4 rounded-2xl font-black uppercase tracking-wider transition-all active:scale-95"
+                        >
+                          Voltar
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             </div>

@@ -5,6 +5,7 @@ import { X, CheckCircle2, ArrowRight, ArrowLeft, Users, User, Search, Trophy } f
 import { SoccerJersey } from './SoccerJersey';
 import { RandomSelectionModal } from './RandomSelectionModal';
 import { calculateGrade } from '../utils/gradeUtils';
+import { getPositionAbbr, getPositionColor } from '../utils/playerUtils';
 
 interface PlayerSelectionModalProps {
   isOpen: boolean;
@@ -38,7 +39,9 @@ const AutocompletePlayer = ({
   teamColor, 
   isGoalkeeper,
   excludedIds,
-  dropdownPosition = 'bottom'
+  dropdownPosition = 'bottom',
+  scaleClass = 'scale-100',
+  onOpenChange
 }: { 
   label: string, 
   value: string, 
@@ -47,7 +50,9 @@ const AutocompletePlayer = ({
   teamColor?: string, 
   isGoalkeeper?: boolean,
   excludedIds: string[],
-  dropdownPosition?: 'top' | 'bottom'
+  dropdownPosition?: 'top' | 'bottom',
+  scaleClass?: string,
+  onOpenChange?: (open: boolean) => void
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -61,10 +66,14 @@ const AutocompletePlayer = ({
   });
 
   return (
-    <div className="relative flex flex-col items-center">
+    <div className="relative flex flex-col items-center font-sans" style={{ zIndex: isOpen ? 150 : 10 }}>
        <div 
-         onClick={() => setIsOpen(!isOpen)}
-         className={`relative cursor-pointer transition-transform hover:scale-105 active:scale-95 ${value ? 'opacity-100' : 'opacity-40'}`}
+         onClick={() => {
+           const next = !isOpen;
+           setIsOpen(next);
+           if (onOpenChange) onOpenChange(next);
+         }}
+         className={`relative cursor-pointer transition-all duration-200 hover:scale-[1.08] active:scale-95 ${value ? 'opacity-100' : 'opacity-40'} ${scaleClass}`}
        >
          <SoccerJersey color={isGoalkeeper ? '#111' : (teamColor || '#555')} size={40} />
          <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded-md whitespace-nowrap border border-white/10 flex flex-col items-center shadow-lg min-w-[60px]">
@@ -78,12 +87,12 @@ const AutocompletePlayer = ({
        <AnimatePresence>
          {isOpen && (
            <>
-             <div className="fixed inset-0 z-[120]" onClick={() => setIsOpen(false)} />
+             <div className="fixed inset-0 z-[120]" onClick={() => { setIsOpen(false); if (onOpenChange) onOpenChange(false); }} />
              <motion.div 
                initial={{ opacity: 0, scale: 0.95, y: dropdownPosition === 'bottom' ? -10 : 10 }}
                animate={{ opacity: 1, scale: 1, y: 0 }}
                exit={{ opacity: 0, scale: 0.95, y: dropdownPosition === 'bottom' ? -10 : 10 }}
-               className={`absolute ${dropdownPosition === 'bottom' ? 'top-16' : 'bottom-16'} left-1/2 -translate-x-1/2 w-[200px] max-w-[90vw] bg-white rounded-xl shadow-2xl border border-gray-100 z-[130] p-2 flex flex-col gap-1 max-h-48 overflow-y-auto`}
+               className={`absolute ${dropdownPosition === 'bottom' ? 'top-16 font-sans' : 'bottom-16 font-sans'} left-1/2 -translate-x-1/2 w-[200px] max-w-[90vw] bg-white rounded-xl shadow-2xl border border-gray-100 z-[130] p-2 flex flex-col gap-1 max-h-48 overflow-y-auto`}
              >
                 <div className="sticky top-0 bg-white pb-1 border-b border-gray-50 mb-1">
                   <input 
@@ -99,6 +108,7 @@ const AutocompletePlayer = ({
                   onClick={() => {
                     onChange('');
                     setIsOpen(false);
+                    if (onOpenChange) onOpenChange(false);
                     setSearch('');
                   }}
                   className="flex items-center gap-2 p-2 hover:bg-red-50 rounded-lg text-left transition-colors text-red-500 italic text-[9px] font-bold uppercase"
@@ -111,16 +121,24 @@ const AutocompletePlayer = ({
                     onClick={() => {
                       onChange(p.id);
                       setIsOpen(false);
+                      if (onOpenChange) onOpenChange(false);
                       setSearch('');
                     }}
                     className="flex items-center gap-2 p-2 hover:bg-blue-50 rounded-lg text-left transition-colors group"
                   >
                     <div className="w-7 h-7 rounded-full bg-gray-100 overflow-hidden flex-shrink-0 border border-gray-100 group-hover:border-primary-blue/30">
-                       {p.photoUrl ? <img src={p.photoUrl} className="w-full h-full object-cover" /> : <User size={12} className="text-gray-300 m-auto" />}
+                       {p.photoUrl ? <img src={p.photoUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <User size={12} className="text-gray-300 m-auto" />}
                     </div>
-                    <span className="text-[10px] font-black uppercase text-primary-gray truncate group-hover:text-primary-blue">
-                       {p.nickname || p.name}
-                    </span>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="text-[10px] font-black uppercase text-primary-gray truncate group-hover:text-primary-blue leading-tight">
+                         {p.nickname || p.name}
+                      </span>
+                      {p.position && (
+                        <span className={`text-[8px] font-extrabold uppercase tracking-widest ${getPositionColor(p.position)} mt-0.5`}>
+                          {getPositionAbbr(p.position)}
+                        </span>
+                      )}
+                    </div>
                   </button>
                 ))}
                 {filtered.length === 0 && <span className="text-[8px] text-gray-300 p-2 text-center uppercase font-bold">Nenhum atleta</span>}
@@ -130,6 +148,26 @@ const AutocompletePlayer = ({
        </AnimatePresence>
     </div>
   );
+};
+
+const createInitialLineup = (
+  teamPlayers: string[], 
+  goalkeeperId: string, 
+  substitutesCount: number
+) => {
+  const gk = goalkeeperId || '';
+  const rest = (teamPlayers || []).filter(id => id !== gk);
+  const mainPlayers = rest.slice(0, 6);
+  const subPlayers = rest.slice(6, 6 + substitutesCount);
+  
+  const lineup: Record<string, string> = { gk };
+  mainPlayers.forEach((id, i) => {
+    lineup[`p${i+1}`] = id;
+  });
+  for (let i = 0; i < substitutesCount; i++) {
+    lineup[`sub${i}`] = subPlayers[i] || '';
+  }
+  return lineup;
 };
 
 export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
@@ -160,22 +198,29 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
   const [goalkeeperB, setGoalkeeperB] = useState<string>(initialData?.goalkeeperBId || '');
   
   // Tactical Lineup State
-  const [lineupA, setLineupA] = useState<Record<string, string>>({
-    gk: initialData?.goalkeeperAId || '',
-    ...Object.fromEntries((initialData?.teamAPlayers || []).filter(id => id !== initialData?.goalkeeperAId).slice(0, 6).map((id, i) => [`p${i+1}`, id]))
-  });
+  const [lineupA, setLineupA] = useState<Record<string, string>>(() => 
+    createInitialLineup(initialData?.teamAPlayers || [], initialData?.goalkeeperAId || '', initialData?.substitutesCount || matchSubstitutesCount)
+  );
   
-  const [lineupB, setLineupB] = useState<Record<string, string>>({
-    gk: initialData?.goalkeeperBId || '',
-    ...Object.fromEntries((initialData?.teamBPlayers || []).filter(id => id !== initialData?.goalkeeperBId).slice(0, 6).map((id, i) => [`p${i+1}`, id]))
-  });
+  const [lineupB, setLineupB] = useState<Record<string, string>>(() => 
+    createInitialLineup(initialData?.teamBPlayers || [], initialData?.goalkeeperBId || '', initialData?.substitutesCount || matchSubstitutesCount)
+  );
+
+  const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isRandomSelectionOpen, setIsRandomSelectionOpen] = useState(false);
 
+  const hasInitializedRef = React.useRef(false);
+
   // Reset state when modal opens/closes or initialData changes
   React.useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) {
+      hasInitializedRef.current = false;
+      return;
+    }
+
+    if (isOpen && !hasInitializedRef.current) {
       setStep(initialStep);
       setTeamAId(initialData?.teamAId || '');
       setTeamBId(initialData?.teamBId || '');
@@ -187,17 +232,21 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
       setGoalkeeperA(initialData?.goalkeeperAId || '');
       setGoalkeeperB(initialData?.goalkeeperBId || '');
       
-      setLineupA({
-        gk: initialData?.goalkeeperAId || '',
-        ...Object.fromEntries((initialData?.teamAPlayers || []).filter(id => id !== initialData?.goalkeeperAId).slice(0, 6).map((id, i) => [`p${i+1}`, id]))
-      });
+      setLineupA(createInitialLineup(
+        initialData?.teamAPlayers || [],
+        initialData?.goalkeeperAId || '',
+        initialData?.substitutesCount ?? matchSubstitutesCount
+      ));
       
-      setLineupB({
-        gk: initialData?.goalkeeperBId || '',
-        ...Object.fromEntries((initialData?.teamBPlayers || []).filter(id => id !== initialData?.goalkeeperBId).slice(0, 6).map((id, i) => [`p${i+1}`, id]))
-      });
+      setLineupB(createInitialLineup(
+        initialData?.teamBPlayers || [],
+        initialData?.goalkeeperBId || '',
+        initialData?.substitutesCount ?? matchSubstitutesCount
+      ));
 
       setSearchTerm('');
+      setActiveDropdownId(null);
+      hasInitializedRef.current = true;
     }
   }, [isOpen, initialData]);
 
@@ -339,8 +388,8 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
       (p.nickname && p.nickname.toLowerCase().includes(searchTerm.toLowerCase()))
     ) : true)
     .sort((a, b) => {
-      const gA = parseInt(calculateGrade(a.overallStats, (a.stats.points || 0) / (a.stats.matches || 1)).grade);
-      const gB = parseInt(calculateGrade(b.overallStats, (b.stats.points || 0) / (b.stats.matches || 1)).grade);
+      const gA = a.overallValue || parseInt(calculateGrade(a.overallStats, (a.stats.points || 0) / (a.stats.matches || 1)).grade) || 75;
+      const gB = b.overallValue || parseInt(calculateGrade(b.overallStats, (b.stats.points || 0) / (b.stats.matches || 1)).grade) || 75;
       if (gB !== gA) return gB - gA;
       return (a.nickname || a.name).localeCompare(b.nickname || b.name);
     });
@@ -403,7 +452,7 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
         className="relative bg-white w-full max-w-2xl rounded-2xl md:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh]"
       >
         {/* Header */}
-        <div className="flex-none p-5 md:p-8 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+        <div className="flex-none p-4 md:p-6 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
           <div className="flex items-center gap-3 md:gap-5">
             <div className="bg-primary-blue/5 p-3 md:p-4 rounded-xl md:rounded-2xl border border-primary-blue/10">
               <Users className="w-5 h-5 md:w-6 md:h-6 text-primary-blue" />
@@ -678,7 +727,7 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
                       {/* Overall Badge */}
                       <div className="absolute -top-3 -left-1 bg-white border border-gray-100 rounded-lg px-2 py-1 shadow-md z-10 scale-90 md:scale-100">
                         <span className={`text-[10px] font-black italic ${calculateGrade(p.overallStats, p.stats.points / (p.stats.matches || 1)).color}`}>
-                          {calculateGrade(p.overallStats, p.stats.points / (p.stats.matches || 1)).grade}
+                          {(p.overallValue || parseInt(calculateGrade(p.overallStats, p.stats.points / (p.stats.matches || 1)).grade) || 75).toString().padStart(2, '0')}
                         </span>
                       </div>
 
@@ -710,18 +759,52 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
 
         {/* Tactical Field Step */}
         {(step === 4 || step === 6) && (
-          <div className="flex-1 flex flex-col items-center justify-center bg-white overflow-visible p-1 md:p-4">
-             <div className="w-full max-w-[280px] md:max-w-[420px] aspect-[4/5] md:aspect-[2/3] bg-green-700 rounded-[1.5rem] md:rounded-[2rem] border-4 border-white/20 relative shadow-2xl shadow-green-900/20 overflow-visible">
-                {/* Field Lines */}
-                <div className="absolute inset-x-0 top-0 h-1/2 border-white/20 border-b-2 rounded-t-[1.5rem] md:rounded-t-[2rem]" />
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 md:w-24 md:h-24 border-2 border-white/10 rounded-full" />
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-1/4 border-white/20 border-x-2 border-b-2 rounded-b-xl rounded-t-[1.5rem] md:rounded-t-[2rem]" />
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/4 h-1/12 border-white/20 border-x-2 border-b-2 rounded-b-lg rounded-t-[1.5rem] md:rounded-t-[2rem]" />
+          <div className="flex-1 flex flex-col items-center bg-white overflow-y-auto overflow-x-hidden p-2 md:p-4 min-h-0 w-full">
+             <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-8 overflow-visible w-full max-w-full px-2 py-4">
+               <div className="w-full max-w-[210px] md:max-w-[290px] aspect-[4/5] rounded-[1.2rem] md:rounded-[1.6rem] border-4 border-white/40 relative shadow-2xl shadow-green-950/40 overflow-visible flex-shrink-0"
+                    style={{
+                      backgroundColor: '#1b5e20',
+                      backgroundImage: 'repeating-linear-gradient(180deg, #1b5e20, #1b5e20 8%, #226c27 8%, #226c27 16%)',
+                    }}
+               >
+                {/* Outer Field Boundary line */}
+                <div className="absolute inset-2 border-2 border-white/15 rounded-[0.9rem] md:rounded-[1.3rem] pointer-events-none" />
+
+                {/* Midfield Line */}
+                <div className="absolute inset-x-2 top-1/2 h-0.5 bg-white/20 -translate-y-1/2 pointer-events-none" />
+                {/* Center Circle */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 md:w-24 md:h-24 border-2 border-white/20 rounded-full pointer-events-none" />
+                {/* Center Spot */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white/30 rounded-full pointer-events-none" />
+
+                {/* Top Penalty Area (Grande Área) */}
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 w-[58%] h-[18%] border-white/25 border-x-2 border-b-2 rounded-b-2xl pointer-events-none" />
+                {/* Top Goal Area (Pequena Área) */}
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 w-[28%] h-[6%] border-white/25 border-x-2 border-b-2 rounded-b-xl pointer-events-none" />
+                {/* Top Penalty Spot */}
+                <div className="absolute top-[14%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white/30 rounded-full pointer-events-none" />
+
+                {/* Bottom Penalty Area (Grande Área) */}
+                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-[58%] h-[18%] border-white/25 border-x-2 border-t-2 rounded-t-2xl pointer-events-none" />
+                {/* Bottom Goal Area (Pequena Área) */}
+                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-[28%] h-[6%] border-white/25 border-x-2 border-t-2 rounded-t-xl pointer-events-none" />
+                {/* Bottom Penalty Spot */}
+                <div className="absolute bottom-[14%] left-1/2 -translate-x-1/2 translate-y-1/2 w-1.5 h-1.5 bg-white/30 rounded-full pointer-events-none" />
+
+                {/* Corner Arcs */}
+                <div className="absolute top-2 left-2 w-3 h-3 border-r-2 border-b-2 border-white/25 rounded-br-full pointer-events-none" />
+                <div className="absolute top-2 right-2 w-3 h-3 border-l-2 border-b-2 border-white/25 rounded-bl-full pointer-events-none" />
+                <div className="absolute bottom-2 left-2 w-3 h-3 border-r-2 border-t-2 border-white/25 rounded-tr-full pointer-events-none" />
+                <div className="absolute bottom-2 right-2 w-3 h-3 border-l-2 border-t-2 border-white/25 rounded-tl-full pointer-events-none" />
+
+                {/* Goals Frame */}
+                <div className="absolute -top-[5px] left-1/2 -translate-x-1/2 w-[60px] h-[5px] border-2 border-white/30 bg-white/5 rounded-t-sm pointer-events-none" />
+                <div className="absolute -bottom-[5px] left-1/2 -translate-x-1/2 w-[60px] h-[5px] border-2 border-white/30 bg-white/5 rounded-b-sm pointer-events-none" />
                 
-                {/* Tactical Layout 1-3-2-1 */}
-                <div className="absolute inset-0 p-1 md:p-6 flex flex-col justify-center gap-y-2 md:gap-y-8">
+                {/* Tactical Layout 1-3-2-1 with perfect absolute rows to resolve clicking overlaps */}
+                <div className="absolute inset-0 p-1 md:p-4 overflow-visible">
                   {/* Position: Goalcapper */}
-                  <div className="flex justify-center scale-90 md:scale-100">
+                  <div className="absolute top-[8%] left-1/2 -translate-x-1/2" style={{ zIndex: activeDropdownId === 'gk' ? 50 : 1 }}>
                     <AutocompletePlayer 
                       label="Goleiro"
                       value={step === 4 ? lineupA.gk : lineupB.gk}
@@ -738,13 +821,15 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
                       teamColor={currentTeam?.color}
                       isGoalkeeper
                       excludedIds={Object.values(step === 4 ? lineupA : lineupB)}
+                      scaleClass="scale-[0.75] md:scale-[0.9]"
+                      onOpenChange={(open) => setActiveDropdownId(open ? 'gk' : null)}
                     />
                   </div>
 
                   {/* Position: Defense (3) */}
-                  <div className="flex justify-around items-center gap-x-0.5">
+                  <div className="absolute top-[32%] inset-x-0 flex justify-around px-1 md:px-4" style={{ zIndex: ['p1', 'p2', 'p3'].includes(activeDropdownId || '') ? 50 : 1 }}>
                     {['p1', 'p2', 'p3'].map((pos, i) => (
-                      <div key={pos} className="scale-[0.75] md:scale-100">
+                      <div key={pos} style={{ zIndex: activeDropdownId === pos ? 60 : 1 }}>
                         <AutocompletePlayer 
                           label={`Zag. ${i + 1}`}
                           value={step === 4 ? lineupA[pos] : lineupB[pos]}
@@ -758,15 +843,17 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
                           availablePlayers={availablePlayers}
                           teamColor={currentTeam?.color}
                           excludedIds={Object.values(step === 4 ? lineupA : lineupB)}
+                          scaleClass="scale-[0.65] md:scale-[0.8]"
+                          onOpenChange={(open) => setActiveDropdownId(open ? pos : null)}
                         />
                       </div>
                     ))}
                   </div>
 
                   {/* Position: Midfield (2) */}
-                  <div className="flex justify-center items-center gap-x-4 md:gap-x-12">
+                  <div className="absolute top-[57%] inset-x-0 flex justify-center gap-x-6 md:gap-x-12" style={{ zIndex: ['p4', 'p5'].includes(activeDropdownId || '') ? 50 : 1 }}>
                     {['p4', 'p5'].map((pos, i) => (
-                      <div key={pos} className="scale-[0.8] md:scale-115">
+                      <div key={pos} style={{ zIndex: activeDropdownId === pos ? 60 : 1 }}>
                         <AutocompletePlayer 
                           label={`Meio ${i + 1}`}
                           value={step === 4 ? lineupA[pos] : lineupB[pos]}
@@ -781,46 +868,85 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
                           teamColor={currentTeam?.color}
                           excludedIds={Object.values(step === 4 ? lineupA : lineupB)}
                           dropdownPosition="top"
+                          scaleClass="scale-[0.7] md:scale-[0.85]"
+                          onOpenChange={(open) => setActiveDropdownId(open ? pos : null)}
                         />
                       </div>
                     ))}
                   </div>
 
                   {/* Position: Attack (1) */}
-                  <div className="flex justify-center">
-                    <div className="scale-90 md:scale-125">
-                      <AutocompletePlayer 
-                        label="Atacante"
-                        value={step === 4 ? lineupA.p6 : lineupB.p6}
-                        onChange={(id) => {
-                          const setLineup = step === 4 ? setLineupA : setLineupB;
-                          setLineup(prev => ({ ...prev, p6: id }));
-                          if (divisionMode === 'manual' && id && !presentPlayers.includes(id)) {
-                             setPresentPlayers(prev => [...prev, id]);
-                          }
-                        }}
-                        availablePlayers={availablePlayers}
-                        teamColor={currentTeam?.color}
-                        excludedIds={Object.values(step === 4 ? lineupA : lineupB)}
-                        dropdownPosition="top"
-                      />
-                    </div>
+                  <div className="absolute top-[80%] left-1/2 -translate-x-1/2" style={{ zIndex: activeDropdownId === 'p6' ? 50 : 1 }}>
+                    <AutocompletePlayer 
+                      label="Atacante"
+                      value={step === 4 ? lineupA.p6 : lineupB.p6}
+                      onChange={(id) => {
+                        const setLineup = step === 4 ? setLineupA : setLineupB;
+                        setLineup(prev => ({ ...prev, p6: id }));
+                        if (divisionMode === 'manual' && id && !presentPlayers.includes(id)) {
+                           setPresentPlayers(prev => [...prev, id]);
+                        }
+                      }}
+                      availablePlayers={availablePlayers}
+                      teamColor={currentTeam?.color}
+                      excludedIds={Object.values(step === 4 ? lineupA : lineupB)}
+                      dropdownPosition="top"
+                      scaleClass="scale-[0.75] md:scale-[0.9]"
+                      onOpenChange={(open) => setActiveDropdownId(open ? 'p6' : null)}
+                    />
                   </div>
                 </div>
+               </div>
+
+                {/* Position: Substitutes */}
+                {matchSubstitutesCount > 0 && (
+                  <div 
+                    className="flex flex-col items-center bg-gray-50/80 p-3 rounded-2xl border border-gray-100 min-w-[210px] md:min-w-[150px] md:max-w-[170px] overflow-visible shadow-lg select-none"
+                    style={{ zIndex: Array.from({ length: matchSubstitutesCount }).some((_, i) => activeDropdownId === `sub${i}`) ? 100 : 1 }}
+                  >
+                    <span className="text-[9px] font-black uppercase text-primary-blue tracking-wider mb-2.5 block">Suplentes ({matchSubstitutesCount})</span>
+                    <div className="flex flex-row md:flex-col flex-wrap md:flex-nowrap gap-x-3 gap-y-7 md:gap-4 justify-center items-center overflow-visible py-1">
+                      {Array.from({ length: matchSubstitutesCount }).map((_, i) => {
+                        const pos = `sub${i}`;
+                        return (
+                          <div key={pos} className="relative" style={{ zIndex: activeDropdownId === pos ? 120 : 1 }}>
+                            <AutocompletePlayer 
+                              label={`Substituto ${i + 1}`}
+                              value={step === 4 ? lineupA[pos] : lineupB[pos]}
+                              onChange={(id) => {
+                                const setLineup = step === 4 ? setLineupA : setLineupB;
+                                setLineup(prev => ({ ...prev, [pos]: id }));
+                                if (divisionMode === 'manual' && id && !presentPlayers.includes(id)) {
+                                   setPresentPlayers(prev => [...prev, id]);
+                                }
+                              }}
+                              availablePlayers={availablePlayers}
+                              teamColor={currentTeam?.color}
+                              excludedIds={Object.values(step === 4 ? lineupA : lineupB)}
+                              dropdownPosition={i < matchSubstitutesCount / 2 ? 'bottom' : 'top'}
+                              scaleClass="scale-[0.7] md:scale-[0.8]"
+                              onOpenChange={(open) => setActiveDropdownId(open ? pos : null)}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
              </div>
              <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest text-center mt-3 opacity-50">
-               Toque na camisa para selecionar o atleta
+                Toque na camisa para selecionar o atleta
              </p>
           </div>
         )}
 
         {/* Footer Actions */}
-        <div className="flex-none p-3 md:p-10 bg-gray-50 border-t border-gray-100 flex flex-nowrap md:flex-wrap gap-2 md:gap-5 shadow-inner">
-          <div className="flex-[2] flex gap-2 md:gap-5 w-auto order-2 sm:order-1">
+        <div className="flex-none p-3 md:p-5 bg-gray-50 border-t border-gray-100 flex flex-nowrap md:flex-wrap gap-2 md:gap-4 shadow-inner">
+          <div className="flex-[2] flex gap-2 md:gap-4 w-auto order-2 sm:order-1">
             {step > 0 && (
               <button
                 onClick={handleBack}
-                className="flex-1 bg-white text-gray-400 border-2 border-gray-100 py-2.5 md:py-5 rounded-xl md:rounded-3xl font-black uppercase tracking-widest flex items-center justify-center gap-1.5 md:gap-3 hover:bg-gray-50 transition-all active:scale-95 text-[9px] md:text-sm shadow-sm"
+                className="flex-1 bg-white text-gray-400 border-2 border-gray-100 py-2.5 md:py-3.5 rounded-xl md:rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-1.5 md:gap-2 hover:bg-gray-50 transition-all active:scale-95 text-[9px] md:text-xs shadow-sm"
               >
                 <ArrowLeft className="w-3.5 h-3.5 md:w-5 md:h-5" /> Voltar
               </button>
@@ -841,7 +967,7 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
                      matchSubstitutesCount
                    );
                 }}
-                className="flex-1 bg-white text-primary-yellow border-2 border-primary-yellow/20 py-2.5 md:py-5 rounded-xl md:rounded-3xl font-black uppercase tracking-widest hover:bg-yellow-50 transition-all active:scale-95 text-[9px] md:text-sm shadow-sm"
+                className="flex-1 bg-white text-primary-yellow border-2 border-primary-yellow/20 py-2.5 md:py-3.5 rounded-xl md:rounded-2xl font-black uppercase tracking-widest hover:bg-yellow-50 transition-all active:scale-95 text-[9px] md:text-xs shadow-sm"
               >
                 Salvar
               </button>
@@ -850,7 +976,7 @@ export const PlayerSelectionModal: React.FC<PlayerSelectionModalProps> = ({
           <button
             onClick={handleNext}
             disabled={!canProceed}
-            className={`flex-[3] py-3 md:py-5 rounded-xl md:rounded-3xl font-black uppercase tracking-widest flex items-center justify-center gap-2 md:gap-3 transition-all order-1 sm:order-2 w-auto shadow-xl active:scale-95 text-[10px] md:text-base ${
+            className={`flex-[3] py-3 md:py-3.5 rounded-xl md:rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2 md:gap-2 transition-all order-1 sm:order-2 w-auto shadow-xl active:scale-95 text-[10px] md:text-sm ${
               canProceed
                 ? 'text-white hover:brightness-110 shadow-blue-200'
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'

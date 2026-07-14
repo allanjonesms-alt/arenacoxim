@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, writeBatch, getDoc, where, limit, getDocs } from 'firebase/firestore';
-import { Player, Match, Location, Team, AdminData, ScoringRules } from '../types';
-import { getPositionAbbr, getPositionColor } from '../utils/playerUtils';
+import { Player, Match, Location, Team, AdminData, ScoringRules, Card, MonthlyAward } from '../types';
+import { getPositionAbbr, getPositionColor, getPlayerFinalOverall } from '../utils/playerUtils';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Trophy, Star, MapPin, Calendar as CalendarIcon, ChevronRight, TrendingUp, User, X, Goal, Plus, Trash2, CheckCircle2 } from 'lucide-react';
@@ -14,20 +14,23 @@ import { handleFirestoreError, OperationType } from '../App';
 import { calculateMatchPoints } from '../utils/scoringEngine';
 import { calculateGrade } from '../utils/gradeUtils';
 import { PlayerSummaryModal } from '../components/PlayerSummaryModal';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 interface PublicDashboardProps {
   adminData?: AdminData | null;
   sharedLocations: Location[];
   sharedTeams: Team[];
   sharedScoringRules: ScoringRules | null;
+  isCompact?: boolean;
+  bottomMainContent?: React.ReactNode;
 }
 
-function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose, onPlayerClick }: { 
+function MatchDetailsModal({ match, players, teams, locations, cards, isAdmin, onClose, onPlayerClick }: { 
   match: Match, 
   players: Player[], 
   teams: Team[],
   locations: Location[],
+  cards: Card[],
   isAdmin: boolean,
   onClose: () => void,
   onPlayerClick?: (player: Player) => void
@@ -77,6 +80,19 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
   const goalsA = events.filter(e => e.type === 'goal' && (teamA.includes(e.playerId) || e.playerId === 'unidentified_A')).length;
   const goalsB = events.filter(e => e.type === 'goal' && (teamB.includes(e.playerId) || e.playerId === 'unidentified_B')).length;
 
+  const formatOverall = (val: number) => {
+    const formatted = val.toFixed(2).replace('.', ',');
+    return formatted.endsWith(',00') ? formatted.slice(0, -3) : formatted;
+  };
+
+  const avgOverallA = teamA.length > 0 
+    ? formatOverall(teamA.reduce((sum, id) => sum + (players.find(p => p.id === id) ? getPlayerFinalOverall(players.find(p => p.id === id)!, cards) : 75), 0) / teamA.length)
+    : "0";
+  
+  const avgOverallB = teamB.length > 0
+    ? formatOverall(teamB.reduce((sum, id) => sum + (players.find(p => p.id === id) ? getPlayerFinalOverall(players.find(p => p.id === id)!, cards) : 75), 0) / teamB.length)
+    : "0";
+
   const handleSaveEvents = async () => {
     if (!isAdmin) return;
     setIsSaving(true);
@@ -88,7 +104,7 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
         const oldResults = calculateMatchPoints(match, match.scoreA, match.scoreB, match.events || [], match.mvpId || null, players, scoringRules);
 
         // 2. Recalculate NEW points (to add)
-        const newResults = calculateMatchPoints(match, goalsA, goalsB, events, match.mvpId || null, players, scoringRules);
+        const newResults = calculateMatchPoints(match, match.scoreA, match.scoreB, events, match.mvpId || null, players, scoringRules);
 
         // 3. Apply deltas to players
         const allInvolvedPlayerIds = new Set([
@@ -115,7 +131,7 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
             const deltaAssists = newAssists - oldAssists;
             
             const oldWinner = match.scoreA > match.scoreB ? 'A' : match.scoreB > match.scoreA ? 'B' : 'draw';
-            const newWinner = goalsA > goalsB ? 'A' : goalsB > goalsA ? 'B' : 'draw';
+            const newWinner = match.scoreA > match.scoreB ? 'A' : match.scoreB > match.scoreA ? 'B' : 'draw';
             
             const isTeamA = match.teamA.includes(pid);
             const wasWin = (oldWinner === 'A' && isTeamA) || (oldWinner === 'B' && !isTeamA);
@@ -136,8 +152,6 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
 
         batch.update(doc(db, 'matches', match.id), {
           events: events,
-          scoreA: goalsA,
-          scoreB: goalsB,
           teamA: teamA,
           teamB: teamB,
           substitutesA: substitutesA,
@@ -206,19 +220,29 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
           {/* Scoreboard */}
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between bg-gray-50 p-4 md:p-6 rounded-2xl md:rounded-3xl border border-gray-100 shadow-inner">
-              <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0" onClick={() => { setActiveTab('pitch'); setIsEditingLineup(false); }}>
+              <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0 cursor-pointer" onClick={() => { setActiveTab('pitch'); setIsEditingLineup(false); }}>
                 <div className="w-8 h-8 md:w-10 md:h-10 flex-shrink-0">
                   <SoccerJersey color={teamAEntity?.color || '#555'} />
                 </div>
-                <div className="font-black uppercase tracking-tight text-[10px] md:text-sm truncate w-full" style={{ color: teamAEntity?.color }}>{teamAEntity?.name}</div>
+                <div className="flex flex-col min-w-0">
+                  <div className="font-black uppercase tracking-tight text-[10px] md:text-sm truncate w-full" style={{ color: teamAEntity?.color }}>{teamAEntity?.name}</div>
+                  <div className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1 mt-0.5">
+                    OVR <span className="text-[11px] md:text-[13px] font-black italic tracking-tighter text-[#a52a2a] tabular-nums">{avgOverallA}</span>
+                  </div>
+                </div>
               </div>
               
               <div className="text-2xl md:text-4xl font-black italic text-primary-blue tabular-nums px-2 md:px-4">
-                {goalsA} - {goalsB}
+                {match.scoreA} - {match.scoreB}
               </div>
 
-              <div className="flex items-center justify-end gap-2 md:gap-4 flex-1 min-w-0" onClick={() => { setActiveTab('pitch'); setIsEditingLineup(false); }}>
-                <div className="font-black uppercase tracking-tight text-[10px] md:text-sm truncate w-full text-right" style={{ color: teamBEntity?.color }}>{teamBEntity?.name}</div>
+              <div className="flex items-center justify-end gap-2 md:gap-4 flex-1 min-w-0 cursor-pointer" onClick={() => { setActiveTab('pitch'); setIsEditingLineup(false); }}>
+                <div className="flex flex-col min-w-0 items-end">
+                  <div className="font-black uppercase tracking-tight text-[10px] md:text-sm truncate w-full text-right" style={{ color: teamBEntity?.color }}>{teamBEntity?.name}</div>
+                  <div className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1 mt-0.5 justify-end">
+                    OVR <span className="text-[11px] md:text-[13px] font-black italic tracking-tighter text-[#a52a2a] tabular-nums">{avgOverallB}</span>
+                  </div>
+                </div>
                 <div className="w-8 h-8 md:w-10 md:h-10 flex-shrink-0">
                   <SoccerJersey color={teamBEntity?.color || '#555'} />
                 </div>
@@ -341,6 +365,8 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
               players={players}
               matchDate={match.date}
               matchTime={match.time}
+              teamAName={teamAEntity?.name}
+              teamBName={teamBEntity?.name}
             />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-primary-gray">
@@ -478,7 +504,7 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
             <div className="bg-gray-50 rounded-3xl p-6 border border-gray-100 space-y-4 mt-4 shadow-inner">
               <h4 className="font-black uppercase tracking-widest text-xs text-center text-primary-blue">Pontuação Completa</h4>
               <div className="space-y-2">
-                {calculateMatchPoints(match, goalsA, goalsB, events, match.mvpId || null, players, scoringRules!)
+                {calculateMatchPoints(match, match.scoreA, match.scoreB, events, match.mvpId || null, players, scoringRules!)
                   .sort((a, b) => b.points - a.points)
                   .map(res => {
                   const p = players.find(x => x.id === res.playerId);
@@ -523,10 +549,11 @@ function MatchDetailsModal({ match, players, teams, locations, isAdmin, onClose,
   );
 }
 
-export default function PublicDashboard({ adminData, sharedLocations, sharedTeams, sharedScoringRules }: PublicDashboardProps) {
+export default function PublicDashboard({ adminData, sharedLocations, sharedTeams, sharedScoringRules, isCompact = false, bottomMainContent }: PublicDashboardProps) {
   const [matches, setMatches] = useState<Match[]>([]);
+  const [cards, setCards] = useState<Card[]>([]);
+  const [monthlyAwards, setMonthlyAwards] = useState<MonthlyAward[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
-  const [locations, setLocations] = useState<Location[]>(sharedLocations);
   const [teams, setTeams] = useState<Team[]>(sharedTeams);
   const [loading, setLoading] = useState(true);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
@@ -535,10 +562,6 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
   const [scoringRules, setScoringRules] = useState<ScoringRules | null>(sharedScoringRules);
   const [showAllPoints, setShowAllPoints] = useState(false);
   const [showAllScorers, setShowAllScorers] = useState(false);
-
-  useEffect(() => {
-    setLocations(sharedLocations);
-  }, [sharedLocations]);
 
   useEffect(() => {
     setTeams(sharedTeams);
@@ -588,41 +611,51 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
       }
     });
 
-    let qPlayers = query(collection(db, 'players'), orderBy('overallValue', 'desc'), limit(100));
+    let qPlayers = query(collection(db, 'players'));
     if (adminData && adminData.role !== 'master' && adminData.locationId) {
       qPlayers = query(
         collection(db, 'players'), 
-        where('locationId', '==', adminData.locationId),
-        orderBy('overallValue', 'desc'),
-        limit(100)
+        where('locationId', '==', adminData.locationId)
       );
     }
     const unsubscribePlayers = onSnapshot(qPlayers, async (snapshot) => {
       let playersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
-      if (playersData.length === 0) {
-         // Fallback if no overallValue yet
-         setPlayers([]);
-      } else {
-         setPlayers(playersData);
-      }
+      setPlayers(playersData);
       setLoading(false);
     }, async (err) => {
-      if (err.message?.includes('index') || err.code === 'failed-precondition') {
-        const snap = await getDocs(collection(db, 'players'));
-        let playersData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
-        if (adminData && adminData.role !== 'master' && adminData.locationId) {
-          playersData = playersData.filter(p => p.locationId === adminData.locationId);
-        }
-        setPlayers(playersData);
-        setLoading(false);
-      } else {
-        handleFirestoreError(err, OperationType.LIST, 'players');
+      const snap = await getDocs(collection(db, 'players'));
+      let playersData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
+      if (adminData && adminData.role !== 'master' && adminData.locationId) {
+        playersData = playersData.filter(p => p.locationId === adminData.locationId);
       }
+      setPlayers(playersData);
+      setLoading(false);
+    });
+
+    let qAwards = query(collection(db, 'monthlyAwards'), orderBy('createdAt', 'desc'));
+    if (adminData && adminData.role !== 'master' && adminData.locationId) {
+      qAwards = query(
+        collection(db, 'monthlyAwards'),
+        where('locationId', '==', adminData.locationId)
+      );
+    }
+    const unsubscribeAwards = onSnapshot(qAwards, (snapshot) => {
+      setMonthlyAwards(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MonthlyAward)));
+    }, (err) => {
+      console.error("Error fetching monthly awards:", err);
+    });
+
+    const unsubscribeCards = onSnapshot(collection(db, 'cards'), (snapshot) => {
+      setCards(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Card)));
+    }, (err) => {
+      console.error("Error fetching cards:", err);
     });
 
     return () => {
       unsubscribeMatches();
       unsubscribePlayers();
+      unsubscribeAwards();
+      unsubscribeCards();
     };
   }, [adminData]);
 
@@ -637,6 +670,9 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
     .sort((a, b) => {
       const avgA = (a.stats.points || 0) / (a.stats.matches || 1);
       const avgB = (b.stats.points || 0) / (b.stats.matches || 1);
+      if (avgB !== avgA) {
+        return avgB - avgA;
+      }
       const numA = parseInt(calculateGrade(a.overallStats, avgA).grade) || 0;
       const numB = parseInt(calculateGrade(b.overallStats, avgB).grade) || 0;
       return numB - numA;
@@ -645,12 +681,12 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
 
   const getLocationName = (locId: string) => {
     if (!locId) return 'Local não definido';
-    const loc = locations.find(l => l.id === locId);
+    const loc = sharedLocations.find(l => l.id === locId);
     if (loc) return loc.name;
     
     // Fallback: check if the locId matches a location name (for legacy data)
     const normalizedLocId = (locId || '').trim().toLowerCase();
-    const locByName = locations.find(l => (l.name || '').trim().toLowerCase() === normalizedLocId);
+    const locByName = sharedLocations.find(l => (l.name || '').trim().toLowerCase() === normalizedLocId);
     if (locByName) return locByName.name;
     
     return 'Local não definido';
@@ -663,6 +699,9 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
     .sort((a, b) => {
       const avgA = (a.stats.points || 0) / (a.stats.matches || 1);
       const avgB = (b.stats.points || 0) / (b.stats.matches || 1);
+      if (avgB !== avgA) {
+        return avgB - avgA;
+      }
       const numA = parseInt(calculateGrade(a.overallStats, avgA).grade) || 0;
       const numB = parseInt(calculateGrade(b.overallStats, avgB).grade) || 0;
       return numB - numA;
@@ -690,7 +729,7 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className={isCompact ? "grid grid-cols-1 md:grid-cols-2 gap-4" : "space-y-4"}>
           {matches.length === 0 ? (
             <div className="bg-app-card p-12 rounded-3xl border border-gray-100 text-center shadow-sm">
               <CalendarIcon className="w-12 h-12 text-gray-200 mx-auto mb-4" />
@@ -708,14 +747,14 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
                     match.status === 'finished' ? 'bg-app-card' : 
                     match.status === 'scheduled' ? 'bg-blue-50' :
                     'bg-app-card'
-                  } rounded-3xl border ${match.status === 'scheduled' ? 'border-blue-100' : 'border-gray-100'} overflow-hidden hover:border-primary-blue/30 transition-all group shadow-sm hover:shadow-md`}
+                  } ${isCompact ? 'rounded-2xl' : 'rounded-3xl'} border ${match.status === 'scheduled' ? 'border-blue-100' : 'border-gray-100'} overflow-hidden hover:border-primary-blue/30 transition-all group shadow-sm hover:shadow-md`}
                 >
                   <div className="flex flex-row">
                     {/* Location Logo - Left Side */}
                     {(() => {
-                      const loc = locations.find(l => l.id === match.locationId);
+                      const loc = sharedLocations.find(l => l.id === match.locationId);
                       return loc?.logoUrl ? (
-                        <div className="w-16 md:w-24 bg-gray-50/50 flex items-center justify-center p-2 border-r border-gray-100 flex-shrink-0">
+                        <div className={isCompact ? "w-10 bg-gray-50/50 flex items-center justify-center p-1.5 border-r border-gray-100 flex-shrink-0" : "w-16 md:w-24 bg-gray-50/50 flex items-center justify-center p-2 border-r border-gray-100 flex-shrink-0"}>
                           <img src={loc.logoUrl} alt="" className="w-full h-full object-contain drop-shadow-sm" />
                         </div>
                       ) : null;
@@ -727,15 +766,15 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
                         match.status === 'finished' ? 'bg-gray-50' : 
                         match.status === 'scheduled' ? 'bg-blue-100/50' :
                         'bg-gray-50'
-                      } px-4 md:px-5 py-2 md:py-2.5 flex items-center justify-between text-[9px] md:text-[10px] uppercase tracking-widest font-black text-gray-400 border-b border-gray-100`}>
-                        <div className="flex items-center gap-3 md:gap-4 overflow-hidden font-bold">
-                          <span className="flex items-center gap-1.5 truncate">
-                            <MapPin className="w-2.5 h-2.5 md:w-3 md:h-3 text-primary-blue flex-shrink-0" /> 
+                      } ${isCompact ? 'px-3 py-1.5 text-[8px] md:text-[9px]' : 'px-4 md:px-5 py-2 md:py-2.5 text-[9px] md:text-[10px]'} uppercase tracking-widest font-black text-gray-400 border-b border-gray-100 flex items-center justify-between`}>
+                        <div className="flex items-center gap-1.5 md:gap-3 overflow-hidden font-bold">
+                          <span className="flex items-center gap-1 truncate">
+                            <MapPin className={isCompact ? "w-2 h-2 text-primary-blue flex-shrink-0" : "w-2.5 h-2.5 md:w-3 md:h-3 text-primary-blue flex-shrink-0"} /> 
                             <span className="truncate">{getLocationName(match.locationId)}</span>
                           </span>
-                          <span className="flex items-center gap-1.5 flex-shrink-0"><CalendarIcon className="w-2.5 h-2.5 md:w-3 md:h-3 text-primary-blue" /> {format(new Date(match.date + 'T00:00:00'), 'dd MMM yyyy', { locale: ptBR })}</span>
+                          <span className="flex items-center gap-1 flex-shrink-0"><CalendarIcon className={isCompact ? "w-2 h-2 text-primary-blue" : "w-2.5 h-2.5 md:w-3 md:h-3 text-primary-blue"} /> {format(new Date(match.date + 'T00:00:00'), 'dd MMM yyyy', { locale: ptBR })}</span>
                         </div>
-                        <span className={`px-2 py-0.5 rounded-full text-[8px] md:text-[9px] flex-shrink-0 ${
+                        <span className={`px-1.5 py-0.5 rounded text-[8px] flex-shrink-0 ${
                           match.status === 'finished' ? 'bg-gray-200 text-gray-600' : 
                           match.status === 'live' ? 'bg-red-500 text-white animate-pulse font-black' : 
                           'bg-primary-blue/10 text-primary-blue'
@@ -745,30 +784,30 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
                       </div>
 
                       {/* Scoreboard Area */}
-                      <div className="p-4 md:p-8 flex items-center justify-between gap-2">
+                      <div className={isCompact ? "p-3 md:p-4 flex items-center justify-between gap-1" : "p-4 md:p-8 flex items-center justify-between gap-2"}>
                         <div className="flex-1 text-center min-w-0">
-                          <div className="flex flex-col items-center gap-2 md:gap-3">
-                            <div className="w-8 h-8 md:w-10 md:h-10">
+                          <div className={isCompact ? "flex flex-col items-center gap-1" : "flex flex-col items-center gap-2 md:gap-3"}>
+                            <div className={isCompact ? "w-6 h-6 md:w-7 md:h-7" : "w-8 h-8 md:w-10 md:h-10"}>
                               <SoccerJersey color={teams.find(t => t.id === match.teamAId)?.color || '#555'} />
                             </div>
-                            <div className="text-xs md:text-lg font-black uppercase tracking-tight text-primary-blue truncate w-full px-1">
+                            <div className={`${isCompact ? 'text-[10px] md:text-xs' : 'text-xs md:text-lg'} font-black uppercase tracking-tight text-primary-blue truncate w-full px-1`}>
                               {teams.find(t => t.id === match.teamAId)?.name || 'Time A'}
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-3 md:gap-10 px-2 md:px-8">
-                          <div className="text-3xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm">{match.scoreA}</div>
-                          <div className="text-[10px] md:text-sm font-black text-primary-yellow opacity-30 italic">X</div>
-                          <div className="text-3xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm">{match.scoreB}</div>
+                        <div className={isCompact ? "flex items-center gap-1 px-1" : "flex items-center gap-3 md:gap-10 px-2 md:px-8"}>
+                          <div className={isCompact ? "text-xl md:text-3xl font-black italic text-primary-blue tabular-nums drop-shadow-sm" : "text-3xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm"}>{match.scoreA}</div>
+                          <div className={isCompact ? "text-[8px] font-black text-primary-yellow opacity-30 italic" : "text-[10px] md:text-sm font-black text-primary-yellow opacity-30 italic"}>X</div>
+                          <div className={isCompact ? "text-xl md:text-3xl font-black italic text-primary-blue tabular-nums drop-shadow-sm" : "text-3xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm"}>{match.scoreB}</div>
                         </div>
 
                         <div className="flex-1 text-center min-w-0">
-                          <div className="flex flex-col items-center gap-2 md:gap-3">
-                            <div className="w-8 h-8 md:w-10 md:h-10">
+                          <div className={isCompact ? "flex flex-col items-center gap-1" : "flex flex-col items-center gap-2 md:gap-3"}>
+                            <div className={isCompact ? "w-6 h-6 md:w-7 md:h-7" : "w-8 h-8 md:w-10 md:h-10"}>
                               <SoccerJersey color={teams.find(t => t.id === match.teamBId)?.color || '#555'} />
                             </div>
-                            <div className="text-xs md:text-lg font-black uppercase tracking-tight text-primary-blue truncate w-full px-1">
+                            <div className={`${isCompact ? 'text-[10px] md:text-xs' : 'text-xs md:text-lg'} font-black uppercase tracking-tight text-primary-blue truncate w-full px-1`}>
                               {teams.find(t => t.id === match.teamBId)?.name || 'Time B'}
                             </div>
                           </div>
@@ -782,10 +821,10 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
                           match.status === 'finished' ? 'bg-gray-50/50' : 
                           match.status === 'scheduled' ? 'bg-blue-50/50' :
                           'bg-gray-50/50'
-                        } px-4 py-3 md:py-4 flex items-center justify-center border-t border-gray-100 group-hover:bg-primary-blue/5 transition-colors cursor-pointer`}
+                        } ${isCompact ? 'px-3 py-1.5 md:py-2' : 'px-4 py-3 md:py-4'} flex items-center justify-center border-t border-gray-100 group-hover:bg-primary-blue/5 transition-colors cursor-pointer`}
                       >
-                        <span className="text-[10px] font-black uppercase tracking-widest text-primary-blue flex items-center gap-2 group-hover:translate-x-1 transition-transform">
-                          Ver Detalhes da Partida <ChevronRight className="w-4 h-4" />
+                        <span className={`${isCompact ? 'text-[8px] md:text-[9px]' : 'text-[10px]'} font-black uppercase tracking-widest text-primary-blue flex items-center gap-1.5 group-hover:translate-x-1 transition-transform`}>
+                          Ver Detalhes da Partida <ChevronRight className={isCompact ? "w-3 h-3" : "w-4 h-4"} />
                         </span>
                       </div>
                     </div>
@@ -796,15 +835,20 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
               {matches.length > 6 && (
                 <button 
                   onClick={() => navigate('/resultados')}
-                  className="w-full bg-white border-2 border-primary-blue text-primary-blue py-5 rounded-3xl font-black uppercase tracking-widest hover:bg-primary-blue hover:text-white transition-all shadow-sm active:scale-95 group flex items-center justify-center gap-3"
+                  className={isCompact ? "col-span-full w-full bg-white border-2 border-primary-blue text-primary-blue py-3 rounded-2xl font-black uppercase tracking-widest hover:bg-primary-blue hover:text-white transition-all shadow-sm active:scale-95 group flex items-center justify-center gap-2 text-xs" : "w-full bg-white border-2 border-primary-blue text-primary-blue py-5 rounded-3xl font-black uppercase tracking-widest hover:bg-primary-blue hover:text-white transition-all shadow-sm active:scale-95 group flex items-center justify-center gap-3"}
                 >
                   Ver Todas as Partidas
-                  <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  <ChevronRight className={isCompact ? "w-4 h-4 group-hover:translate-x-1 transition-transform" : "w-5 h-5 group-hover:translate-x-1 transition-transform"} />
                 </button>
               )}
             </>
           )}
         </div>
+        {bottomMainContent && (
+          <div className="mt-8">
+            {bottomMainContent}
+          </div>
+        )}
       </div>
 
       {/* Player Details Modal */}
@@ -814,6 +858,7 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
             player={selectedPlayer}
             matches={matches}
             scoringRules={scoringRules}
+            isAdminView={!!adminData}
             onClose={() => setSelectedPlayer(null)}
           />
         )}
@@ -822,11 +867,12 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
       {/* Match Details Modal */}
       <AnimatePresence>
         {selectedMatch && (
-          <MatchDetailsModal 
+          <MatchDetailsModal
+            cards={cards} 
             match={selectedMatch} 
             players={players}
             teams={teams}
-            locations={locations}
+            locations={sharedLocations}
             isAdmin={!!adminData}
             onClose={() => setSelectedMatch(null)}
             onPlayerClick={(player) => {
@@ -937,25 +983,6 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
             ))}
           </div>
         </section>
-
-        {/* Quick Stats Banner */}
-        <div className="bg-primary-blue p-8 rounded-3xl text-white shadow-xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-primary-yellow/10 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-primary-yellow/20 transition-all duration-700"></div>
-          <div className="relative z-10">
-            <h4 className="font-black uppercase italic text-2xl leading-tight mb-2 tracking-tighter">Estatísticas <span className="text-primary-yellow underline decoration-primary-yellow/30 underline-offset-4">em Tempo Real</span></h4>
-            <p className="text-xs font-bold text-white/60 mb-6 max-w-[200px]">Acompanhe o desempenho individual de cada atleta da nossa arena.</p>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
-                <div className="text-3xl font-black italic mb-1">{players.length}</div>
-                <div className="text-[10px] uppercase font-black text-primary-yellow tracking-widest">Atletas</div>
-              </div>
-              <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
-                <div className="text-3xl font-black italic mb-1">{matches.length}</div>
-                <div className="text-[10px] uppercase font-black text-primary-yellow tracking-widest">Partidas</div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Leaderboard Modal */}
@@ -1016,7 +1043,7 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
                           </span>
                         </div>
                         <div className={`text-[10px] uppercase font-bold tracking-tighter ${getPositionColor(player.position)}`}>
-                          {getPositionAbbr(player.position)} • <span className="text-gray-400">{player.stats.matches} jogos</span>
+                          {getPositionAbbr(player.position)} • <span className="text-gray-400">{player.stats.matches} jogos • {player.stats.goals || 0} G / {player.stats.assists || 0} A</span>
                         </div>
                       </div>
                     </div>

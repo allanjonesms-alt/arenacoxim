@@ -4,8 +4,6 @@ import { collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc } from 'fireb
 import { Location } from '../types';
 import { MapPin, Plus, Trash2, Edit2, Search, X, Map, Users, Clock, CheckCircle2, Shield } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { storage } from '../firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { handleFirestoreError, OperationType } from '../App';
 
 export default function LocationManagement() {
@@ -88,15 +86,34 @@ export default function LocationManagement() {
         return;
       }
       
-      try {
-        const storageRef = ref(storage, `locations/${Date.now()}_${file.name}`);
-        const snapshot = await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(snapshot.ref);
-        setLogoUrl(url);
-      } catch (error) {
-        console.error('Error uploading image:', error);
-        alert('Erro ao enviar imagem.');
-      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new window.Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          // Max width/height to limit base64 size
+          const MAX_SIZE = 400;
+          if (width > height && width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          } else if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            setLogoUrl(dataUrl);
+          }
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
     }
   };
 

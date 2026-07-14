@@ -3,7 +3,7 @@ import { calculateAverage } from './gradeUtils';
 
 export interface MatchEvent {
   playerId: string;
-  type: 'goal' | 'assist';
+  type: 'goal' | 'assist' | 'own_goal' | 'penalty_save' | 'penalty_miss';
 }
 
 export interface PlayerScoreResult {
@@ -15,7 +15,11 @@ export interface PlayerScoreResult {
     goalsCount: number;
     assists: number;
     assistsCount: number;
+    ownGoals: number;
+    ownGoalsCount: number;
     goalkeeperBonus: number;
+    penaltyMiss: number;
+    penaltyMissCount: number;
     cleanSheet: number;
     goalDifference: number;
     mvp: number;
@@ -46,13 +50,16 @@ export const calculateMatchPoints = (
     const isDraw = winner === 'draw';
     const isLoss = !isWin && !isDraw;
 
-    const goalsScored = events.filter(e => e.playerId === pid && e.type === 'goal').length;
-    const assistsMade = events.filter(e => e.playerId === pid && e.type === 'assist').length;
+    const goalsScored = events ? events.filter(e => e.playerId === pid && e.type === 'goal').length : 0;
+    const assistsMade = events ? events.filter(e => e.playerId === pid && e.type === 'assist').length : 0;
+    const ownGoalsCommitted = events ? events.filter(e => e.playerId === pid && e.type === 'own_goal').length : 0;
+    const penaltySaves = events ? events.filter(e => e.playerId === pid && e.type === 'penalty_save').length : 0;
+    const penaltyMisses = events ? events.filter(e => e.playerId === pid && e.type === 'penalty_miss').length : 0;
     
     const teamGoalsScored = isTeamA ? scoreA : scoreB;
     const teamGoalsConceded = isTeamA ? scoreB : scoreA;
 
-  // 1. Result Points
+    // 1. Result Points
     let resultPoints = 0;
     const isSubstitute = (match.substitutesA?.includes(pid) || match.substitutesB?.includes(pid));
     
@@ -64,16 +71,25 @@ export const calculateMatchPoints = (
     // 2. Participation Points
     const goalPoints = goalsScored * rules.goal;
     const assistPoints = assistsMade * rules.assist;
+    const ownGoalPoints = ownGoalsCommitted * -3; // 3 points per own goal
 
     // 3. Goalkeeper/Defender Points
     let cleanSheetPoints = 0;
     let gdPoints = 0;
+    const positionLower = (player.position || '').toLowerCase();
+    const isEscaladoGoalkeeper = (isTeamA && match.goalkeeperAId === pid) || (!isTeamA && match.goalkeeperBId === pid);
+    
+    const penaltySavePoints = isEscaladoGoalkeeper ? penaltySaves * (rules.penaltySave !== undefined ? rules.penaltySave : 5) : 0;
+    const penaltyMissPoints = penaltyMisses * -(rules.penaltyMiss !== undefined ? rules.penaltyMiss : 5);
 
     if (!isSubstitute) {
-      const isDefensive = ['goleiro', 'zagueiro', 'lateral'].includes(player.position.toLowerCase());
+      const isDefensive = ['zagueiro', 'lateral'].includes(positionLower);
 
-      if (isDefensive) {
-        // Clean Sheet: 7 points - goals conceded
+      if (isEscaladoGoalkeeper) {
+        // Clean Sheet: starts with 7 points, reduced by each goal conceded
+        cleanSheetPoints = Math.max(0, 7 - teamGoalsConceded);
+      } else if (isDefensive) {
+        // Clean Sheet for other defenders: starts with rules.cleanSheet (typically 5), reduced by each goal conceded
         cleanSheetPoints = Math.max(0, rules.cleanSheet - teamGoalsConceded);
       }
 
@@ -94,7 +110,11 @@ export const calculateMatchPoints = (
         goalsCount: goalsScored,
         assists: assistPoints,
         assistsCount: assistsMade,
-        goalkeeperBonus: 0,
+        ownGoals: ownGoalPoints,
+        ownGoalsCount: ownGoalsCommitted,
+        goalkeeperBonus: penaltySavePoints,
+        penaltyMiss: penaltyMissPoints,
+        penaltyMissCount: penaltyMisses,
         cleanSheet: cleanSheetPoints,
         goalDifference: gdPoints,
         mvp: 0 // Will set after calculating all base points
@@ -104,7 +124,7 @@ export const calculateMatchPoints = (
 
   // Calculate base points for MVP determination
   results.forEach(r => {
-    r.points = r.breakdown.result + r.breakdown.goals + r.breakdown.assists + r.breakdown.goalkeeperBonus + r.breakdown.cleanSheet + r.breakdown.goalDifference + r.breakdown.mvp;
+    r.points = r.breakdown.result + r.breakdown.goals + r.breakdown.assists + r.breakdown.ownGoals + r.breakdown.goalkeeperBonus + r.breakdown.penaltyMiss + r.breakdown.cleanSheet + r.breakdown.goalDifference + r.breakdown.mvp;
   });
 
   // 5. MVP (Craque da Partida)

@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { ScoringRules } from '../types';
-import { Save, Loader2, Info, Calculator, Trophy, Shield, Star } from 'lucide-react';
+import { Save, Loader2, Info, Calculator, Trophy, Shield, Star, AlertTriangle } from 'lucide-react';
 import { motion } from 'motion/react';
-import { SoccerBall, SoccerCleat } from '../components/Icons';
+import { SoccerBall, SoccerCleat, GoalkeeperGlove, PenaltyMissIcon } from '../components/Icons';
 import { handleFirestoreError, OperationType } from '../App';
 import CalculationRules from '../components/CalculationRules';
 
@@ -14,8 +14,10 @@ const DEFAULT_RULES: ScoringRules = {
   draw: 1,
   goal: 5,
   assist: 3,
-  cleanSheet: 7,
+  cleanSheet: 5,
   mvp: 10,
+  penaltySave: 5,
+  penaltyMiss: 5,
   updatedAt: Date.now()
 };
 
@@ -78,6 +80,8 @@ export default function Tabelas() {
     { key: 'goal', label: 'Gol', icon: SoccerBall, color: 'text-red-500', bgColor: 'bg-red-50', description: 'Pontos por cada gol marcado' },
     { key: 'assist', label: 'Assistência', icon: SoccerCleat, color: 'text-green-500', bgColor: 'bg-green-50', description: 'Pontos por cada assistência' },
     { key: 'cleanSheet', label: 'Defesa Invicta', icon: Shield, color: 'text-cyan-500', bgColor: 'bg-cyan-50', description: 'Pontos por não sofrer gols' },
+    { key: 'penaltySave', label: 'Defesa de Pênalti', icon: GoalkeeperGlove, color: 'text-orange-500', bgColor: 'bg-orange-50', description: 'Defesa de pênalti (Apenas Goleiro)' },
+    { key: 'penaltyMiss', label: 'Pênalti Perdido', icon: PenaltyMissIcon, color: 'text-red-500', bgColor: 'bg-red-50', description: 'Ação negativa se desperdiçar cobrança' },
     { key: 'mvp', label: 'Craque do Jogo', icon: Star, color: 'text-purple-500', bgColor: 'bg-purple-50', description: 'Pontos extras para o melhor da partida' },
   ];
 

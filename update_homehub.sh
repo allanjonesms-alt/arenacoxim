@@ -1,0 +1,1 @@
+sed -i "s/to: '\/admin\/cards',/to: '\/admin\/cards',\n    },\n    {\n      title: 'Melhores do Mês',\n      subtitle: 'Gerenciar os destaques mensais e cartas bônus.',\n      icon: Star,\n      to: '\/admin\/awards',\n      gradient: 'from-yellow-500 to-amber-700',/g" src/pages/HomeHub.tsx

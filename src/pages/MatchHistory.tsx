@@ -21,17 +21,12 @@ interface MatchHistoryProps {
 export default function MatchHistory({ adminData, sharedLocations, sharedTeams, sharedScoringRules }: MatchHistoryProps) {
   const [matches, setMatches] = useState<Match[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
-  const [locations, setLocations] = useState<Location[]>(sharedLocations);
   const [teams, setTeams] = useState<Team[]>(sharedTeams);
   const [loading, setLoading] = useState(true);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [scoringRules, setScoringRules] = useState<ScoringRules | null>(sharedScoringRules);
   const [matchLimit, setMatchLimit] = useState(30);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    setLocations(sharedLocations);
-  }, [sharedLocations]);
 
   useEffect(() => {
     setTeams(sharedTeams);
@@ -105,7 +100,7 @@ export default function MatchHistory({ adminData, sharedLocations, sharedTeams, 
   }, [adminData, matchLimit]);
 
   const getLocationName = (locId: string) => {
-    const loc = locations.find(l => l.id === locId);
+    const loc = sharedLocations.find(l => l.id === locId);
     return loc ? loc.name : 'Local não definido';
   };
 
@@ -181,7 +176,7 @@ export default function MatchHistory({ adminData, sharedLocations, sharedTeams, 
             <div className="flex flex-row">
               {/* Location Logo - Left Side */}
               {(() => {
-                const loc = locations.find(l => l.id === match.locationId);
+                const loc = sharedLocations.find(l => l.id === match.locationId);
                 return loc?.logoUrl ? (
                   <div className="w-16 md:w-24 bg-gray-50 flex items-center justify-center p-2 border-r border-gray-100 flex-shrink-0">
                     <img src={loc.logoUrl} alt="" className="w-full h-full object-contain" />
@@ -353,6 +348,7 @@ export default function MatchHistory({ adminData, sharedLocations, sharedTeams, 
             player={selectedPlayer}
             matches={matches}
             scoringRules={scoringRules}
+            isAdminView={!!adminData}
             onClose={() => setSelectedPlayer(null)}
           />
         )}

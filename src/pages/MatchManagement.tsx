@@ -4,16 +4,17 @@ import { collection, addDoc, onSnapshot, doc, updateDoc, writeBatch, deleteDoc, 
 import { Player, Match, Location, Team, ScoringRules, AdminData } from '../types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Calendar, MapPin, Clock, Plus, Users, CheckCircle2, XCircle, Trophy, Goal, Map, ShieldCheck, X, Trash2, Pencil, Search, Layout, ArrowRightLeft, UserMinus } from 'lucide-react';
+import { Calendar, MapPin, Clock, Plus, Users, CheckCircle2, XCircle, Trophy, Goal, Map, ShieldCheck, X, Trash2, Pencil, Search, Layout, ArrowRightLeft, UserMinus, ArrowRight, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SoccerJersey } from '../components/SoccerJersey';
 import { SoccerPitch } from '../components/SoccerPitch';
-import { SoccerBall, SoccerCleat, GoalkeeperGlove } from '../components/Icons';
+import { SoccerBall, SoccerCleat, GoalkeeperGlove, PenaltyMissIcon } from '../components/Icons';
 import { handleFirestoreError, OperationType } from '../App';
 import { Link } from 'react-router-dom';
 import { PlayerSelectionModal } from '../components/PlayerSelectionModal';
 import { calculateMatchPoints, MatchEvent } from '../utils/scoringEngine';
 import { calculateGrade } from '../utils/gradeUtils';
+import { getPositionAbbr, getPositionColor } from '../utils/playerUtils';
 
 const DEFAULT_RULES: ScoringRules = {
   id: 'scoring',
@@ -23,6 +24,8 @@ const DEFAULT_RULES: ScoringRules = {
   assist: 3,
   cleanSheet: 5,
   mvp: 10,
+  penaltySave: 5,
+  penaltyMiss: 5,
   updatedAt: Date.now()
 };
 
@@ -55,10 +58,18 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
   const [matchForLineup, setMatchForLineup] = useState<Match | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string>('all');
+  const [visibleCount, setVisibleCount] = useState<number>(10);
 
   // Form State
+  const getCurrentTimeFormatted = () => {
+    const now = new Date();
+    const hours = now.getHours().toString().padStart(2, '0');
+    const minutes = now.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [time, setTime] = useState('19:00');
+  const [time, setTime] = useState(getCurrentTimeFormatted());
   const [locationId, setLocationId] = useState('');
   const [teamAIdInput, setTeamAIdInput] = useState('');
   const [teamBIdInput, setTeamBIdInput] = useState('');
@@ -105,26 +116,23 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
   }, [sharedScoringRules]);
 
   useEffect(() => {
-    let qMatches = query(collection(db, 'matches'), orderBy('date', 'desc'), limit(100));
+    let qMatches = query(collection(db, 'matches'), orderBy('createdAt', 'desc'), limit(500));
     
     // Server-side filtering by location if not master admin
     if (adminData && adminData.role !== 'master' && adminData.locationId) {
       qMatches = query(
         collection(db, 'matches'), 
         where('locationId', '==', adminData.locationId),
-        orderBy('date', 'desc'),
-        limit(100)
+        orderBy('createdAt', 'desc'),
+        limit(500)
       );
     }
 
     const unsubscribeMatches = onSnapshot(qMatches, (snapshot) => {
       let matchesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match));
       
-      // Memory sort by time to handle cases where index is missing for composite orderBy
-      matchesList.sort((a, b) => {
-        if (a.date !== b.date) return b.date.localeCompare(a.date);
-        return (b.time || '').localeCompare(a.time || '');
-      });
+      // Memory sort by createdAt to guarantee descending registry order
+      matchesList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
       setMatches(matchesList);
       
@@ -137,9 +145,18 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
     }, async (err) => {
       if (err.message?.includes('index') || err.code === 'failed-precondition') {
         console.warn("Match query failed due to missing index in MatchManagement. Falling back to unordered query.");
-        const qFallback = query(collection(db, 'matches'), limit(50));
+        const qFallback = query(collection(db, 'matches'), limit(200));
         const snap = await getDocs(qFallback);
-        setMatches(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match)));
+        let matchesList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match));
+        
+        // Filter by location if not master admin
+        if (adminData && adminData.role !== 'master' && adminData.locationId) {
+          matchesList = matchesList.filter(m => m.locationId === adminData.locationId);
+        }
+        
+        // Memory sort by createdAt to guarantee descending registry order
+        matchesList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        setMatches(matchesList);
       } else {
         handleFirestoreError(err, OperationType.LIST, 'matches');
       }
@@ -195,6 +212,12 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
 
       if (editingMatch) {
         await updateDoc(doc(db, 'matches', editingMatch.id), matchData);
+        if (isDraft) {
+          setEditingMatch({
+            ...editingMatch,
+            ...matchData
+          });
+        }
         if (!isDraft && editingMatch.status === 'finished') {
           await recalculateAllStats();
         }
@@ -234,7 +257,7 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
 
   const resetForm = () => {
     setDate(format(new Date(), 'yyyy-MM-dd'));
-    setTime('19:00');
+    setTime(getCurrentTimeFormatted());
     setLocationId(adminData && adminData.role !== 'master' && adminData.locationId ? adminData.locationId : '');
     setTeamAIdInput('');
     setTeamBIdInput('');
@@ -248,83 +271,8 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
 
   const recalculateAllStats = async () => {
     try {
-      const batch = writeBatch(db);
-      
-      // Fetch fresh data to avoid race conditions with state
-      const [playersSnap, matchesSnap] = await Promise.all([
-        getDocs(collection(db, 'players')),
-        getDocs(query(collection(db, 'matches'), where('status', '==', 'finished')))
-      ]);
-      
-      const freshPlayers = playersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Player));
-      const freshMatches = matchesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Match));
-
-      // 1. Reset all players to zero stats
-      freshPlayers.forEach(p => {
-        batch.update(doc(db, 'players', p.id), {
-          'stats.matches': 0,
-          'stats.wins': 0,
-          'stats.goals': 0,
-          'stats.assists': 0,
-          'stats.points': 0
-        });
-      });
-
-      // Temporary map to accumulate points in memory before final batch update
-      const playerAccumulator: Record<string, { matches: number, wins: number, goals: number, assists: number, points: number }> = {};
-      
-      freshPlayers.forEach(p => {
-        playerAccumulator[p.id] = { matches: 0, wins: 0, goals: 0, assists: 0, points: 0 };
-      });
-
-      freshMatches.forEach(match => {
-        const results = calculateMatchPoints(
-          match, 
-          match.scoreA, 
-          match.scoreB, 
-          match.events || [], 
-          match.mvpId || null, 
-          freshPlayers, 
-          scoringRules
-        );
-
-        results.forEach(res => {
-          if (res.playerId.startsWith('unidentified_')) return;
-          if (!playerAccumulator[res.playerId]) return;
-
-          const acc = playerAccumulator[res.playerId];
-          acc.matches += 1;
-          acc.points += res.points;
-
-          const winner = match.scoreA > match.scoreB ? 'A' : match.scoreB > match.scoreA ? 'B' : 'draw';
-          const isTeamA = match.teamA.includes(res.playerId);
-          const isWin = (winner === 'A' && isTeamA) || (winner === 'B' && !isTeamA);
-          if (isWin) acc.wins += 1;
-
-          const pGoals = (match.events || []).filter(e => e.playerId === res.playerId && e.type === 'goal').length;
-          const pAssists = (match.events || []).filter(e => e.playerId === res.playerId && e.type === 'assist').length;
-          acc.goals += pGoals;
-          acc.assists += pAssists;
-        });
-      });
-
-      // 3. Apply accumulated stats to batch
-      Object.entries(playerAccumulator).forEach(([pid, stats]) => {
-        const player = freshPlayers.find(p => p.id === pid);
-        const avgPoints = stats.points / (stats.matches || 1);
-        const { grade } = calculateGrade(player?.overallStats, avgPoints);
-        
-        batch.update(doc(db, 'players', pid), {
-          'stats.matches': stats.matches,
-          'stats.wins': stats.wins,
-          'stats.goals': stats.goals,
-          'stats.assists': stats.assists,
-          'stats.points': stats.points,
-          'overallValue': parseInt(grade) || 75
-        });
-      });
-
-      await batch.commit();
+      const { recalculateAllPlayerStats } = await import('../utils/maintenanceUtils');
+      await recalculateAllPlayerStats();
       console.log("Stats recalculated successfully with fresh data.");
     } catch (error) {
       console.error("Error recalculating stats:", error);
@@ -387,12 +335,12 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
 
   const getLocationName = (locId: string) => {
     if (!locId) return 'Local não definido';
-    const loc = locations.find(l => l.id === locId);
+    const loc = sharedLocations.find(l => l.id === locId);
     if (loc) return loc.name;
     
     // Fallback: check if the locId matches a location name (for legacy data)
     const normalizedLocId = (locId || '').trim().toLowerCase();
-    const locByName = locations.find(l => (l.name || '').trim().toLowerCase() === normalizedLocId);
+    const locByName = sharedLocations.find(l => (l.name || '').trim().toLowerCase() === normalizedLocId);
     if (locByName) return locByName.name;
     
     return 'Local não definido';
@@ -442,7 +390,7 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
   const ScoreEntry = ({ match, onClose }: { match: Match, onClose: () => void }) => {
     const [sA, setSA] = useState(match.scoreA);
     const [sB, setSB] = useState(match.scoreB);
-    const [events, setEvents] = useState<{playerId: string, type: 'goal' | 'assist'}[]>(match.events || []);
+    const [events, setEvents] = useState<MatchEvent[]>(match.events || []);
     const [isSaving, setIsSaving] = useState(false);
     const [substitutingPlayer, setSubstitutingPlayer] = useState<{team: 'A' | 'B', oldId: string} | null>(null);
     const [editingPlayer, setEditingPlayer] = useState<{team: 'A' | 'B', oldId: string} | null>(null);
@@ -452,8 +400,8 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
 
     // Auto-update score when events change
     useEffect(() => {
-      const goalsA = events.filter(e => e.type === 'goal' && (match.teamA.includes(e.playerId) || e.playerId === 'unidentified_A')).length;
-      const goalsB = events.filter(e => e.type === 'goal' && (match.teamB.includes(e.playerId) || e.playerId === 'unidentified_B')).length;
+      const goalsA = events.filter(e => (e.type === 'goal' && (match.teamA.includes(e.playerId) || e.playerId === 'unidentified_A')) || (e.type === 'own_goal' && (match.teamB.includes(e.playerId) || e.playerId === 'unidentified_B'))).length;
+      const goalsB = events.filter(e => (e.type === 'goal' && (match.teamB.includes(e.playerId) || e.playerId === 'unidentified_B')) || (e.type === 'own_goal' && (match.teamA.includes(e.playerId) || e.playerId === 'unidentified_A'))).length;
       setSA(goalsA);
       setSB(goalsB);
     }, [events, match.teamA, match.teamB]);
@@ -560,7 +508,7 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
       setEditingPlayer(null);
     };
 
-    const addEvent = (playerId: string, type: 'goal' | 'assist') => {
+    const addEvent = (playerId: string, type: MatchEvent['type']) => {
       setEvents([...events, { playerId, type }]);
     };
 
@@ -625,7 +573,7 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
               </button>
               <div>
                 <h3 className="text-xl md:text-2xl font-black uppercase italic tracking-tighter text-primary-blue">
-                  {match.status === 'finished' ? 'Editar Estatísticas' : 'Partida ao Vivo'}
+                  {match.status === 'finished' ? 'EDITAR RESULTADO' : 'Partida ao Vivo'}
                 </h3>
                 <div className="flex items-center gap-2 mt-0.5">
                   <div className={`w-2 h-2 rounded-full ${isSaving ? 'bg-primary-yellow animate-pulse' : 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]'}`} />
@@ -684,9 +632,9 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
               <div className="space-y-4">
                 <h4 className="text-xs font-black uppercase italic tracking-widest text-primary-blue flex items-center gap-2 px-2">
                   <div className="w-1.5 h-4 rounded-full" style={{ backgroundColor: teamA?.color }} />
-                  Inscrições {teamA?.name}
+                  TIME {teamA?.name}
                 </h4>
-                <div className="bg-white rounded-3xl p-4 border border-gray-100 shadow-sm space-y-2">
+                <div className="rounded-3xl p-4 border border-white/20 shadow-sm space-y-2" style={{ backgroundColor: `${teamA?.color}b2` }}>
                       {[
                         ...[...match.teamA].map(pid => {
                           if (pid.startsWith('empty_')) return { id: pid, nickname: 'POSIÇÃO VAZIA', name: 'POSIÇÃO VAZIA', isPlaceholder: true, position: '' as any };
@@ -717,89 +665,125 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
                         const teamColor = teamA?.color;
                         const pGoals = events.filter(e => e.playerId === p.id && e.type === 'goal').length;
                         const pAssists = events.filter(e => e.playerId === p.id && e.type === 'assist').length;
-                        const isGoalkeeper = p.id === match.goalkeeperAId;
+                        const pPenaltySaves = events.filter(e => e.playerId === p.id && e.type === 'penalty_save').length;
+                        const pPenaltyMisses = events.filter(e => e.playerId === p.id && e.type === 'penalty_miss').length;
+                        const isGoalkeeper = p.id === match.goalkeeperAId || p.position?.toLowerCase() === 'goleiro';
                         const isRealPlayer = !p.id.startsWith('unidentified_') && !p.isPlaceholder;
 
                         return (
-                          <div key={p.id} className={`flex items-center justify-between p-3 rounded-2xl border transition-all group ${p.isPlaceholder ? 'bg-gray-100/30 border-dashed border-gray-200' : 'bg-gray-50/50 border-gray-100 hover:border-blue-200'}`}>
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="relative">
-                                <SoccerJersey color={p.isPlaceholder ? '#ccc' : (teamColor || '#555')} size={20} />
-                                {isGoalkeeper && (
-                                  <div className="absolute -bottom-1 -right-1 bg-white p-0.5 rounded-full shadow-sm">
-                                    <GoalkeeperGlove size={10} className="text-primary-blue" />
+                          <div key={p.id} className={`flex flex-col justify-between p-3 rounded-2xl border transition-all group ${p.isPlaceholder ? 'bg-gray-100/30 border-dashed border-gray-200' : 'bg-gray-50/50 border-gray-100 hover:border-blue-200'}`}>
+                            {/* Inner block 1: Name and Edit/Sub */}
+                            <div className="flex items-center justify-between w-full mb-2">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="relative">
+                                    <SoccerJersey color={p.isPlaceholder ? '#ccc' : (teamColor || '#555')} size={20} />
+                                    {isGoalkeeper && (
+                                      <div className="absolute -bottom-1 -right-1 bg-white w-4 h-4 rounded-full shadow-sm flex items-center justify-center border border-gray-100">
+                                        <span className="text-[9px] font-black text-primary-blue leading-none text-center">G</span>
+                                      </div>
+                                    )}
                                   </div>
-                                )}
-                              </div>
-                              <span className={`text-[12px] font-black uppercase tracking-tight truncate ${isGoalkeeper ? 'text-primary-blue' : (p.isPlaceholder ? 'text-gray-300 italic' : 'text-gray-600')}`}>
-                                {p.nickname || p.name}
-                              </span>
+                                  <span className={`text-[14px] font-black uppercase tracking-tight truncate ${isGoalkeeper ? 'text-primary-blue' : (p.isPlaceholder ? 'text-gray-300 italic' : 'text-gray-600')}`}>
+                                    {p.nickname || p.name}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {!p.id.startsWith('unidentified_') && (
+                                      <button 
+                                        type="button"
+                                        onClick={() => setEditingPlayer({ team: 'A', oldId: p.id })}
+                                        className="w-10 h-10 flex items-center justify-center bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all active:scale-95"
+                                        title="Editar Atleta"
+                                      >
+                                        <Pencil size={18} />
+                                      </button>
+                                   )}
+                                   {isRealPlayer && (
+                                      <button 
+                                        type="button"
+                                        onClick={() => setSubstitutingPlayer({ team: 'A', oldId: p.id })}
+                                        className="w-10 h-10 flex items-center justify-center bg-gray-100 text-gray-400 rounded-xl hover:bg-gray-200 hover:text-primary-blue transition-all active:scale-95"
+                                        title="Substituir ou Vazio"
+                                      >
+                                        <ArrowRightLeft size={18} />
+                                      </button>
+                                   )}
+                                </div>
                             </div>
-                            <div className="flex gap-2 shrink-0">
-                              {!p.id.startsWith('unidentified_') && (
-                                  console.log("Rendering edit button for player:", p.id),
-                                  <button 
-                                    type="button"
-                                    onClick={() => setEditingPlayer({ team: 'A', oldId: p.id })}
-                                    className="w-10 h-10 flex items-center justify-center bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all active:scale-95"
-                                    title="Editar Atleta"
-                                  >
-                                    <Pencil size={16} />
-                                  </button>
-                               )}
-                               {isRealPlayer && (
+                                          {/* Inner block 2: Action buttons */}
+                             <div className="mt-2 w-full">
+                                {p.isPlaceholder ? (
                                   <button 
                                     type="button"
                                     onClick={() => setSubstitutingPlayer({ team: 'A', oldId: p.id })}
-                                    className="w-10 h-10 flex items-center justify-center bg-gray-100 text-gray-400 rounded-xl hover:bg-gray-200 hover:text-primary-blue transition-all active:scale-95"
-                                    title="Substituir ou Vazio"
+                                    className="w-full px-4 py-2 flex items-center justify-center bg-primary-blue/10 text-primary-blue rounded-xl hover:bg-primary-blue text-[12px] font-black uppercase tracking-widest hover:text-white transition-all active:scale-95"
                                   >
-                                    <ArrowRightLeft size={16} />
+                                    Preencher Vaga
                                   </button>
-                               )}
-                               {isRealPlayer && (
-                                  <div className="w-px h-6 bg-gray-200 my-auto mx-1" />
-                               )}
-
-                              {p.isPlaceholder && (
-                                <button 
-                                  type="button"
-                                  onClick={() => setSubstitutingPlayer({ team: 'A', oldId: p.id })}
-                                  className="w-full px-4 py-2 flex items-center justify-center bg-primary-blue/10 text-primary-blue rounded-xl hover:bg-primary-blue text-[10px] font-black uppercase tracking-widest hover:text-white transition-all active:scale-95"
-                                >
-                                  Preencher Vaga
-                                </button>
-                              )}
-
-                              {!p.isPlaceholder && (
-                                <>
-                                  <button 
-                                    type="button"
-                                    onClick={() => addEvent(p.id, 'goal')} 
-                                    className="relative w-12 h-12 flex items-center justify-center bg-green-600 text-white rounded-full hover:bg-green-700 transition-all active:scale-90 shadow-md shadow-green-100"
-                                  >
-                                    {pGoals > 0 && (
-                                      <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-primary-yellow text-primary-blue text-[9px] font-black rounded-full flex items-center justify-center shadow-lg border-2 border-white z-10">
-                                        {pGoals}
-                                      </span>
-                                    )}
-                                    <SoccerBall size={22} />
-                                  </button>
-
-                                  <button 
-                                    type="button"
-                                    onClick={() => addEvent(p.id, 'assist')} 
-                                    className="relative w-12 h-12 flex items-center justify-center bg-orange-100 text-orange-600 rounded-2xl hover:bg-orange-200 transition-all active:scale-90 shadow-md shadow-orange-50 border border-orange-200"
-                                  >
-                                    {pAssists > 0 && (
-                                      <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-primary-blue text-white text-[9px] font-black rounded-full flex items-center justify-center shadow-lg border-2 border-white z-10">
-                                        {pAssists}
-                                      </span>
-                                    )}
-                                    <SoccerCleat size={22} />
-                                  </button>
-                                </>
-                              )}
+                                ) : (
+                                  <div className="flex gap-2 justify-between w-full">
+                                      {isGoalkeeper && (
+                                        <button 
+                                          type="button"
+                                          onClick={() => addEvent(p.id, 'penalty_save')} 
+                                          className="relative w-12 h-12 flex items-center justify-center bg-orange-50 text-orange-600 rounded-2xl hover:bg-orange-100/80 transition-all active:scale-90 shadow-md shadow-orange-100 border border-orange-200"
+                                          title="Defesa de Pênalti"
+                                        >
+                                          {pPenaltySaves > 0 && (
+                                            <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-orange-600 text-white text-[9px] font-black rounded-full flex items-center justify-center shadow-lg border-2 border-white z-10">
+                                              {pPenaltySaves}
+                                            </span>
+                                          )}
+                                          <GoalkeeperGlove size={22} className="text-[#FF4500]" />
+                                        </button>
+                                      )}
+                                      <button 
+                                        type="button"
+                                        onClick={() => addEvent(p.id, 'goal')} 
+                                        className="relative w-12 h-12 flex items-center justify-center bg-green-600 text-white rounded-full hover:bg-green-700 transition-all active:scale-90 shadow-md shadow-green-100"
+                                      >
+                                        {pGoals > 0 && (
+                                          <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-primary-yellow text-primary-blue text-[9px] font-black rounded-full flex items-center justify-center shadow-lg border-2 border-white z-10">
+                                            {pGoals}
+                                          </span>
+                                        )}
+                                        <SoccerBall size={36} />
+                                      </button>
+                                      <button 
+                                        type="button"
+                                        onClick={() => addEvent(p.id, 'assist')} 
+                                        className="relative w-12 h-12 flex items-center justify-center bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition-all active:scale-90 shadow-md shadow-blue-100 border border-blue-200"
+                                      >
+                                        {pAssists > 0 && (
+                                          <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-primary-blue text-white text-[9px] font-black rounded-full flex items-center justify-center shadow-lg border-2 border-white z-10">
+                                            {pAssists}
+                                          </span>
+                                        )}
+                                        <ArrowRight size={36} />
+                                      </button>
+                                      <button 
+                                        type="button"
+                                        onClick={() => addEvent(p.id, 'penalty_miss')} 
+                                        className="relative w-12 h-12 flex items-center justify-center bg-red-50 text-red-600 rounded-2xl hover:bg-red-100/80 transition-all active:scale-90 shadow-md shadow-red-100 border border-red-200"
+                                        title="Pênalti Perdido"
+                                      >
+                                        {pPenaltyMisses > 0 && (
+                                          <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-600 text-white text-[9px] font-black rounded-full flex items-center justify-center shadow-lg border-2 border-white z-10 font-bold">
+                                            {pPenaltyMisses}
+                                          </span>
+                                        )}
+                                        <PenaltyMissIcon size={22} className="text-[#EF4444]" />
+                                      </button>
+                                      <button 
+                                        type="button"
+                                        onClick={() => addEvent(p.id, 'own_goal')} 
+                                        className="relative w-12 h-12 flex items-center justify-center bg-red-600 text-white rounded-2xl hover:bg-red-700 transition-all active:scale-90 shadow-md shadow-red-50 border border-red-200"
+                                      >
+                                        <SoccerBall size={36} />
+                                        <X size={20} className="absolute font-black" strokeWidth={4} />
+                                      </button>
+                                  </div>
+                                )}
                             </div>
                           </div>
                         );
@@ -811,9 +795,9 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
               <div className="space-y-4">
                 <h4 className="text-xs font-black uppercase italic tracking-widest text-primary-blue flex items-center gap-2 px-2">
                   <div className="w-1.5 h-4 rounded-full" style={{ backgroundColor: teamB?.color }} />
-                  Inscrições {teamB?.name}
+                  TIME {teamB?.name}
                 </h4>
-                <div className="bg-white rounded-3xl p-4 border border-gray-100 shadow-sm space-y-2">
+                <div className="rounded-3xl p-4 border border-white/20 shadow-sm space-y-2" style={{ backgroundColor: `${teamB?.color}b2` }}>
                       {[
                         ...[...match.teamB].map(pid => {
                           if (pid.startsWith('empty_')) return { id: pid, nickname: 'POSIÇÃO VAZIA', name: 'POSIÇÃO VAZIA', isPlaceholder: true, position: '' as any };
@@ -844,89 +828,125 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
                         const teamColor = teamB?.color;
                         const pGoals = events.filter(e => e.playerId === p.id && e.type === 'goal').length;
                         const pAssists = events.filter(e => e.playerId === p.id && e.type === 'assist').length;
-                        const isGoalkeeper = p.id === match.goalkeeperBId;
+                        const pPenaltySaves = events.filter(e => e.playerId === p.id && e.type === 'penalty_save').length;
+                        const pPenaltyMisses = events.filter(e => e.playerId === p.id && e.type === 'penalty_miss').length;
+                        const isGoalkeeper = p.id === match.goalkeeperBId || p.position?.toLowerCase() === 'goleiro';
                         const isRealPlayer = !p.id.startsWith('unidentified_') && !p.isPlaceholder;
 
                         return (
-                          <div key={p.id} className={`flex items-center justify-between p-3 rounded-2xl border transition-all group ${p.isPlaceholder ? 'bg-gray-100/30 border-dashed border-gray-200' : 'bg-gray-50/50 border-gray-100 hover:border-blue-200'}`}>
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="relative">
-                                <SoccerJersey color={p.isPlaceholder ? '#ccc' : (teamColor || '#555')} size={20} />
-                                {isGoalkeeper && (
-                                  <div className="absolute -bottom-1 -right-1 bg-white p-0.5 rounded-full shadow-sm">
-                                    <GoalkeeperGlove size={10} className="text-primary-blue" />
+                          <div key={p.id} className={`flex flex-col justify-between p-3 rounded-2xl border transition-all group ${p.isPlaceholder ? 'bg-gray-100/30 border-dashed border-gray-200' : 'bg-gray-50/50 border-gray-100 hover:border-blue-200'}`}>
+                            {/* Inner block 1: Name and Edit/Sub */}
+                            <div className="flex items-center justify-between w-full mb-2">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="relative">
+                                    <SoccerJersey color={p.isPlaceholder ? '#ccc' : (teamColor || '#555')} size={20} />
+                                    {isGoalkeeper && (
+                                      <div className="absolute -bottom-1 -right-1 bg-white w-4 h-4 rounded-full shadow-sm flex items-center justify-center border border-gray-100">
+                                        <span className="text-[9px] font-black text-primary-blue leading-none text-center">G</span>
+                                      </div>
+                                    )}
                                   </div>
-                                )}
-                              </div>
-                              <span className={`text-[12px] font-black uppercase tracking-tight truncate ${isGoalkeeper ? 'text-primary-blue' : (p.isPlaceholder ? 'text-gray-300 italic' : 'text-gray-600')}`}>
-                                {p.nickname || p.name}
-                              </span>
+                                  <span className={`text-[14px] font-black uppercase tracking-tight truncate ${isGoalkeeper ? 'text-primary-blue' : (p.isPlaceholder ? 'text-gray-300 italic' : 'text-gray-600')}`}>
+                                    {p.nickname || p.name}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {!p.id.startsWith('unidentified_') && (
+                                      <button 
+                                        type="button"
+                                        onClick={() => setEditingPlayer({ team: 'B', oldId: p.id })}
+                                        className="w-10 h-10 flex items-center justify-center bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all active:scale-95"
+                                        title="Editar Atleta"
+                                      >
+                                        <Pencil size={18} />
+                                      </button>
+                                   )}
+                                   {isRealPlayer && (
+                                      <button 
+                                        type="button"
+                                        onClick={() => setSubstitutingPlayer({ team: 'B', oldId: p.id })}
+                                        className="w-10 h-10 flex items-center justify-center bg-gray-100 text-gray-400 rounded-xl hover:bg-gray-200 hover:text-primary-blue transition-all active:scale-95"
+                                        title="Substituir ou Vazio"
+                                      >
+                                        <ArrowRightLeft size={18} />
+                                      </button>
+                                   )}
+                                </div>
                             </div>
-                            <div className="flex gap-2 shrink-0">
-                              {!p.id.startsWith('unidentified_') && (
-                                  console.log("Rendering edit button for player B:", p.id),
-                                  <button 
-                                    type="button"
-                                    onClick={() => setEditingPlayer({ team: 'B', oldId: p.id })}
-                                    className="w-10 h-10 flex items-center justify-center bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all active:scale-95"
-                                    title="Editar Atleta"
-                                  >
-                                    <Pencil size={16} />
-                                  </button>
-                               )}
-                               {isRealPlayer && (
+                                   {/* Inner block 2: Action buttons */}
+                             <div className="mt-2 w-full">
+                                {p.isPlaceholder ? (
                                   <button 
                                     type="button"
                                     onClick={() => setSubstitutingPlayer({ team: 'B', oldId: p.id })}
-                                    className="w-10 h-10 flex items-center justify-center bg-gray-100 text-gray-400 rounded-xl hover:bg-gray-200 hover:text-primary-blue transition-all active:scale-95"
-                                    title="Substituir ou Vazio"
+                                    className="w-full px-4 py-2 flex items-center justify-center bg-primary-blue/10 text-primary-blue rounded-xl hover:bg-primary-blue text-[12px] font-black uppercase tracking-widest hover:text-white transition-all active:scale-95"
                                   >
-                                    <ArrowRightLeft size={16} />
+                                    Preencher Vaga
                                   </button>
-                               )}
-                               {isRealPlayer && (
-                                  <div className="w-px h-6 bg-gray-200 my-auto mx-1" />
-                               )}
-
-                              {p.isPlaceholder && (
-                                <button 
-                                  type="button"
-                                  onClick={() => setSubstitutingPlayer({ team: 'B', oldId: p.id })}
-                                  className="w-full px-4 py-2 flex items-center justify-center bg-primary-blue/10 text-primary-blue rounded-xl hover:bg-primary-blue text-[10px] font-black uppercase tracking-widest hover:text-white transition-all active:scale-95"
-                                >
-                                  Preencher Vaga
-                                </button>
-                              )}
-
-                              {!p.isPlaceholder && (
-                                <>
-                                  <button 
-                                    type="button"
-                                    onClick={() => addEvent(p.id, 'goal')} 
-                                    className="relative w-12 h-12 flex items-center justify-center bg-green-600 text-white rounded-full hover:bg-green-700 transition-all active:scale-90 shadow-md shadow-green-100"
-                                  >
-                                    {pGoals > 0 && (
-                                      <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-primary-yellow text-primary-blue text-[9px] font-black rounded-full flex items-center justify-center shadow-lg border-2 border-white z-10">
-                                        {pGoals}
-                                      </span>
-                                    )}
-                                    <SoccerBall size={22} />
-                                  </button>
-
-                                  <button 
-                                    type="button"
-                                    onClick={() => addEvent(p.id, 'assist')} 
-                                    className="relative w-12 h-12 flex items-center justify-center bg-orange-100 text-orange-600 rounded-2xl hover:bg-orange-200 transition-all active:scale-90 shadow-md shadow-orange-50 border border-orange-200"
-                                  >
-                                    {pAssists > 0 && (
-                                      <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-primary-blue text-white text-[9px] font-black rounded-full flex items-center justify-center shadow-lg border-2 border-white z-10">
-                                        {pAssists}
-                                      </span>
-                                    )}
-                                    <SoccerCleat size={22} />
-                                  </button>
-                                </>
-                              )}
+                                ) : (
+                                  <div className="flex gap-2 justify-between w-full">
+                                      {isGoalkeeper && (
+                                        <button 
+                                          type="button"
+                                          onClick={() => addEvent(p.id, 'penalty_save')} 
+                                          className="relative w-12 h-12 flex items-center justify-center bg-orange-50 text-orange-600 rounded-2xl hover:bg-orange-100/80 transition-all active:scale-90 shadow-md shadow-orange-100 border border-orange-200"
+                                          title="Defesa de Pênalti"
+                                        >
+                                          {pPenaltySaves > 0 && (
+                                            <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-orange-600 text-white text-[9px] font-black rounded-full flex items-center justify-center shadow-lg border-2 border-white z-10">
+                                              {pPenaltySaves}
+                                            </span>
+                                          )}
+                                          <GoalkeeperGlove size={22} className="text-[#FF4500]" />
+                                        </button>
+                                      )}
+                                      <button 
+                                        type="button"
+                                        onClick={() => addEvent(p.id, 'goal')} 
+                                        className="relative w-12 h-12 flex items-center justify-center bg-green-600 text-white rounded-full hover:bg-green-700 transition-all active:scale-90 shadow-md shadow-green-100"
+                                      >
+                                        {pGoals > 0 && (
+                                          <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-primary-yellow text-primary-blue text-[9px] font-black rounded-full flex items-center justify-center shadow-lg border-2 border-white z-10">
+                                            {pGoals}
+                                          </span>
+                                        )}
+                                        <SoccerBall size={36} />
+                                      </button>
+                                      <button 
+                                        type="button"
+                                        onClick={() => addEvent(p.id, 'assist')} 
+                                        className="relative w-12 h-12 flex items-center justify-center bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition-all active:scale-90 shadow-md shadow-blue-100 border border-blue-200"
+                                      >
+                                        {pAssists > 0 && (
+                                          <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-primary-blue text-white text-[9px] font-black rounded-full flex items-center justify-center shadow-lg border-2 border-white z-10">
+                                            {pAssists}
+                                          </span>
+                                        )}
+                                        <ArrowRight size={36} />
+                                      </button>
+                                      <button 
+                                        type="button"
+                                        onClick={() => addEvent(p.id, 'penalty_miss')} 
+                                        className="relative w-12 h-12 flex items-center justify-center bg-red-50 text-red-600 rounded-2xl hover:bg-red-100/80 transition-all active:scale-90 shadow-md shadow-red-100 border border-red-200"
+                                        title="Pênalti Perdido"
+                                      >
+                                        {pPenaltyMisses > 0 && (
+                                          <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-600 text-white text-[9px] font-black rounded-full flex items-center justify-center shadow-lg border-2 border-white z-10 font-bold">
+                                            {pPenaltyMisses}
+                                          </span>
+                                        )}
+                                        <PenaltyMissIcon size={22} className="text-[#EF4444]" />
+                                      </button>
+                                      <button 
+                                        type="button"
+                                        onClick={() => addEvent(p.id, 'own_goal')} 
+                                        className="relative w-12 h-12 flex items-center justify-center bg-red-600 text-white rounded-2xl hover:bg-red-700 transition-all active:scale-90 shadow-md shadow-red-50 border border-red-200"
+                                      >
+                                        <SoccerBall size={36} />
+                                        <X size={20} className="absolute font-black" strokeWidth={4} />
+                                      </button>
+                                  </div>
+                                )}
                             </div>
                           </div>
                         );
@@ -962,26 +982,39 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
                       key={i} 
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
-                      className="flex items-center gap-3 pr-2 pl-3 py-2 bg-gray-50 border border-gray-100 rounded-2xl hover:border-red-200 transition-all group shrink-0"
+                      className={`flex items-center gap-3 pr-2 pl-3 py-2 border rounded-2xl transition-all group shrink-0 ${e.type === 'own_goal' ? 'bg-red-500 border-red-600' : 'bg-gray-50 border-gray-100 hover:border-red-200'}`}
                     >
                       <div className="flex items-center gap-2">
                         {e.type === 'goal' ? (
-                          <div className="w-7 h-7 bg-green-50 text-green-600 rounded-full flex items-center justify-center shadow-sm border border-green-100">
-                            <SoccerBall size={15} />
+                          <div className="w-7 h-7 bg-green-600 text-white rounded-full flex items-center justify-center shadow-sm border border-green-700">
+                            <SoccerBall size={20} />
+                          </div>
+                        ) : e.type === 'own_goal' ? (
+                          <div className="relative w-7 h-7 bg-red-600 rounded-full flex items-center justify-center shadow-sm border border-red-700">
+                            <SoccerBall size={20} className="text-white" />
+                            <X size={14} className="absolute text-white font-black" strokeWidth={4} />
+                          </div>
+                        ) : e.type === 'penalty_save' ? (
+                          <div className="w-7 h-7 bg-orange-50 text-[#FF4500] rounded-full flex items-center justify-center shadow-sm border border-orange-200">
+                            <GoalkeeperGlove size={16} className="text-[#FF4500] font-black" />
+                          </div>
+                        ) : e.type === 'penalty_miss' ? (
+                          <div className="w-7 h-7 bg-red-50 text-[#EF4444] rounded-full flex items-center justify-center shadow-sm border border-red-200">
+                            <PenaltyMissIcon size={14} className="text-[#EF4444] font-black" />
                           </div>
                         ) : (
-                          <div className="w-7 h-7 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center shadow-sm border border-orange-100">
-                            <SoccerCleat size={15} />
+                          <div className="w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-sm border border-blue-700">
+                            <ArrowRight size={20} />
                           </div>
                         )}
-                        <span className="text-[10px] font-black uppercase tracking-tight text-primary-blue max-w-[120px] truncate">
+                        <span className={`text-[10px] font-black uppercase tracking-tight max-w-[120px] truncate ${e.type === 'own_goal' ? 'text-white' : 'text-primary-blue'}`}>
                           {p.nickname || p.name}
                         </span>
                       </div>
                       <button 
                          type="button"
                         onClick={() => removeEvent(i)} 
-                        className="w-6 h-6 bg-white rounded-full flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all"
+                        className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${e.type === 'own_goal' ? 'bg-red-400 text-white hover:bg-red-300' : 'bg-white text-gray-300 hover:text-red-500 hover:bg-red-50'}`}
                       >
                         <X size={12} />
                       </button>
@@ -1045,6 +1078,11 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
                             <span className="text-[10px] font-black uppercase tracking-tight text-gray-600 truncate w-full">
                               {p.nickname || p.name}
                             </span>
+                            {p.position && (
+                              <span className={`text-[8px] font-extrabold uppercase tracking-widest ${getPositionColor(p.position)}`}>
+                                {getPositionAbbr(p.position)}
+                              </span>
+                            )}
                           </button>
                         ))
                       }
@@ -1090,6 +1128,11 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
                           >
                             <SoccerJersey color={p.position ? '#555' : '#ccc'} size={24} />
                             <span className="text-[11px] font-black uppercase tracking-tight text-gray-700">{p.nickname || p.name}</span>
+                            {p.position && (
+                              <span className={`text-[8px] font-extrabold uppercase tracking-widest ${getPositionColor(p.position)}`}>
+                                {getPositionAbbr(p.position)}
+                              </span>
+                            )}
                           </button>
                         ))}
                     </div>
@@ -1117,7 +1160,10 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
               <MapPin className="w-4 h-4 text-primary-yellow ml-3" />
               <select
                 value={selectedLocationId}
-                onChange={(e) => setSelectedLocationId(e.target.value)}
+                onChange={(e) => {
+                  setSelectedLocationId(e.target.value);
+                  setVisibleCount(10);
+                }}
                 className="bg-transparent text-primary-blue text-[10px] font-black uppercase tracking-widest py-3 px-4 outline-none border-none focus:ring-0 cursor-pointer"
               >
                 <option value="all">Todos os Locais</option>
@@ -1150,8 +1196,9 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
           ) : (
           matches
             .filter(m => selectedLocationId === 'all' || m.locationId === selectedLocationId)
+            .slice(0, visibleCount)
             .map((match) => {
-              const matchLocation = locations.find(l => l.id === match.locationId);
+              const matchLocation = sharedLocations.find(l => l.id === match.locationId);
               return (
               <motion.div 
                 layout
@@ -1361,6 +1408,17 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
             })
           )}
         </div>
+
+        {matches.filter(m => selectedLocationId === 'all' || m.locationId === selectedLocationId).length > visibleCount && (
+          <div className="flex justify-center pt-8">
+            <button
+              onClick={() => setVisibleCount(prev => prev + 10)}
+              className="bg-white hover:bg-gray-50 text-primary-blue border-2 border-primary-blue/10 hover:border-primary-blue/20 px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] md:text-sm transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              Carregar Mais Partidas
+            </button>
+          </div>
+        )}
 
       {/* New Match Modal */}
       <AnimatePresence>
@@ -1736,9 +1794,9 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
         onSaveDraft={(...args) => onConfirmPlayerSelection(...args, true)}
         players={players}
         allTeams={teams}
-        allLocations={locations}
+        allLocations={sharedLocations}
         locationId={locationId}
-        playerCount={locations.find(l => l.id === locationId)?.playerCount || 5}
+        playerCount={sharedLocations.find(l => l.id === locationId)?.playerCount || 5}
         initialStep={editingMatch ? 4 : (matchChoiceType === 'manual' ? 4 : 3)} // If manual, skip to Step 4 (Team Selection). If random, stay at Step 3 (Division Mode) with Random selected.
         initialDivisionMode={matchChoiceType}
         initialData={editingMatch ? {
@@ -1812,6 +1870,8 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
                   players={players}
                   matchDate={matchForLineup.date}
                   matchTime={matchForLineup.time}
+                  teamAName={teams.find(t => t.id === matchForLineup.teamAId)?.name}
+                  teamBName={teams.find(t => t.id === matchForLineup.teamBId)?.name}
                 />
               </div>
 

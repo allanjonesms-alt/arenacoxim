@@ -16,17 +16,26 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.email_verified == true;
     }
 
-    function isMaster() {
-      return isEmailVerified() && 
-             (request.auth.token.email.lower() == "allanjonesms@gmail.com");
+    function isAdmin() {
+      return request.auth != null && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email != null && (
+          exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower())) ||
+          exists(/databases/$(database)/documents/admins/$(request.auth.token.email))
+        )) ||
+        isMaster()
+      );
     }
 
-    function isAdmin() {
-      return isMaster() || exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    function isMaster() {
+      return request.auth != null && (
+         request.auth.uid == '8I83FFoO4ASDc1vh2rN8fBN8AzE2' ||
+         (request.auth.token.email != null && request.auth.token.email.lower() == 'allanjonesms@gmail.com')
+      );
     }
 
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_-]+$');
     }
 
     function incoming() {
@@ -40,19 +49,42 @@ service cloud.firestore {
     // --- Entity Specific Validators ---
 
     function isValidPlayer(data) {
-      return data.keys().hasAll(['name', 'position']) &&
+      return (!('name' in data) || (data.name is string && data.name.size() > 0 && data.name.size() <= 200)) &&
+             (!('position' in data) || (data.position in ['goleiro', 'zagueiro', 'lateral', 'meio-campo', 'centroavante'])) &&
+             (!('nickname' in data) || (data.nickname is string && data.nickname.size() <= 100)) &&
+             (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 6000000)) &&
+             (!('cardBgUrl' in data) || (data.cardBgUrl is string && data.cardBgUrl.size() <= 6000000)) &&
+             (!('gmail' in data) || (data.gmail is string && data.gmail.size() <= 200)) &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 100));
+    }
+
+    function isValidPlayerUpdate(newData, oldData) {
+      return (!('name' in newData && newData.name != oldData.name) || (newData.name is string && newData.name.size() > 0 && newData.name.size() <= 200)) &&
+             (!('position' in newData && newData.position != oldData.position) || (newData.position in ['goleiro', 'zagueiro', 'lateral', 'meio-campo', 'centroavante'])) &&
+             (!('nickname' in newData && newData.nickname != oldData.nickname) || (newData.nickname is string && newData.nickname.size() <= 100)) &&
+             (!('photoUrl' in newData && newData.photoUrl != oldData.photoUrl) || (newData.photoUrl is string && newData.photoUrl.size() <= 6000000)) &&
+             (!('cardBgUrl' in newData && newData.cardBgUrl != oldData.cardBgUrl) || (newData.cardBgUrl is string && newData.cardBgUrl.size() <= 6000000)) &&
+             (!('gmail' in newData && newData.gmail != oldData.gmail) || (newData.gmail is string && newData.gmail.size() <= 200)) &&
+             (!('phone' in newData && newData.phone != oldData.phone) || (newData.phone is string && newData.phone.size() <= 100));
+    }
+
+    function isValidPlayerCreate(data) {
+      return data.keys().hasAll(['name', 'position']) && isValidPlayer(data);
+    }
+
+    function isValidCard(data) {
+      return data.keys().hasAll(['name', 'imageUrl']) &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
-             data.position in ['goleiro', 'defensor', 'atacante'] &&
-             (!data.keys().contains('nickname') || (data.nickname is string && data.nickname.size() <= 100)) &&
-             (!data.keys().contains('photoUrl') || (data.photoUrl is string && data.photoUrl.size() <= 1000));
+             data.imageUrl is string && data.imageUrl.size() <= 6000000 &&
+             (!('createdAt' in data) || data.createdAt != null);
     }
 
     function isValidMatch(data) {
-      return data.keys().hasAll(['date', 'time', 'locationId', 'status', 'createdAt']) &&
+      return data.keys().hasAll(['date', 'time', 'locationId', 'status']) &&
              data.date is string && data.time is string &&
              data.locationId is string &&
              data.status in ['scheduled', 'live', 'finished'] &&
-             data.createdAt is number;
+             (!('createdAt' in data) || data.createdAt != null);
     }
 
     function isValidLocation(data) {
@@ -72,42 +104,123 @@ service cloud.firestore {
              data.locationId is string;
     }
 
+    function isValidNews(data) {
+      return data.keys().hasAll(['title', 'content']) &&
+             data.title is string && data.title.size() > 0 &&
+             data.content is string && data.content.size() > 0 &&
+             (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 6000000));
+    }
+
+    function isValidBanner(data) {
+      return data.keys().hasAll([
+          'imageUrlDesktop',
+          'imageUrlMobile',
+          'link',
+          'active'
+     ]);  
+    }
+
     // --- Routes ---
 
     match /players/{playerId} {
-      allow read, list: if true;
-      allow create, update: if isAdmin() && isValidPlayer(incoming());
-      allow delete: if isAdmin();
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isSignedIn() && (
+          // Case 1: First-time linking
+          (
+            (!('gmail' in resource.data) || resource.data.gmail == null || resource.data.gmail == '') &&
+            request.resource.data.gmail == request.auth.token.email &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['gmail'])
+          ) ||
+          // Case 2: Already linked user editing their own birthDate/phone
+          (
+            resource.data.gmail == request.auth.token.email &&
+            request.resource.data.gmail == resource.data.gmail &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['birthDate', 'phone'])
+          )
+        )
+      );
     }
 
     match /matches/{matchId} {
-      allow read, list: if true;
-      allow create, update: if isAdmin() && isValidMatch(incoming());
-      allow delete: if isAdmin();
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     match /teams/{teamId} {
-      allow read, list: if true;
-      allow create, update: if isAdmin() && isValidTeam(incoming());
-      allow delete: if isAdmin();
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /news/{newsId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // --- Regras Temporárias de Diagnóstico ---
+    match /news_test_c1/{id} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /news_test_c2/{id} {
+      allow read, write: if request.auth != null && request.auth.uid == '8I83FFoO4ASDc1vh2rN8fBN8AzE2';
+    }
+
+    match /news_test_c3/{id} {
+      allow read, write: if request.auth != null && request.auth.token.email != null && request.auth.token.email.lower() == 'allanjonesms@gmail.com';
+    }
+
+    match /news_test_c4/{id} {
+      allow read, write: if request.auth != null && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    match /cards/{cardId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     match /locations/{locationId} {
-      allow read, list: if true;
-      allow create, update: if isAdmin() && isValidLocation(incoming());
-      allow delete: if isAdmin();
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     match /admins/{adminId} {
       allow get: if isSignedIn();
-      allow list: if isAdmin();
-      allow create, update: if (isMaster() || (isSignedIn() && request.auth.uid == adminId)) && isValidAdminEntry(incoming());
-      allow delete: if isMaster();
+      allow list: if isSignedIn();
+      allow write: if isAdmin() || (isSignedIn() && request.auth.uid == adminId);
     }
 
+    match /odds_simulation_history/{docId} {
+      allow read, write: if isAdmin();
+    }
     match /settings/{settingId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    match /monthlyAwards/{awardId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (request.resource != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['clicks']));
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId || isAdmin();
+    }
+    match /bets/{betId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+    match /transactions/{txId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
     }
   }
 }

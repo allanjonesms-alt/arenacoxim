@@ -8,7 +8,10 @@
         "name": { "type": "string", "description": "Full name of the player" },
         "nickname": { "type": "string", "description": "Nickname of the player" },
         "position": { "type": "string", "enum": ["goleiro", "defensor", "atacante"], "description": "Player's preferred position" },
+        "gmail": { "type": "string", "description": "Player's Google email for authentication linkage" },
+        "phone": { "type": "string", "description": "Player's phone/WhatsApp number" },
         "photoUrl": { "type": "string", "description": "URL to player's photo" },
+        "cardBgUrl": { "type": "string", "description": "Dynamic background card theme image URL/base64" },
         "stats": {
           "type": "object",
           "properties": {
@@ -119,6 +122,43 @@
         "updatedAt": { "type": "integer" }
       },
       "required": ["win", "draw", "goal", "assist", "cleanSheet", "mvp"]
+    },
+    "News": {
+      "title": "News",
+      "description": "Fast news for the home page",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["title", "content", "createdAt"]
+    },
+    "Card": {
+      "title": "Card",
+      "description": "Custom card background images representing themes for athletes",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["name", "imageUrl", "createdAt"]
+    },
+    "Banner": {
+      "title": "Banner",
+      "description": "Advertising or informational banner",
+      "type": "object",
+      "properties": {
+        "imageUrlDesktop": { "type": "string", "description": "Base64 or URL of desktop image" },
+        "imageUrlMobile": { "type": "string", "description": "Base64 or URL of mobile image" },
+        "link": { "type": "string", "description": "Destination URL on click" },
+        "active": { "type": "boolean", "description": "Whether banner is active and visible" },
+        "clicks": { "type": "integer", "description": "Total number of clicks" },
+        "createdAt": { "type": "integer", "description": "Timestamp when banner was created" }
+      },
+      "required": ["imageUrlDesktop", "imageUrlMobile", "link", "active"]
     }
   },
   "firestore": {
@@ -145,6 +185,18 @@
     "/settings/scoring": {
       "schema": "ScoringRules",
       "description": "Global scoring rules configuration"
+    },
+    "/news/{newsId}": {
+      "schema": "News",
+      "description": "Collection of fast news"
+    },
+    "/cards/{cardId}": {
+      "schema": "Card",
+      "description": "Collection of custom athlete card backgrounds"
+    },
+    "/banners/{bannerId}": {
+      "schema": "Banner",
+      "description": "Collection of promotional/informational banners"
     }
   }
 }

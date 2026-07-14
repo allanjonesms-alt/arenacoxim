@@ -295,7 +295,7 @@ export const RandomSelectionModal: React.FC<RandomSelectionModalProps> = ({
                       {currentSelection.position === 'goleiro' ? 'GOLEIRO' : 'JOGADOR'}
                     </p>
                     <span className="bg-white/20 px-2 rounded-md text-white text-[10px] font-black italic border border-white/30 backdrop-blur-sm">
-                      {calculateGrade(currentSelection.overallStats, currentSelection.stats.points / (currentSelection.stats.matches || 1)).grade}
+                      {(currentSelection.overallValue || parseInt(calculateGrade(currentSelection.overallStats, currentSelection.stats.points / (currentSelection.stats.matches || 1)).grade) || 75).toString().padStart(2, '0')}
                     </span>
                   </div>
                   <div className="relative z-10 mt-3 md:mt-6 px-3 md:px-5 py-1 md:py-2 rounded-lg md:rounded-xl text-[8px] md:text-[10px] font-black uppercase tracking-widest bg-white text-primary-blue shadow-lg">
