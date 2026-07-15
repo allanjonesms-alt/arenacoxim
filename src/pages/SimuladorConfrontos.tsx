@@ -314,7 +314,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
     // However, if the admin adjusted manual volume, maybe they want to start with that?
     // Let's just save the BASE odds (without volume adjustment) so public area has a starting point.
     // Or we just save the current calculated odds.
-    const isCurrentlyEnabled = selectedMatch.bettingMarkets?.matchWinner?.enabled;
+    const isCurrentlyEnabled = selectedMatch.bettingMarkets?.matchWinner?.enabled || false;
     const newEnabled = !isCurrentlyEnabled;
     
     try {
@@ -340,6 +340,54 @@ export default function SimuladorConfrontos({ adminData }: Props) {
     } catch (err) {
       console.error(err);
       alert("Erro ao atualizar disponibilidade da aposta.");
+    }
+  };
+
+  const handleTogglePlayerGoalsMarket = async () => {
+    if (!selectedMatch) {
+      alert("Selecione uma partida.");
+      return;
+    }
+    const isCurrentlyEnabled = selectedMatch.bettingMarkets?.playerGoals?.enabled || false;
+    const newEnabled = !isCurrentlyEnabled;
+    try {
+      const matchRef = doc(db, 'matches', selectedMatch.id);
+      const newMarkets = {
+        ...(selectedMatch.bettingMarkets || {}),
+        playerGoals: {
+          enabled: newEnabled
+        }
+      };
+      await updateDoc(matchRef, { bettingMarkets: newMarkets });
+      alert(newEnabled ? 'Mercado de Gols habilitado para esta partida!' : 'Mercado de Gols desabilitado para esta partida.');
+      setSelectedMatch({...selectedMatch, bettingMarkets: newMarkets});
+    } catch (err: any) {
+      console.error(err);
+      alert("Erro ao atualizar mercado de gols: " + err.message);
+    }
+  };
+
+  const handleTogglePlayerAssistsMarket = async () => {
+    if (!selectedMatch) {
+      alert("Selecione uma partida.");
+      return;
+    }
+    const isCurrentlyEnabled = selectedMatch.bettingMarkets?.playerAssists?.enabled || false;
+    const newEnabled = !isCurrentlyEnabled;
+    try {
+      const matchRef = doc(db, 'matches', selectedMatch.id);
+      const newMarkets = {
+        ...(selectedMatch.bettingMarkets || {}),
+        playerAssists: {
+          enabled: newEnabled
+        }
+      };
+      await updateDoc(matchRef, { bettingMarkets: newMarkets });
+      alert(newEnabled ? 'Mercado de Assistências habilitado para esta partida!' : 'Mercado de Assistências desabilitado para esta partida.');
+      setSelectedMatch({...selectedMatch, bettingMarkets: newMarkets});
+    } catch (err: any) {
+      console.error(err);
+      alert("Erro ao atualizar mercado de assistências: " + err.message);
     }
   };
   const handleSaveSimulation = async () => {
@@ -401,7 +449,12 @@ export default function SimuladorConfrontos({ adminData }: Props) {
 
   const filteredMatches = matches
     .filter(m => selectedLocationId === 'all' || m.locationId === selectedLocationId)
-    .sort((a, b) => new Date(`${b.date}T${b.time || '00:00'}`).getTime() - new Date(`${a.date}T${a.time || '00:00'}`).getTime());
+    .sort((a, b) => {
+      const timeA = a.createdAt || new Date(`${a.date}T${a.time || '00:00'}`).getTime() || 0;
+      const timeB = b.createdAt || new Date(`${b.date}T${b.time || '00:00'}`).getTime() || 0;
+      return timeB - timeA;
+    })
+    .slice(0, 6);
 
   const handleSelectMatch = (match: Match) => {
     setSelectedMatch(match);
@@ -548,14 +601,14 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                 <div></div>
                 <h3 className="text-center text-xs font-black uppercase tracking-[0.2em] text-gray-400">Projeção de Apostas</h3>
                 <button 
-                  onClick={() => handleToggleBetMarket('matchWinner')}
+                  onClick={handleToggleMatchWinnerMarket}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-wider transition-all ${
-                    betSettings.matchWinner
+                    selectedMatch?.bettingMarkets?.matchWinner?.enabled
                       ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
                       : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}
                 >
-                  {betSettings.matchWinner ? <><Zap className="w-3 h-3" /> Público (ON)</> : <><Shield className="w-3 h-3" /> Público (OFF)</>}
+                  {selectedMatch?.bettingMarkets?.matchWinner?.enabled ? <><Zap className="w-3 h-3" /> Público (ON)</> : <><Shield className="w-3 h-3" /> Público (OFF)</>}
                 </button>
               </div>
               
@@ -650,24 +703,24 @@ export default function SimuladorConfrontos({ adminData }: Props) {
             <h3 className="text-sm font-black uppercase tracking-widest text-gray-600">Desempenho Individual</h3>
             <div className="flex gap-2">
               <button 
-                onClick={() => handleToggleBetMarket('playerGoals')}
+                onClick={handleTogglePlayerGoalsMarket}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-wider transition-all ${
-                  betSettings.playerGoals
+                  selectedMatch?.bettingMarkets?.playerGoals?.enabled
                     ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
                     : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                 }`}
               >
-                Gols: {betSettings.playerGoals ? 'ON' : 'OFF'}
+                Gols: {selectedMatch?.bettingMarkets?.playerGoals?.enabled ? 'ON' : 'OFF'}
               </button>
               <button 
-                onClick={() => handleToggleBetMarket('playerAssists')}
+                onClick={handleTogglePlayerAssistsMarket}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-wider transition-all ${
-                  betSettings.playerAssists
+                  selectedMatch?.bettingMarkets?.playerAssists?.enabled
                     ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
                     : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                 }`}
               >
-                Assistências: {betSettings.playerAssists ? 'ON' : 'OFF'}
+                Assistências: {selectedMatch?.bettingMarkets?.playerAssists?.enabled ? 'ON' : 'OFF'}
               </button>
             </div>
           </div>

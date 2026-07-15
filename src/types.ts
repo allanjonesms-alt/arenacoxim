@@ -56,6 +56,12 @@ export interface Match {
       baseOddDraw: number;
       baseOddB: number;
     };
+    playerGoals?: {
+      enabled: boolean;
+    };
+    playerAssists?: {
+      enabled: boolean;
+    };
   };
   createdAt: number;
 }
