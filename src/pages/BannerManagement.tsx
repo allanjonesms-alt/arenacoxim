@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
-import { collection, query, getDocs, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, getDocs, doc, setDoc, deleteDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../App';
-import { Save, Plus, Trash2, Edit2, Loader2, Link2, Eye, EyeOff, Activity } from 'lucide-react';
+import { Save, Plus, Trash2, Edit2, Loader2, Link2, Eye, EyeOff, Activity, Trophy, Settings } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export interface Banner {
@@ -15,6 +15,7 @@ export interface Banner {
 }
 
 export default function BannerManagement() {
+  const [activeTab, setActiveTab] = useState<'banners' | 'promo'>('banners');
   const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -32,9 +33,103 @@ export default function BannerManagement() {
     imageUrlMobile: ''
   });
 
+  const [promoConfig, setPromoConfig] = useState({
+    active: true,
+    imageUrl: '',
+    link: 'https://docs.google.com/forms/d/e/1FAIpQLSfJFjmpcdmGpk6Ayc_m6ksYbjY7REyDgTd1OHIbGFYAyNKEfQ/viewform?usp=header',
+    title: '10º Torneio e Churrasco ACS',
+    eventDate: '15 de Agosto',
+    closingDate: '27 de Julho',
+    description: 'Um dia de futebol, amizade e bom churrasco!'
+  });
+  const [isSavingPromo, setIsSavingPromo] = useState(false);
+
   useEffect(() => {
     fetchBanners();
+    fetchPromoConfig();
   }, []);
+
+  const fetchPromoConfig = async () => {
+    try {
+      const docSnap = await getDoc(doc(db, 'settings', 'promo_popup'));
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setPromoConfig({
+          active: data.active ?? true,
+          imageUrl: data.imageUrl || '',
+          link: data.link || 'https://docs.google.com/forms/d/e/1FAIpQLSfJFjmpcdmGpk6Ayc_m6ksYbjY7REyDgTd1OHIbGFYAyNKEfQ/viewform?usp=header',
+          title: data.title || '10º Torneio e Churrasco ACS',
+          eventDate: data.eventDate || '15 de Agosto',
+          closingDate: data.closingDate || '27 de Julho',
+          description: data.description || 'Um dia de futebol, amizade e bom churrasco!'
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching promo config:", error);
+    }
+  };
+
+  const handlePromoImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const ratio = img.height / img.width;
+          const targetWidth = Math.min(img.width, 800);
+          const targetHeight = targetWidth * ratio;
+          
+          const canvas = document.createElement('canvas');
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#f9fafb';
+            ctx.fillRect(0, 0, targetWidth, targetHeight);
+            ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+            const base64 = canvas.toDataURL('image/jpeg', 0.85);
+            setPromoConfig(prev => ({ ...prev, imageUrl: base64 }));
+          }
+        } catch (err) {
+          console.error("Error processing promo image:", err);
+          alert("Erro ao processar imagem.");
+        }
+      };
+      img.onerror = () => {
+        alert("Erro ao carregar a imagem. Verifique se o arquivo é válido.");
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSavePromo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingPromo(true);
+    try {
+      let validLink = promoConfig.link.trim();
+      if (validLink && !validLink.startsWith('http://') && !validLink.startsWith('https://')) {
+        validLink = 'https://' + validLink;
+      }
+      
+      const updatedConfig = {
+        ...promoConfig,
+        link: validLink
+      };
+      
+      await setDoc(doc(db, 'settings', 'promo_popup'), updatedConfig, { merge: true });
+      setPromoConfig(updatedConfig);
+      alert("Configurações do Pop-up salvas com sucesso!");
+    } catch (error) {
+      console.error("Error saving promo config:", error);
+      alert("Erro ao salvar configurações do pop-up: " + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setIsSavingPromo(false);
+    }
+  };
 
   const fetchBanners = async () => {
     setLoading(true);
@@ -218,21 +313,195 @@ export default function BannerManagement() {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      
+      {/* Header with Tabs */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-150 pb-5">
         <div>
-          <h2 className="text-3xl font-black uppercase italic tracking-tight text-primary-blue">Banners</h2>
-          <p className="text-gray-500 text-sm font-medium">Cadastre promoções e patrocínios (ex: Shopee)</p>
+          <h2 className="text-3xl font-black uppercase italic tracking-tight text-primary-blue">Banners e Promoções</h2>
+          <p className="text-gray-500 text-sm font-medium">Controle os banners rotativos e pop-ups promocionais do site</p>
         </div>
-        <button
-          onClick={openNewModal}
-          className="flex items-center gap-2 bg-primary-yellow hover:bg-yellow-400 text-black px-6 py-3 rounded-2xl font-black uppercase tracking-widest shadow-sm hover:shadow transition-all"
-        >
-          <Plus className="w-5 h-5" />
-          Novo Banner
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3 self-start sm:self-auto items-stretch sm:items-center">
+          <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200 shadow-sm shrink-0">
+            <button
+              onClick={() => setActiveTab('banners')}
+              className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                activeTab === 'banners'
+                  ? 'bg-primary-blue text-white shadow-sm'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              Banners Gerais
+            </button>
+            <button
+              onClick={() => setActiveTab('promo')}
+              className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                activeTab === 'promo'
+                  ? 'bg-primary-blue text-white shadow-sm'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              <Trophy className="w-3.5 h-3.5" />
+              Pop-up do Torneio
+            </button>
+          </div>
+          
+          {activeTab === 'banners' && (
+            <button
+              onClick={openNewModal}
+              className="flex items-center justify-center gap-2 bg-primary-yellow hover:bg-yellow-400 text-black px-6 py-3 rounded-2xl font-black uppercase tracking-widest shadow-sm hover:shadow transition-all"
+            >
+              <Plus className="w-5 h-5" />
+              Novo Banner
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {activeTab === 'promo' ? (
+        <form onSubmit={handleSavePromo} className="bg-white rounded-[2rem] border border-gray-100 p-8 shadow-sm max-w-3xl space-y-6 mx-auto animate-in fade-in duration-300">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+            <h3 className="font-black uppercase italic text-base text-primary-blue flex items-center gap-2">
+              <Settings className="w-5 h-5 text-primary-yellow animate-spin-slow" />
+              Configurações do Pop-up do Torneio
+            </h3>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={promoConfig.active}
+                onChange={(e) => setPromoConfig(prev => ({ ...prev, active: e.target.checked }))}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-blue"></div>
+              <span className="ml-3 text-xs font-black uppercase tracking-wider text-gray-700">
+                {promoConfig.active ? 'Ativo' : 'Inativo'}
+              </span>
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest pl-1">Título do Evento</label>
+                <input 
+                  type="text" 
+                  value={promoConfig.title}
+                  onChange={(e) => setPromoConfig(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="Ex: 10º Torneio e Churrasco ACS"
+                  className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-3 px-4 outline-none focus:ring-4 focus:ring-primary-blue/5 focus:border-primary-blue/20 transition-all font-semibold text-primary-gray"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest pl-1">Descrição/Subtítulo</label>
+                <textarea 
+                  value={promoConfig.description}
+                  onChange={(e) => setPromoConfig(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Ex: Um dia inesquecível de muito futebol, amizade e o melhor churrasco!"
+                  className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-3 px-4 outline-none focus:ring-4 focus:ring-primary-blue/5 focus:border-primary-blue/20 transition-all font-semibold text-primary-gray h-24 resize-none"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest pl-1">Data do Evento</label>
+                  <input 
+                    type="text" 
+                    value={promoConfig.eventDate}
+                    onChange={(e) => setPromoConfig(prev => ({ ...prev, eventDate: e.target.value }))}
+                    placeholder="Ex: 15 de Agosto"
+                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-3 px-4 outline-none focus:ring-4 focus:ring-primary-blue/5 focus:border-primary-blue/20 transition-all font-semibold text-primary-gray"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest pl-1">Prazo de Inscrição</label>
+                  <input 
+                    type="text" 
+                    value={promoConfig.closingDate}
+                    onChange={(e) => setPromoConfig(prev => ({ ...prev, closingDate: e.target.value }))}
+                    placeholder="Ex: 27 de Julho"
+                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-3 px-4 outline-none focus:ring-4 focus:ring-primary-blue/5 focus:border-primary-blue/20 transition-all font-semibold text-primary-gray"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest pl-1">Link do Google Forms (Inscrição)</label>
+                <div className="relative">
+                  <Link2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input 
+                    type="text" 
+                    value={promoConfig.link}
+                    onChange={(e) => setPromoConfig(prev => ({ ...prev, link: e.target.value }))}
+                    placeholder="https://docs.google.com/forms/..."
+                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-3 pl-11 pr-4 outline-none focus:ring-4 focus:ring-primary-blue/5 focus:border-primary-blue/20 transition-all font-semibold text-primary-gray"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-3xl p-6 bg-gray-50 relative group min-h-[300px]">
+              {promoConfig.imageUrl ? (
+                <div className="space-y-4 w-full flex flex-col items-center">
+                  <div className="relative max-w-[200px] rounded-2xl overflow-hidden border border-gray-150 shadow-md aspect-[3/4] bg-white">
+                    <img 
+                      src={promoConfig.imageUrl} 
+                      alt="Cartaz original enviado" 
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPromoConfig(prev => ({ ...prev, imageUrl: '' }))}
+                      className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white px-2.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors shadow-lg"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider text-center">Imagem Original Carregada</p>
+                </div>
+              ) : (
+                <div className="text-center space-y-4 relative w-full h-full flex flex-col items-center justify-center">
+                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center border border-gray-100 shadow-md mx-auto group-hover:scale-110 transition-transform">
+                    <Trophy className="w-8 h-8 text-primary-blue" />
+                  </div>
+                  <div>
+                    <span className="bg-primary-blue hover:bg-blue-900 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer shadow-md inline-block">
+                      Selecionar Cartaz Original
+                    </span>
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={handlePromoImageUpload}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    />
+                  </div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider max-w-[180px] mx-auto leading-normal">
+                    Arraste ou clique para enviar a imagem original (não modificada por IA)
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-4 border-t border-gray-100">
+            <button
+              type="submit"
+              disabled={isSavingPromo}
+              className="flex items-center gap-2 bg-primary-blue hover:bg-blue-900 text-white px-8 py-3.5 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-blue-100 transition-all disabled:opacity-50"
+            >
+              {isSavingPromo ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Save className="w-5 h-5 text-primary-yellow" />
+              )}
+              Salvar Configurações
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-300">
         {banners.length === 0 ? (
           <div className="col-span-full p-12 text-center bg-white rounded-3xl border border-gray-100 italic text-gray-400 font-medium">
             Nenhum banner cadastrado. Clique em Novo Banner para adicionar.
@@ -318,6 +587,7 @@ export default function BannerManagement() {
           ))
         )}
       </div>
+    )}
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

@@ -229,7 +229,7 @@ function MatchDetailsModal({ match, players, teams, locations, cards, isAdmin, o
                 <div className="flex flex-col min-w-0">
                   <div className="font-black uppercase tracking-tight text-[10px] md:text-sm truncate w-full" style={{ color: teamAEntity?.color }}>{teamAEntity?.name}</div>
                   <div className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1 mt-0.5">
-                    OVR <span className="text-[11px] md:text-[13px] font-black italic tracking-tighter text-[#a52a2a] tabular-nums">{avgOverallA}</span>
+                    OVR MÉDIO <span className="text-[11px] md:text-[13px] font-black italic tracking-tighter text-[#a52a2a] tabular-nums">{avgOverallA}</span>
                   </div>
                 </div>
               </div>
@@ -242,7 +242,7 @@ function MatchDetailsModal({ match, players, teams, locations, cards, isAdmin, o
                 <div className="flex flex-col min-w-0 items-end">
                   <div className="font-black uppercase tracking-tight text-[10px] md:text-sm truncate w-full text-right" style={{ color: teamBEntity?.color }}>{teamBEntity?.name}</div>
                   <div className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1 mt-0.5 justify-end">
-                    OVR <span className="text-[11px] md:text-[13px] font-black italic tracking-tighter text-[#a52a2a] tabular-nums">{avgOverallB}</span>
+                    OVR MÉDIO <span className="text-[11px] md:text-[13px] font-black italic tracking-tighter text-[#a52a2a] tabular-nums">{avgOverallB}</span>
                   </div>
                 </div>
                 <div className="w-8 h-8 md:w-10 md:h-10 flex-shrink-0">

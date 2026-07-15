@@ -18,12 +18,13 @@ import {
 , Star, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { AdminData, News, Location, Team, ScoringRules, Player, Card } from '../types';
-import { collection, query, orderBy, onSnapshot, deleteDoc, doc, where } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, deleteDoc, doc, where, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { handleFirestoreError, OperationType } from '../App';
 import PublicDashboard from './PublicDashboard';
 import { ScheduledMatchesOdds } from '../components/ScheduledMatchesOdds';
 import ShopeeBanner from '../components/ShopeeBanner';
+import churrascoPoster from '../assets/images/churrasco_torneio_poster_1784130670700.jpg';
 
 interface HomeHubProps {
   user: any;
@@ -37,10 +38,50 @@ interface HomeHubProps {
 export default function HomeHub({ user, isAdmin, adminData, sharedLocations = [], sharedTeams = [], sharedScoringRules = null }: HomeHubProps) {
   const isMaster = adminData?.role === 'master';
   const [showBettingModal, setShowBettingModal] = useState(false);
+  const [showPromoPopup, setShowPromoPopup] = useState(() => {
+    try {
+      return !sessionStorage.getItem('dismissedChurrascoPromo');
+    } catch {
+      return true;
+    }
+  });
   const [news, setNews] = useState<News[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const [promoConfig, setPromoConfig] = useState({
+    active: true,
+    imageUrl: '',
+    link: 'https://docs.google.com/forms/d/e/1FAIpQLSfJFjmpcdmGpk6Ayc_m6ksYbjY7REyDgTd1OHIbGFYAyNKEfQ/viewform?usp=header',
+    title: '10º Torneio e Churrasco ACS',
+    eventDate: '15 de Agosto',
+    closingDate: '27 de Julho',
+    description: 'Um dia de futebol, amizade e bom churrasco!'
+  });
+
+  useEffect(() => {
+    const fetchPromoConfig = async () => {
+      try {
+        const docSnap = await getDoc(doc(db, 'settings', 'promo_popup'));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setPromoConfig({
+            active: data.active ?? true,
+            imageUrl: data.imageUrl || '',
+            link: data.link || 'https://docs.google.com/forms/d/e/1FAIpQLSfJFjmpcdmGpk6Ayc_m6ksYbjY7REyDgTd1OHIbGFYAyNKEfQ/viewform?usp=header',
+            title: data.title || '10º Torneio e Churrasco ACS',
+            eventDate: data.eventDate || '15 de Agosto',
+            closingDate: data.closingDate || '27 de Julho',
+            description: data.description || 'Um dia de futebol, amizade e bom churrasco!'
+          });
+        }
+      } catch (e) {
+        console.error("Error loading promo config in HomeHub:", e);
+      }
+    };
+    fetchPromoConfig();
+  }, []);
 
   useEffect(() => {
     const q = query(collection(db, 'news'), orderBy('createdAt', 'desc'));
@@ -494,6 +535,97 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
           <span className="text-xs text-gray-400 font-extrabold uppercase italic shrink-0">
             Botão de acesso no canto superior direito ↗
           </span>
+        </div>
+      )}
+
+      {/* Pop-up de Promoção do Torneio e Churrasco ACS */}
+      {showPromoPopup && promoConfig.active && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-[110] flex items-center justify-center p-4">
+          <div className="relative bg-white rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-300 flex flex-col max-h-[90vh]">
+            
+            {/* Header / Title */}
+            <div className="flex-shrink-0 bg-primary-blue text-white p-4 flex items-center justify-between">
+              <h3 className="font-black text-sm uppercase tracking-wider italic flex items-center gap-2 text-primary-yellow">
+                <Trophy className="w-5 h-5 text-primary-yellow" />
+                {promoConfig.title}
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowPromoPopup(false);
+                  try {
+                    sessionStorage.setItem('dismissedChurrascoPromo', 'true');
+                  } catch (e) {
+                    console.error(e);
+                  }
+                }}
+                className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Poster image & CTA */}
+            <div className="overflow-y-auto p-5 flex flex-col items-center gap-4 text-center">
+              <div className="w-full max-w-sm rounded-2xl overflow-hidden shadow-md border border-gray-100 bg-gray-50 aspect-[3/4] relative">
+                <img 
+                  src={promoConfig.imageUrl || churrascoPoster} 
+                  alt="Cartaz do Evento" 
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+              
+              <div className="space-y-1">
+                <h4 className="font-black text-primary-blue text-base uppercase italic leading-tight">
+                  {promoConfig.description}
+                </h4>
+                {promoConfig.closingDate && (
+                  <p className="text-xs text-gray-500 font-bold max-w-sm">
+                    Inscrições/Fechamento da lista dia: <span className="text-rose-600 font-black">{promoConfig.closingDate}</span>.
+                  </p>
+                )}
+                {promoConfig.eventDate && (
+                  <p className="text-xs text-gray-400 font-bold max-w-sm">
+                    Data do Evento: <span className="text-primary-blue font-black">{promoConfig.eventDate}</span>.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Footer with actions */}
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => {
+                  setShowPromoPopup(false);
+                  try {
+                    sessionStorage.setItem('dismissedChurrascoPromo', 'true');
+                  } catch (e) {
+                    console.error(e);
+                  }
+                }}
+                className="flex-1 order-2 sm:order-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all"
+              >
+                Fechar
+              </button>
+              <a
+                href={promoConfig.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  setShowPromoPopup(false);
+                  try {
+                    sessionStorage.setItem('dismissedChurrascoPromo', 'true');
+                  } catch (e) {
+                    console.error(e);
+                  }
+                }}
+                className="flex-1 order-1 sm:order-2 bg-primary-blue hover:bg-blue-900 text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider transition-all text-center flex items-center justify-center gap-2 shadow-md shadow-blue-100"
+              >
+                Inscrição Online →
+              </a>
+            </div>
+
+          </div>
         </div>
       )}
 
