@@ -80,34 +80,58 @@ export const calculateMatchOdds = (
 
 interface ScheduledMatchesOddsProps {
   teams: Team[];
+  players?: Player[];
+  cards?: Card[];
 }
 
-export function ScheduledMatchesOdds({ teams }: ScheduledMatchesOddsProps) {
-  const [scheduledMatches, setScheduledMatches] = useState<Match[]>([]);
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [cards, setCards] = useState<Card[]>([]);
+export function ScheduledMatchesOdds({ teams, players: playersProp, cards: cardsProp }: ScheduledMatchesOddsProps) {
+  const [scheduledMatches, setScheduledMatches] = useState<Match[]>(playersProp ? [] : []);
+  const [players, setPlayers] = useState<Player[]>(playersProp || []);
+  const [cards, setCards] = useState<Card[]>(cardsProp || []);
   const [oddsConfig, setOddsConfig] = useState<OddsEngineConfig | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (playersProp && playersProp.length > 0) {
+      setPlayers(playersProp);
+    }
+  }, [playersProp]);
+
+  useEffect(() => {
+    if (cardsProp && cardsProp.length > 0) {
+      setCards(cardsProp);
+    }
+  }, [cardsProp]);
 
   useEffect(() => {
     let isMounted = true;
     
     const fetchData = async () => {
       try {
-        const matchesQ = query(collection(db, 'matches'), where('status', '==', 'scheduled'));
-        const matchesSnap = await getDocs(matchesQ);
+        // Parallelized fetching of matches and config to eliminate sequential await waterfalls
+        const [matchesSnap, configDoc] = await Promise.all([
+          getDocs(query(collection(db, 'matches'), where('status', '==', 'scheduled'))),
+          getDoc(doc(db, 'config', 'odds_engine'))
+        ]);
+
         const fetchedMatches = matchesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Match)).sort((a, b) => a.date.localeCompare(b.date));
         
-        const playersSnap = await getDocs(collection(db, 'players'));
-        const fetchedPlayers = playersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Player));
-        
-        const cardsSnap = await getDocs(collection(db, 'cards'));
-        const fetchedCards = cardsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Card));
-        
-        const configDoc = await getDoc(doc(db, 'config', 'odds_engine'));
         let fetchedConfig = null;
         if (configDoc.exists()) {
           fetchedConfig = configDoc.data() as OddsEngineConfig;
+        }
+
+        // Reuse props if present to save on queries and avoid redudant massive reads
+        let fetchedPlayers = playersProp || [];
+        let fetchedCards = cardsProp || [];
+
+        if (fetchedPlayers.length === 0 || fetchedCards.length === 0) {
+          const [playersSnap, cardsSnap] = await Promise.all([
+            getDocs(collection(db, 'players')),
+            getDocs(collection(db, 'cards'))
+          ]);
+          fetchedPlayers = playersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Player));
+          fetchedCards = cardsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Card));
         }
 
         if (isMounted) {
@@ -126,7 +150,7 @@ export function ScheduledMatchesOdds({ teams }: ScheduledMatchesOddsProps) {
     fetchData();
 
     return () => { isMounted = false; };
-  }, []);
+  }, [playersProp, cardsProp]);
 
   if (loading) return null;
   if (scheduledMatches.length === 0) return null;

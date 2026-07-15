@@ -48,7 +48,7 @@ export interface Match {
   substitutesCount?: number;
   status: 'scheduled' | 'live' | 'finished';
   mvpId?: string;
-  events?: { playerId: string; type: 'goal' | 'assist' }[];
+  events?: { playerId: string; type: 'goal' | 'assist' | 'own_goal' | 'penalty_save' | 'penalty_miss' }[];
   bettingMarkets?: {
     matchWinner?: {
       enabled: boolean;

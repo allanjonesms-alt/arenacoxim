@@ -17,8 +17,8 @@ import {
   Trash2
 , Star, X } from 'lucide-react';
 import { motion } from 'motion/react';
-import { AdminData, News, Location, Team, ScoringRules } from '../types';
-import { collection, query, orderBy, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
+import { AdminData, News, Location, Team, ScoringRules, Player, Card } from '../types';
+import { collection, query, orderBy, onSnapshot, deleteDoc, doc, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { handleFirestoreError, OperationType } from '../App';
 import PublicDashboard from './PublicDashboard';
@@ -38,14 +38,35 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
   const isMaster = adminData?.role === 'master';
   const [showBettingModal, setShowBettingModal] = useState(false);
   const [news, setNews] = useState<News[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [cards, setCards] = useState<Card[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, 'news'), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snapshot) => {
+    const unsubscribeNews = onSnapshot(q, (snapshot) => {
       setNews(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as News)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'news'));
-  }, []);
+
+    // Real-time players cache to speed up home screen loading and avoid waterfalls
+    let qPlayers = query(collection(db, 'players'));
+    if (adminData && adminData.role !== 'master' && adminData.locationId) {
+      qPlayers = query(collection(db, 'players'), where('locationId', '==', adminData.locationId));
+    }
+    const unsubscribePlayers = onSnapshot(qPlayers, (snapshot) => {
+      setPlayers(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Player)));
+    }, (err) => console.error("Error loading players in HomeHub:", err));
+
+    const unsubscribeCards = onSnapshot(collection(db, 'cards'), (snapshot) => {
+      setCards(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Card)));
+    }, (err) => console.error("Error loading cards in HomeHub:", err));
+
+    return () => {
+      unsubscribeNews();
+      unsubscribePlayers();
+      unsubscribeCards();
+    };
+  }, [adminData]);
 
   const handleDeleteNews = async (id: string) => {
     try {
@@ -258,7 +279,7 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
 
 
       {/* Seção Odds Agendadas */}
-        <ScheduledMatchesOdds teams={sharedTeams} />
+        <ScheduledMatchesOdds teams={sharedTeams} players={players} cards={cards} />
 
       {/* 3. Seção Resultados e Jogos */}
         <div className="pt-2 border-t border-gray-100">
@@ -268,6 +289,8 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
              sharedTeams={sharedTeams}
              sharedScoringRules={sharedScoringRules}
              isCompact={true}
+             sharedPlayers={players}
+             sharedCards={cards}
              bottomMainContent={
                <div className="space-y-3 mt-4">
                  <h2 className="text-sm font-black uppercase tracking-widest italic text-primary-blue flex items-center justify-between">

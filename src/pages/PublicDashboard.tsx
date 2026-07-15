@@ -23,6 +23,8 @@ interface PublicDashboardProps {
   sharedScoringRules: ScoringRules | null;
   isCompact?: boolean;
   bottomMainContent?: React.ReactNode;
+  sharedPlayers?: Player[];
+  sharedCards?: Card[];
 }
 
 function MatchDetailsModal({ match, players, teams, locations, cards, isAdmin, onClose, onPlayerClick }: { 
@@ -249,22 +251,38 @@ function MatchDetailsModal({ match, players, teams, locations, cards, isAdmin, o
               </div>
             </div>
             
-            {!isAdmin && (
-              <div className="grid grid-cols-2 gap-4 text-[10px] md:text-xs font-bold text-gray-500">
-                <div className="flex flex-col gap-1 items-center">
-                    {events.filter(e => (teamA.includes(e.playerId) || e.playerId === 'unidentified_A') && e.type === 'goal').map((e, idx) => {
-                      const p = players.find(x => x.id === e.playerId);
-                      return <div key={idx} className="bg-blue-50 text-blue-800 text-[8px] px-2 py-0.5 rounded-full">{(p?.nickname || '').toUpperCase() || p?.name || '---'}</div>
-                    })}
-                </div>
-                <div className="flex flex-col gap-1 items-center">
-                    {events.filter(e => (teamB.includes(e.playerId) || e.playerId === 'unidentified_B') && e.type === 'goal').map((e, idx) => {
-                      const p = players.find(x => x.id === e.playerId);
-                      return <div key={idx} className="bg-blue-50 text-blue-800 text-[8px] px-2 py-0.5 rounded-full">{(p?.nickname || '').toUpperCase() || p?.name || '---'}</div>
-                    })}
-                </div>
+            <div className="grid grid-cols-2 gap-4 text-[10px] md:text-xs font-bold text-gray-500">
+              <div className="flex flex-col gap-1 items-center">
+                  {events.filter(e => 
+                    (e.type === 'goal' && (teamA.includes(e.playerId) || e.playerId === 'unidentified_A')) ||
+                    (e.type === 'own_goal' && (teamB.includes(e.playerId) || e.playerId === 'unidentified_B'))
+                  ).map((e, idx) => {
+                    const p = players.find(x => x.id === e.playerId);
+                    const isOwnGoal = e.type === 'own_goal';
+                    return (
+                      <div key={idx} className="bg-blue-50 text-blue-800 text-[8px] px-2 py-0.5 rounded-full flex items-center gap-1 font-extrabold tracking-tight">
+                        <span>{(p?.nickname || '').toUpperCase() || p?.name || '---'}</span>
+                        {isOwnGoal && <span className="text-red-500 font-black text-[7px] ml-1 uppercase">(CONTRA)</span>}
+                      </div>
+                    );
+                  })}
               </div>
-            )}
+              <div className="flex flex-col gap-1 items-center">
+                  {events.filter(e => 
+                    (e.type === 'goal' && (teamB.includes(e.playerId) || e.playerId === 'unidentified_B')) ||
+                    (e.type === 'own_goal' && (teamA.includes(e.playerId) || e.playerId === 'unidentified_A'))
+                  ).map((e, idx) => {
+                    const p = players.find(x => x.id === e.playerId);
+                    const isOwnGoal = e.type === 'own_goal';
+                    return (
+                      <div key={idx} className="bg-blue-50 text-blue-800 text-[8px] px-2 py-0.5 rounded-full flex items-center gap-1 font-extrabold tracking-tight">
+                        <span>{(p?.nickname || '').toUpperCase() || p?.name || '---'}</span>
+                        {isOwnGoal && <span className="text-red-500 font-black text-[7px] ml-1 uppercase">(CONTRA)</span>}
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
           </div>
 
           {/* Tab Switcher */}
@@ -380,8 +398,12 @@ function MatchDetailsModal({ match, players, teams, locations, cards, isAdmin, o
                   {/* Goals */}
                   <div className="text-[10px] font-black text-primary-blue uppercase italic">Gols</div>
                   <div className="space-y-2">
-                    {events.filter(e => (teamA.includes(e.playerId) || e.playerId === 'unidentified_A') && e.type === 'goal').map((e, idx) => {
+                    {events.filter(e => 
+                      (e.type === 'goal' && (teamA.includes(e.playerId) || e.playerId === 'unidentified_A')) ||
+                      (e.type === 'own_goal' && (teamB.includes(e.playerId) || e.playerId === 'unidentified_B'))
+                    ).map((e, idx) => {
                       const p = players.find(x => x.id === e.playerId);
+                      const isOwnGoal = e.type === 'own_goal';
                       return (
                         <div key={idx} className={`${isAdmin ? 'flex justify-between' : ''} text-xs p-3 bg-blue-50 rounded-xl border border-blue-100 font-bold group/player`}>
                           <span 
@@ -389,6 +411,7 @@ function MatchDetailsModal({ match, players, teams, locations, cards, isAdmin, o
                             onClick={() => p && onPlayerClick?.(p)}
                           >
                             {(p?.nickname || '').toUpperCase() || p?.name || '---'}
+                            {isOwnGoal && <span className="text-red-500 font-black text-[9px] uppercase ml-1.5">(GOL CONTRA)</span>}
                           </span>
                           {isAdmin && (
                             <button onClick={() => removeEvent(events.indexOf(e))} className="text-red-500 hover:scale-110 transition-transform"><Trash2 size={14} /></button>
@@ -427,8 +450,12 @@ function MatchDetailsModal({ match, players, teams, locations, cards, isAdmin, o
                   {/* Goals */}
                   <div className="text-[10px] font-black text-primary-blue uppercase italic">Gols</div>
                   <div className="space-y-2">
-                    {events.filter(e => (teamB.includes(e.playerId) || e.playerId === 'unidentified_B') && e.type === 'goal').map((e, idx) => {
+                    {events.filter(e => 
+                      (e.type === 'goal' && (teamB.includes(e.playerId) || e.playerId === 'unidentified_B')) ||
+                      (e.type === 'own_goal' && (teamA.includes(e.playerId) || e.playerId === 'unidentified_A'))
+                    ).map((e, idx) => {
                       const p = players.find(x => x.id === e.playerId);
+                      const isOwnGoal = e.type === 'own_goal';
                       return (
                         <div key={idx} className={`${isAdmin ? 'flex justify-between' : ''} text-xs p-3 bg-blue-50 rounded-xl border border-blue-100 font-bold group/player`}>
                           <span 
@@ -436,6 +463,7 @@ function MatchDetailsModal({ match, players, teams, locations, cards, isAdmin, o
                             onClick={() => p && onPlayerClick?.(p)}
                           >
                             {(p?.nickname || '').toUpperCase() || p?.name || '---'}
+                            {isOwnGoal && <span className="text-red-500 font-black text-[9px] uppercase ml-1.5">(GOL CONTRA)</span>}
                           </span>
                           {isAdmin && (
                             <button onClick={() => removeEvent(events.indexOf(e))} className="text-red-500 hover:scale-110 transition-transform"><Trash2 size={14} /></button>
@@ -549,13 +577,22 @@ function MatchDetailsModal({ match, players, teams, locations, cards, isAdmin, o
   );
 }
 
-export default function PublicDashboard({ adminData, sharedLocations, sharedTeams, sharedScoringRules, isCompact = false, bottomMainContent }: PublicDashboardProps) {
+export default function PublicDashboard({ 
+  adminData, 
+  sharedLocations, 
+  sharedTeams, 
+  sharedScoringRules, 
+  isCompact = false, 
+  bottomMainContent,
+  sharedPlayers,
+  sharedCards
+}: PublicDashboardProps) {
   const [matches, setMatches] = useState<Match[]>([]);
-  const [cards, setCards] = useState<Card[]>([]);
+  const [cards, setCards] = useState<Card[]>(sharedCards || []);
   const [monthlyAwards, setMonthlyAwards] = useState<MonthlyAward[]>([]);
-  const [players, setPlayers] = useState<Player[]>([]);
+  const [players, setPlayers] = useState<Player[]>(sharedPlayers || []);
   const [teams, setTeams] = useState<Team[]>(sharedTeams);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!sharedPlayers);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const navigate = useNavigate();
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
@@ -570,6 +607,19 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
   useEffect(() => {
     setScoringRules(sharedScoringRules);
   }, [sharedScoringRules]);
+
+  useEffect(() => {
+    if (sharedPlayers && sharedPlayers.length > 0) {
+      setPlayers(sharedPlayers);
+      setLoading(false);
+    }
+  }, [sharedPlayers]);
+
+  useEffect(() => {
+    if (sharedCards && sharedCards.length > 0) {
+      setCards(sharedCards);
+    }
+  }, [sharedCards]);
 
   useEffect(() => {
     let qMatches = query(collection(db, 'matches'), orderBy('date', 'desc'), limit(25));
@@ -611,26 +661,32 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
       }
     });
 
-    let qPlayers = query(collection(db, 'players'));
-    if (adminData && adminData.role !== 'master' && adminData.locationId) {
-      qPlayers = query(
-        collection(db, 'players'), 
-        where('locationId', '==', adminData.locationId)
-      );
-    }
-    const unsubscribePlayers = onSnapshot(qPlayers, async (snapshot) => {
-      let playersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
-      setPlayers(playersData);
+    let unsubscribePlayers = () => {};
+    if (sharedPlayers && sharedPlayers.length > 0) {
+      setPlayers(sharedPlayers);
       setLoading(false);
-    }, async (err) => {
-      const snap = await getDocs(collection(db, 'players'));
-      let playersData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
+    } else {
+      let qPlayers = query(collection(db, 'players'));
       if (adminData && adminData.role !== 'master' && adminData.locationId) {
-        playersData = playersData.filter(p => p.locationId === adminData.locationId);
+        qPlayers = query(
+          collection(db, 'players'), 
+          where('locationId', '==', adminData.locationId)
+        );
       }
-      setPlayers(playersData);
-      setLoading(false);
-    });
+      unsubscribePlayers = onSnapshot(qPlayers, async (snapshot) => {
+        let playersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
+        setPlayers(playersData);
+        setLoading(false);
+      }, async (err) => {
+        const snap = await getDocs(collection(db, 'players'));
+        let playersData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
+        if (adminData && adminData.role !== 'master' && adminData.locationId) {
+          playersData = playersData.filter(p => p.locationId === adminData.locationId);
+        }
+        setPlayers(playersData);
+        setLoading(false);
+      });
+    }
 
     let qAwards = query(collection(db, 'monthlyAwards'), orderBy('createdAt', 'desc'));
     if (adminData && adminData.role !== 'master' && adminData.locationId) {
@@ -645,11 +701,16 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
       console.error("Error fetching monthly awards:", err);
     });
 
-    const unsubscribeCards = onSnapshot(collection(db, 'cards'), (snapshot) => {
-      setCards(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Card)));
-    }, (err) => {
-      console.error("Error fetching cards:", err);
-    });
+    let unsubscribeCards = () => {};
+    if (sharedCards && sharedCards.length > 0) {
+      setCards(sharedCards);
+    } else {
+      unsubscribeCards = onSnapshot(collection(db, 'cards'), (snapshot) => {
+        setCards(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Card)));
+      }, (err) => {
+        console.error("Error fetching cards:", err);
+      });
+    }
 
     return () => {
       unsubscribeMatches();
@@ -657,7 +718,7 @@ export default function PublicDashboard({ adminData, sharedLocations, sharedTeam
       unsubscribeAwards();
       unsubscribeCards();
     };
-  }, [adminData]);
+  }, [adminData, sharedPlayers, sharedCards]);
 
   const getAveragePoints = (p: Player) => {
     if (!p.stats.matches || p.stats.matches === 0) return 0;
