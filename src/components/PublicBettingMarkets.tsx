@@ -369,12 +369,24 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
     const weight = Math.min(1.0, careerMatchesCount / 25);
     const blendedGoalsPerMatch = (careerAvgPerMatch * weight) + (positionBasePerMatch * (1 - weight));
 
-    // Remaining matches of the month
-    const remainingMatches = getRemainingMatchesInMonth(false);
-    const ExpectedRemaining = blendedGoalsPerMatch * remainingMatches;
-
     // Current goals scored in this month so far
     const C = playerMonthlyGoals[player.id]?.[currentMonthKey] || 0;
+
+    // Count finished matches played by this specific player in the current month
+    const finishedMatchesThisMonth = matches.filter(m => m.status === 'finished' && m.date?.substring(0, 7) === currentMonthKey);
+    const playedThisMonth = finishedMatchesThisMonth.filter(m => m.teamA.includes(player.id) || m.teamB.includes(player.id)).length;
+
+    // Current month form (shrinkage estimator blending career blendedGoalsPerMatch and current month average)
+    let projectedGoalsPerMatch = blendedGoalsPerMatch;
+    if (playedThisMonth > 0) {
+      const currentMonthAvg = C / playedThisMonth;
+      const formWeight = Math.min(0.40, playedThisMonth / 10); // up to 40% weight to current month form
+      projectedGoalsPerMatch = (currentMonthAvg * formWeight) + (blendedGoalsPerMatch * (1 - formWeight));
+    }
+
+    // Remaining matches of the month
+    const remainingMatches = getRemainingMatchesInMonth(false);
+    const ExpectedRemaining = projectedGoalsPerMatch * remainingMatches;
     const ExpectedTotal = C + ExpectedRemaining;
 
     // Custom Over/Under Line
@@ -416,7 +428,8 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
     };
 
     // To display monthly projection baseline in the UI
-    const blendedMonthlyAvg = blendedGoalsPerMatch * 8; // run-rate of 8 games
+    const totalGamesInMonth = playedThisMonth + remainingMatches;
+    const blendedMonthlyAvg = projectedGoalsPerMatch * (totalGamesInMonth || 8);
 
     return {
       currentGoals: C,
@@ -461,12 +474,24 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
     const gkWeight = Math.min(1.0, gkMatchesCount / 20);
     const blendedConcededPerMatch = (careerConcededAvgPerMatch * gkWeight) + (positionBaseConcededPerMatch * (1 - gkWeight));
 
-    // Remaining matches of the month for Goalkeepers (10 matches)
-    const remainingGKMatches = getRemainingMatchesInMonth(true);
-    const ExpectedRemaining = blendedConcededPerMatch * remainingGKMatches;
-
     // Current goals conceded in this month so far
     const C = playerMonthlyConceded[player.id]?.[currentMonthKey] || 0;
+
+    // Count finished matches played by this goalkeeper in the current month
+    const finishedMatchesThisMonth = finishedMatches.filter(m => m.date?.substring(0, 7) === currentMonthKey);
+    const playedThisMonth = finishedMatchesThisMonth.filter(m => m.goalkeeperAId === player.id || m.goalkeeperBId === player.id).length;
+
+    // Current month form (shrinkage estimator blending career blendedConcededPerMatch and current month average conceded)
+    let projectedConcededPerMatch = blendedConcededPerMatch;
+    if (playedThisMonth > 0) {
+      const currentMonthAvg = C / playedThisMonth;
+      const formWeight = Math.min(0.40, playedThisMonth / 10); // up to 40% weight to current month form
+      projectedConcededPerMatch = (currentMonthAvg * formWeight) + (blendedConcededPerMatch * (1 - formWeight));
+    }
+
+    // Remaining matches of the month for Goalkeepers (10 matches)
+    const remainingGKMatches = getRemainingMatchesInMonth(true);
+    const ExpectedRemaining = projectedConcededPerMatch * remainingGKMatches;
     const ExpectedTotal = C + ExpectedRemaining;
 
     // Custom Over/Under Line
@@ -507,7 +532,8 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
       return odd.toFixed(2);
     };
 
-    const blendedMonthlyAvg = blendedConcededPerMatch * 8; // run-rate of 8 games
+    const totalGKGamesInMonth = playedThisMonth + remainingGKMatches;
+    const blendedMonthlyAvg = projectedConcededPerMatch * (totalGKGamesInMonth || 10);
 
     return {
       currentGoals: C,
@@ -852,9 +878,9 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                 </p>
               </div>
 
-              <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+              <div className="space-y-1.5 pr-1">
                 {(() => {
-                  const nonGoalkeepers = players.filter(p => p.position !== 'goleiro' && (p.stats?.matches || 0) >= 10);
+                  const nonGoalkeepers = players.filter(p => p.position !== 'goleiro' && (p.stats?.matches || 0) >= 10 && !p.bettingDisabled);
                   const currentMonthKey = new Date().toISOString().substring(0, 7);
                   const currentMonthName = MONTH_NAMES_PT[currentMonthKey.split('-')[1]] || 'Julho';
 
@@ -878,7 +904,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                   }
 
                   return sortedNonGoalkeepers.map(({ player, ltOdds }) => (
-                    <div key={player.id} className="flex items-center justify-between border border-gray-50 rounded-2xl p-3 bg-slate-50/50 hover:bg-slate-50 transition-all gap-4">
+                    <div key={player.id} className="flex items-center justify-between border border-gray-50 rounded-xl p-2 bg-slate-50/50 hover:bg-slate-50 transition-all gap-2">
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <span className={`w-5 h-5 rounded flex items-center justify-center text-[8px] font-black text-white shrink-0 ${getPositionColor(player.position)}`}>
                           {getPositionAbbr(player.position)}
@@ -942,9 +968,9 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                 </p>
               </div>
 
-              <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+              <div className="space-y-1.5 pr-1">
                 {(() => {
-                  const goalkeepers = players.filter(p => p.position === 'goleiro' && (p.stats?.matches || 0) >= 20);
+                  const goalkeepers = players.filter(p => p.position === 'goleiro' && (p.stats?.matches || 0) >= 15 && !p.bettingDisabled);
                   const currentMonthKey = new Date().toISOString().substring(0, 7);
                   const currentMonthName = MONTH_NAMES_PT[currentMonthKey.split('-')[1]] || 'Julho';
 
@@ -968,7 +994,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                   }
 
                   return sortedGoalkeepers.map(({ player, ltOdds }) => (
-                    <div key={player.id} className="flex items-center justify-between border border-gray-50 rounded-2xl p-3 bg-slate-50/50 hover:bg-slate-50 transition-all gap-4">
+                    <div key={player.id} className="flex items-center justify-between border border-gray-50 rounded-xl p-2 bg-slate-50/50 hover:bg-slate-50 transition-all gap-2">
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <span className={`w-5 h-5 rounded flex items-center justify-center text-[8px] font-black text-white shrink-0 bg-blue-600`}>
                           GK

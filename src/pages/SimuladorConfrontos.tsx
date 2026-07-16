@@ -38,6 +38,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
   const [simulationHistory, setSimulationHistory] = useState<OddsSimulationHistory[]>([]);
   const [isSavingHistory, setIsSavingHistory] = useState(false);
   const [longTermSearch, setLongTermSearch] = useState('');
+  const [activeBetTab, setActiveBetTab] = useState<'linha' | 'goleiro'>('linha');
 
 
   // Load data
@@ -583,12 +584,24 @@ export default function SimuladorConfrontos({ adminData }: Props) {
     const weight = Math.min(1.0, careerMatchesCount / 25);
     const blendedGoalsPerMatch = (careerAvgPerMatch * weight) + (positionBasePerMatch * (1 - weight));
 
-    // Remaining matches of the month
-    const remainingMatches = getRemainingMatchesInMonth(false);
-    const ExpectedRemaining = blendedGoalsPerMatch * remainingMatches;
-
     // Current goals scored in this month so far
     const C = playerMonthlyGoals[player.id]?.[currentMonthKey] || 0;
+
+    // Count finished matches played by this specific player in the current month
+    const finishedMatchesThisMonth = matches.filter(m => m.status === 'finished' && m.date?.substring(0, 7) === currentMonthKey);
+    const playedThisMonth = finishedMatchesThisMonth.filter(m => m.teamA.includes(player.id) || m.teamB.includes(player.id)).length;
+
+    // Current month form (shrinkage estimator blending career blendedGoalsPerMatch and current month average)
+    let projectedGoalsPerMatch = blendedGoalsPerMatch;
+    if (playedThisMonth > 0) {
+      const currentMonthAvg = C / playedThisMonth;
+      const formWeight = Math.min(0.40, playedThisMonth / 10); // up to 40% weight to current month form
+      projectedGoalsPerMatch = (currentMonthAvg * formWeight) + (blendedGoalsPerMatch * (1 - formWeight));
+    }
+
+    // Remaining matches of the month
+    const remainingMatches = getRemainingMatchesInMonth(false);
+    const ExpectedRemaining = projectedGoalsPerMatch * remainingMatches;
     const ExpectedTotal = C + ExpectedRemaining;
 
     // Custom Over/Under Line
@@ -630,7 +643,8 @@ export default function SimuladorConfrontos({ adminData }: Props) {
     };
 
     // To display monthly projection baseline in the UI
-    const blendedMonthlyAvg = blendedGoalsPerMatch * 8; // run-rate of 8 games
+    const totalGamesInMonth = playedThisMonth + remainingMatches;
+    const blendedMonthlyAvg = projectedGoalsPerMatch * (totalGamesInMonth || 8);
 
     return {
       currentGoals: C,
@@ -675,12 +689,24 @@ export default function SimuladorConfrontos({ adminData }: Props) {
     const gkWeight = Math.min(1.0, gkMatchesCount / 20);
     const blendedConcededPerMatch = (careerConcededAvgPerMatch * gkWeight) + (positionBaseConcededPerMatch * (1 - gkWeight));
 
-    // Remaining matches of the month for Goalkeepers (10 matches)
-    const remainingGKMatches = getRemainingMatchesInMonth(true);
-    const ExpectedRemaining = blendedConcededPerMatch * remainingGKMatches;
-
     // Current goals conceded in this month so far
     const C = playerMonthlyConceded[player.id]?.[currentMonthKey] || 0;
+
+    // Count finished matches played by this goalkeeper in the current month
+    const finishedMatchesThisMonth = finishedMatches.filter(m => m.date?.substring(0, 7) === currentMonthKey);
+    const playedThisMonth = finishedMatchesThisMonth.filter(m => m.goalkeeperAId === player.id || m.goalkeeperBId === player.id).length;
+
+    // Current month form (shrinkage estimator blending career blendedConcededPerMatch and current month average conceded)
+    let projectedConcededPerMatch = blendedConcededPerMatch;
+    if (playedThisMonth > 0) {
+      const currentMonthAvg = C / playedThisMonth;
+      const formWeight = Math.min(0.40, playedThisMonth / 10); // up to 40% weight to current month form
+      projectedConcededPerMatch = (currentMonthAvg * formWeight) + (blendedConcededPerMatch * (1 - formWeight));
+    }
+
+    // Remaining matches of the month for Goalkeepers (10 matches)
+    const remainingGKMatches = getRemainingMatchesInMonth(true);
+    const ExpectedRemaining = projectedConcededPerMatch * remainingGKMatches;
     const ExpectedTotal = C + ExpectedRemaining;
 
     // Custom Over/Under Line
@@ -721,7 +747,8 @@ export default function SimuladorConfrontos({ adminData }: Props) {
       return odd.toFixed(2);
     };
 
-    const blendedMonthlyAvg = blendedConcededPerMatch * 8; // run-rate of 8 games
+    const totalGKGamesInMonth = playedThisMonth + remainingGKMatches;
+    const blendedMonthlyAvg = projectedConcededPerMatch * (totalGKGamesInMonth || 10);
 
     return {
       currentGoals: C,
@@ -1172,247 +1199,209 @@ export default function SimuladorConfrontos({ adminData }: Props) {
               <Search className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
             </div>
 
-            {/* Listagem de Jogadores e Odds por Categoria */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* SUBSEÇÃO GOLS NO MÊS */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-black uppercase tracking-wider text-emerald-600 border-b border-gray-150 pb-2 flex items-center justify-between">
-                  <span>Gols no Mês (Linha)</span>
-                  <span className="text-[10px] text-gray-400 font-bold lowercase">atleta de linha - ordenado por gols</span>
-                </h4>
-                <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-                  {(() => {
-                    const linePlayers = players.filter(p => p.position !== 'goleiro' && (p.stats?.matches || 0) >= 10);
-                    const sortedLine = [...linePlayers]
-                      .filter(p => {
-                        const term = longTermSearch.toLowerCase();
-                        return p.name.toLowerCase().includes(term) || p.nickname?.toLowerCase().includes(term);
-                      })
-                      .map(p => ({ player: p, ltOdds: calculateLongTermOdds(p) }))
-                      .sort((a, b) => b.ltOdds.currentGoals - a.ltOdds.currentGoals);
-
-                    if (sortedLine.length === 0) {
-                      return <p className="text-xs text-gray-400 italic text-center py-4">Nenhum atleta de linha encontrado.</p>;
-                    }
-
-                    return sortedLine.map(({ player, ltOdds }) => {
-                      const currentMonthKey = new Date().toISOString().substring(0, 7);
-                      const currentMonthName = MONTH_NAMES_PT[currentMonthKey.split('-')[1]] || 'Julho';
-
-                      return (
-                        <div key={player.id} className="bg-gray-50 border border-gray-100 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md transition-all gap-4">
-                          <div>
-                            {/* Identidade do Atleta */}
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center gap-2">
-                                <span className={`w-6 h-6 rounded flex items-center justify-center text-[9px] font-black text-white ${getPositionColor(player.position)}`}>
-                                  {getPositionAbbr(player.position)}
-                                </span>
-                                <span className="text-sm font-black text-gray-800 uppercase tracking-tight">
-                                  {player.nickname || player.name}
-                                </span>
-                              </div>
-                              <span className="text-xs bg-white border border-gray-200 px-2 py-0.5 rounded-full font-black text-gray-500">
-                                Rating: {getPlayerFinalOverall(player, cards)}
-                              </span>
-                            </div>
-
-                            {/* Histórico Recente de Gols por Mês */}
-                            <div className="bg-white border border-gray-150 rounded-xl p-2.5 mb-3">
-                              <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-2">
-                                Histórico de Gols ({new Date().getFullYear()})
-                              </div>
-                              <div className="flex gap-2 flex-wrap">
-                                {activeMonths.map(mKey => {
-                                  const mNum = mKey.split('-')[1];
-                                  const mNameAbbr = MONTH_NAMES_PT[mNum]?.substring(0, 3).toUpperCase() || mNum;
-                                  const goalsInM = playerMonthlyGoals[player.id]?.[mKey] || 0;
-                                  const isCurrent = mKey === currentMonthKey;
-
-                                  return (
-                                    <div 
-                                      key={mKey} 
-                                      className={`flex-1 min-w-[55px] text-center p-1 rounded-lg border ${
-                                        isCurrent 
-                                          ? 'bg-emerald-50/50 border-emerald-200' 
-                                          : 'bg-gray-50 border-gray-100'
-                                      }`}
-                                    >
-                                      <div className={`text-[8px] font-bold ${isCurrent ? 'text-emerald-700' : 'text-gray-400'}`}>
-                                        {mNameAbbr}
-                                      </div>
-                                      <div className={`text-xs font-black ${isCurrent ? 'text-emerald-800' : 'text-gray-700'}`}>
-                                        {goalsInM} G
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            {/* Dados Estatísticos e Projeção */}
-                            <div className="text-[10px] text-gray-500 font-semibold space-y-1 mb-4 bg-gray-100/50 p-2.5 rounded-xl border border-gray-200/50">
-                              <div className="flex justify-between">
-                                <span>Média Histórica Estimada:</span>
-                                <span className="font-bold text-gray-700">{ltOdds.blendedMonthlyAvg.toFixed(1)} gols/mês</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span>Expectativa Restante ({Math.round((new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() - new Date().getDate() + 1) / new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() * 105)}% do mês):</span>
-                                <span className="font-bold text-gray-700">+{ltOdds.expectedRemaining.toFixed(1)} gols</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span>Gols Atuais no Mês:</span>
-                                <span className="font-bold text-gray-700">{ltOdds.currentGoals} gols</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Mercado de Over/Under */}
-                          <div className="bg-white border border-gray-200 rounded-xl p-3">
-                            <div className="text-center text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">
-                              Mercado: Gols em {currentMonthName}
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-center">
-                                <span className="block text-[9.5px] font-black uppercase text-white mb-0.5 tracking-wider">+{ltOdds.line}</span>
-                                <span className="text-sm font-black text-primary-yellow">@ {ltOdds.oddOver}</span>
-                                <span className="block text-[8px] text-gray-400 font-semibold mt-0.5">Prob: {ltOdds.probOver}%</span>
-                              </div>
-                              <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-center">
-                                <span className="block text-[9.5px] font-black uppercase text-white mb-0.5 tracking-wider">-{ltOdds.line}</span>
-                                <span className="text-sm font-black text-primary-yellow">@ {ltOdds.oddUnder}</span>
-                                <span className="block text-[8px] text-gray-400 font-semibold mt-0.5">Prob: {ltOdds.probUnder}%</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </div>
-
-              {/* SUBSEÇÃO GOLS SOFRIDOS */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-black uppercase tracking-wider text-indigo-600 border-b border-gray-150 pb-2 flex items-center justify-between">
-                  <span>Gols Sofridos (Goleiros)</span>
-                  <span className="text-[10px] text-gray-400 font-bold lowercase">goleiro - ordenado por sofridos</span>
-                </h4>
-                <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-                  {(() => {
-                    const goalkeepers = players.filter(p => p.position === 'goleiro' && (p.stats?.matches || 0) >= 20);
-                    const sortedGK = [...goalkeepers]
-                      .filter(p => {
-                        const term = longTermSearch.toLowerCase();
-                        return p.name.toLowerCase().includes(term) || p.nickname?.toLowerCase().includes(term);
-                      })
-                      .map(p => ({ player: p, ltOdds: calculateLongTermConcededOdds(p) }))
-                      .sort((a, b) => b.ltOdds.currentGoals - a.ltOdds.currentGoals);
-
-                    if (sortedGK.length === 0) {
-                      return <p className="text-xs text-gray-400 italic text-center py-4">Nenhum goleiro encontrado.</p>;
-                    }
-
-                    return sortedGK.map(({ player, ltOdds }) => {
-                      const currentMonthKey = new Date().toISOString().substring(0, 7);
-                      const currentMonthName = MONTH_NAMES_PT[currentMonthKey.split('-')[1]] || 'Julho';
-
-                      return (
-                        <div key={player.id} className="bg-gray-50 border border-gray-100 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md transition-all gap-4">
-                          <div>
-                            {/* Identidade do Atleta */}
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center gap-2">
-                                <span className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-black text-white bg-blue-600">
-                                  GK
-                                </span>
-                                <span className="text-sm font-black text-gray-800 uppercase tracking-tight">
-                                  {player.nickname || player.name}
-                                </span>
-                              </div>
-                              <span className="text-xs bg-white border border-gray-200 px-2 py-0.5 rounded-full font-black text-gray-500">
-                                Rating: {getPlayerFinalOverall(player, cards)}
-                              </span>
-                            </div>
-
-                            {/* Histórico Recente de Gols por Mês */}
-                            <div className="bg-white border border-gray-150 rounded-xl p-2.5 mb-3">
-                              <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-2">
-                                Histórico de Gols Sofridos ({new Date().getFullYear()})
-                              </div>
-                              <div className="flex gap-2 flex-wrap">
-                                {activeMonths.map(mKey => {
-                                  const mNum = mKey.split('-')[1];
-                                  const mNameAbbr = MONTH_NAMES_PT[mNum]?.substring(0, 3).toUpperCase() || mNum;
-                                  const concededInM = playerMonthlyConceded[player.id]?.[mKey] || 0;
-                                  const isCurrent = mKey === currentMonthKey;
-
-                                  return (
-                                    <div 
-                                      key={mKey} 
-                                      className={`flex-1 min-w-[55px] text-center p-1 rounded-lg border ${
-                                        isCurrent 
-                                          ? 'bg-indigo-50/50 border-indigo-200' 
-                                          : 'bg-gray-50 border-gray-100'
-                                      }`}
-                                    >
-                                      <div className={`text-[8px] font-bold ${isCurrent ? 'text-indigo-700' : 'text-gray-400'}`}>
-                                        {mNameAbbr}
-                                      </div>
-                                      <div className={`text-xs font-black ${isCurrent ? 'text-indigo-800' : 'text-gray-700'}`}>
-                                        {concededInM} G
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            {/* Dados Estatísticos e Projeção */}
-                            <div className="text-[10px] text-gray-500 font-semibold space-y-1 mb-4 bg-gray-100/50 p-2.5 rounded-xl border border-gray-200/50">
-                              <div className="flex justify-between">
-                                <span>Média Histórica Estimada:</span>
-                                <span className="font-bold text-gray-700">{ltOdds.blendedMonthlyAvg.toFixed(1)} sofridos/mês</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span>Expectativa Restante ({Math.round((new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() - new Date().getDate() + 1) / new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() * 105)}% do mês):</span>
-                                <span className="font-bold text-gray-700">+{ltOdds.expectedRemaining.toFixed(1)} sofridos</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span>Gols Sofridos Atuais no Mês:</span>
-                                <span className="font-bold text-red-500">{ltOdds.currentGoals} sofridos</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Mercado de Over/Under */}
-                          <div className="bg-white border border-gray-200 rounded-xl p-3">
-                            <div className="text-center text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-2">
-                              Mercado: Gols Sofridos em {currentMonthName}
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-center">
-                                <span className="block text-[9.5px] font-black uppercase text-white mb-0.5 tracking-wider">+{ltOdds.line}</span>
-                                <span className="text-sm font-black text-primary-yellow">@ {ltOdds.oddOver}</span>
-                                <span className="block text-[8px] text-gray-400 font-semibold mt-0.5">Prob: {ltOdds.probOver}%</span>
-                              </div>
-                              <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-center">
-                                <span className="block text-[9.5px] font-black uppercase text-white mb-0.5 tracking-wider">-{ltOdds.line}</span>
-                                <span className="text-sm font-black text-primary-yellow">@ {ltOdds.oddUnder}</span>
-                                <span className="block text-[8px] text-gray-400 font-semibold mt-0.5">Prob: {ltOdds.probUnder}%</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </div>
+            {/* Abas para Apostas no Longo Prazo */}
+            <div className="flex border-b border-gray-150 mb-6 gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveBetTab('linha')}
+                className={`pb-3 px-4 text-xs sm:text-sm font-black uppercase tracking-wider border-b-2 transition-all ${
+                  activeBetTab === 'linha'
+                    ? 'border-emerald-500 text-emerald-600'
+                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                Gols no Mês (Linha)
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveBetTab('goleiro')}
+                className={`pb-3 px-4 text-xs sm:text-sm font-black uppercase tracking-wider border-b-2 transition-all ${
+                  activeBetTab === 'goleiro'
+                    ? 'border-indigo-500 text-indigo-600'
+                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                Gols Sofridos (Goleiros)
+              </button>
             </div>
+
+            {/* Listagem de Jogadores e Odds por Categoria */}
+            <div className="space-y-4">
+              {activeBetTab === 'linha' && (
+                <div className="space-y-4">
+                  <h4 className="text-sm font-black uppercase tracking-wider text-emerald-600 border-b border-gray-150 pb-2 flex items-center justify-between">
+                    <span>Gols no Mês (Linha)</span>
+                    <span className="text-[10px] text-gray-400 font-bold lowercase">atleta de linha - ordenado por gols</span>
+                  </h4>
+                  <div className="flex flex-col bg-white border border-gray-100 rounded-2xl overflow-hidden divide-y divide-gray-100 shadow-sm">
+                    {(() => {
+                      const linePlayers = players.filter(p => p.position !== 'goleiro' && (p.stats?.matches || 0) >= 10 && (adminData ? true : !p.bettingDisabled));
+                      const sortedLine = [...linePlayers]
+                        .filter(p => {
+                          const term = longTermSearch.toLowerCase();
+                          return p.name.toLowerCase().includes(term) || p.nickname?.toLowerCase().includes(term);
+                        })
+                        .map(p => ({ player: p, ltOdds: calculateLongTermOdds(p) }))
+                        .sort((a, b) => b.ltOdds.currentGoals - a.ltOdds.currentGoals);
+
+                      if (sortedLine.length === 0) {
+                        return <p className="text-xs text-gray-400 italic text-center py-6">Nenhum atleta de linha encontrado.</p>;
+                      }
+
+                      return sortedLine.map(({ player, ltOdds }) => {
+                        return (
+                          <div key={player.id} className={`flex flex-col sm:flex-row sm:items-center justify-between py-2 px-3 hover:bg-slate-50 transition-all gap-3 ${player.bettingDisabled ? 'opacity-65 grayscale-[30%]' : ''}`}>
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <span className={`w-6 h-6 rounded flex items-center justify-center text-[9px] font-black text-white shrink-0 ${getPositionColor(player.position)}`}>
+                                {getPositionAbbr(player.position)}
+                              </span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-black text-gray-800 uppercase tracking-tight truncate">
+                                    {player.nickname || player.name}
+                                  </span>
+                                  {player.bettingDisabled && (
+                                    <span className="text-[8px] bg-red-100 text-red-700 px-1 py-0.5 rounded font-black uppercase shrink-0">Desativado</span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">
+                                  Gols no Mês: <span className="text-gray-700 font-black">{ltOdds.currentGoals}</span> | Projeção: <span className="text-gray-700 font-black">{ltOdds.blendedMonthlyAvg.toFixed(1)}</span> | Rating: <span className="text-gray-500 font-bold">{getPlayerFinalOverall(player, cards)}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0 justify-between sm:justify-end">
+                              {adminData && (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    try {
+                                      await updateDoc(doc(db, 'players', player.id), {
+                                        bettingDisabled: !player.bettingDisabled
+                                      });
+                                    } catch (err) {
+                                      console.error(err);
+                                    }
+                                  }}
+                                  className={`px-2 py-1 rounded text-[8px] font-black uppercase tracking-wider transition-all ${
+                                    !player.bettingDisabled
+                                      ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                  }`}
+                                >
+                                  {!player.bettingDisabled ? '🟢 Ativo' : '🔴 Inativo'}
+                                </button>
+                              )}
+
+                              {/* Mercado de Over/Under */}
+                              <div className="flex gap-2">
+                                <div className="bg-slate-900 border border-slate-800 rounded-lg py-1 px-3 text-center min-w-[70px]">
+                                  <span className="block text-[11px] font-bold text-white tracking-wider">+{ltOdds.line}</span>
+                                  <span className="text-[12.5px] font-black text-primary-yellow">@ {ltOdds.oddOver}</span>
+                                </div>
+                                <div className="bg-slate-900 border border-slate-800 rounded-lg py-1 px-3 text-center min-w-[70px]">
+                                  <span className="block text-[11px] font-bold text-white tracking-wider">-{ltOdds.line}</span>
+                                  <span className="text-[12.5px] font-black text-primary-yellow">@ {ltOdds.oddUnder}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              {activeBetTab === 'goleiro' && (
+                <div className="space-y-4">
+                  <h4 className="text-sm font-black uppercase tracking-wider text-indigo-600 border-b border-gray-150 pb-2 flex items-center justify-between">
+                    <span>Gols Sofridos (Goleiros)</span>
+                    <span className="text-[10px] text-gray-400 font-bold lowercase">goleiro - ordenado por sofridos</span>
+                  </h4>
+                  <div className="flex flex-col bg-white border border-gray-100 rounded-2xl overflow-hidden divide-y divide-gray-100 shadow-sm">
+                    {(() => {
+                      const goalkeepers = players.filter(p => p.position === 'goleiro' && (p.stats?.matches || 0) >= 15 && (adminData ? true : !p.bettingDisabled));
+                      const sortedGK = [...goalkeepers]
+                        .filter(p => {
+                          const term = longTermSearch.toLowerCase();
+                          return p.name.toLowerCase().includes(term) || p.nickname?.toLowerCase().includes(term);
+                        })
+                        .map(p => ({ player: p, ltOdds: calculateLongTermConcededOdds(p) }))
+                        .sort((a, b) => b.ltOdds.currentGoals - a.ltOdds.currentGoals);
+
+                      if (sortedGK.length === 0) {
+                        return <p className="text-xs text-gray-400 italic text-center py-6">Nenhum goleiro encontrado.</p>;
+                      }
+
+                      return sortedGK.map(({ player, ltOdds }) => {
+                        return (
+                          <div key={player.id} className={`flex flex-col sm:flex-row sm:items-center justify-between py-2 px-3 hover:bg-slate-50 transition-all gap-3 ${player.bettingDisabled ? 'opacity-65 grayscale-[30%]' : ''}`}>
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <span className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-black text-white shrink-0 bg-blue-600">
+                                GK
+                              </span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-black text-gray-800 uppercase tracking-tight truncate">
+                                    {player.nickname || player.name}
+                                  </span>
+                                  {player.bettingDisabled && (
+                                    <span className="text-[8px] bg-red-100 text-red-700 px-1 py-0.5 rounded font-black uppercase shrink-0">Desativado</span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">
+                                  Gols Sofridos no Mês: <span className="text-red-500 font-black">{ltOdds.currentGoals}</span> | Projeção: <span className="text-gray-700 font-black">{ltOdds.blendedMonthlyAvg.toFixed(1)}</span> | Rating: <span className="text-gray-500 font-bold">{getPlayerFinalOverall(player, cards)}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0 justify-between sm:justify-end">
+                              {adminData && (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    try {
+                                      await updateDoc(doc(db, 'players', player.id), {
+                                        bettingDisabled: !player.bettingDisabled
+                                      });
+                                    } catch (err) {
+                                      console.error(err);
+                                    }
+                                  }}
+                                  className={`px-2 py-1 rounded text-[8px] font-black uppercase tracking-wider transition-all ${
+                                    !player.bettingDisabled
+                                      ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                  }`}
+                                >
+                                  {!player.bettingDisabled ? '🟢 Ativo' : '🔴 Inativo'}
+                                </button>
+                              )}
+
+                              {/* Mercado de Over/Under */}
+                              <div className="flex gap-2">
+                                <div className="bg-slate-900 border border-slate-800 rounded-lg py-1 px-3 text-center min-w-[70px]">
+                                  <span className="block text-[11px] font-bold text-white tracking-wider">+{ltOdds.line}</span>
+                                  <span className="text-[12.5px] font-black text-primary-yellow">@ {ltOdds.oddOver}</span>
+                                </div>
+                                <div className="bg-slate-900 border border-slate-800 rounded-lg py-1 px-3 text-center min-w-[70px]">
+                                  <span className="block text-[11px] font-bold text-white tracking-wider">-{ltOdds.line}</span>
+                                  <span className="text-[12.5px] font-black text-primary-yellow">@ {ltOdds.oddUnder}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+              )}
           </div>
         </div>
       </div>
     </div>
+  </div>
   );
 }

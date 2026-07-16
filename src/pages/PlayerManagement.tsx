@@ -3,7 +3,7 @@ import { db, auth } from '../firebase';
 import { collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { Player, Position, Location, OverallStats, AdminData, Match, ScoringRules, Card } from '../types';
 import { getPositionAbbr, getPositionColor } from '../utils/playerUtils';
-import { Users, UserPlus, Trash2, Edit2, Shield, Sword, ShieldAlert, Search, X, MapPin, Zap, Heart, Dumbbell, Target, Move, Share2, BarChart3, User, Star, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { Users, UserPlus, Trash2, Edit2, Shield, Sword, ShieldAlert, Search, X, MapPin, Zap, Heart, Dumbbell, Target, Move, Share2, BarChart3, User, Star, ShieldCheck, CheckCircle2, Coins } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../App';
 import { calculateGrade, calculateAverage, valueToLetter, letterToValue, getGradeColor } from '../utils/gradeUtils';
@@ -96,6 +96,7 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
   const [cardBgUrl, setCardBgUrl] = useState('');
   const [gmail, setGmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [bettingDisabled, setBettingDisabled] = useState(false);
   const [availableCards, setAvailableCards] = useState<Card[]>([]);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const [rawImageSrc, setRawImageSrc] = useState('');
@@ -286,7 +287,8 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
           gmail: gmail.toLowerCase().trim() || null,
           phone: phone.trim() || null,
           overallValue: overallValue,
-          birthDate: birthDate || ''
+          birthDate: birthDate || '',
+          bettingDisabled: bettingDisabled
         };
         
         // Safely update the current admin's rating
@@ -318,7 +320,8 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
             ratings: currentRating !== undefined ? { [currentAdminId]: currentRating } : {}
           },
           overallValue: overallValue,
-          birthDate: birthDate || ''
+          birthDate: birthDate || '',
+          bettingDisabled: bettingDisabled
         };
         console.log("playerData to create:", playerData);                
         await addDoc(collection(db, 'players'), playerData);
@@ -344,12 +347,26 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
     setCardBgUrl('');
     setGmail('');
     setPhone('');
+    setBettingDisabled(false);
     setEditingPlayer(null);
     setIsModalOpen(false);
     setIsOverallModalOpen(false);
     setOverallStats({
       ratings: {}
     });
+  };
+
+  const handleTogglePlayerBetting = async (e: React.MouseEvent, player: Player) => {
+    e.stopPropagation();
+    try {
+      const newStatus = !player.bettingDisabled;
+      await updateDoc(doc(db, 'players', player.id), {
+        bettingDisabled: newStatus
+      });
+    } catch (err) {
+      console.error("Erro ao alternar status de aposta:", err);
+      alert("Erro ao atualizar o status de aposta.");
+    }
   };
 
   const handleEdit = (player: Player) => {
@@ -361,6 +378,7 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
     setCardBgUrl(player.cardBgUrl || '');
     setGmail(player.gmail || '');
     setPhone(player.phone || '');
+    setBettingDisabled(player.bettingDisabled || false);
     
     // Resolve locationId: if it's a name (legacy), find the ID so the dropdown selects it
     let resolvedLocId = player.locationId || '';
@@ -763,7 +781,18 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
                 }}
               >
                 {isAdmin && (
-                  <div className="absolute top-[6%] right-[6%] z-20 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all translate-y-0 sm:translate-y-1 sm:group-hover:translate-y-0">
+                  <div className="absolute top-[6%] right-[6%] z-20 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all translate-y-0 sm:translate-y-1 sm:group-hover:translate-y-0 flex gap-1">
+                    <button 
+                      onClick={(e) => handleTogglePlayerBetting(e, player)}
+                      title={player.bettingDisabled ? "Ativar Apostas" : "Desativar Apostas"}
+                      className={`p-2 sm:p-1.5 rounded-xl sm:rounded-lg transition-all shadow-md sm:shadow-sm cursor-pointer ${
+                        !player.bettingDisabled
+                          ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                          : 'bg-gray-500 hover:bg-gray-600 text-white'
+                      }`}
+                    >
+                      <Coins className="w-4 h-4 sm:w-3 sm:h-3" />
+                    </button>
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1140,6 +1169,28 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
                       onChange={(e) => setPhone(e.target.value)}
                       className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 px-5 outline-none focus:ring-4 focus:ring-primary-blue/5 focus:border-primary-blue/20 transition-all font-medium text-primary-gray"
                     />
+                  </div>
+
+                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-center justify-between shadow-inner">
+                    <div>
+                      <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest block">Apostas de Longo Prazo</label>
+                      <span className="text-[11px] text-gray-500 font-bold block mt-0.5">
+                        {!bettingDisabled ? '🟢 APOSTAS ATIVADAS' : '🔴 APOSTAS DESATIVADAS'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setBettingDisabled(!bettingDisabled)}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        !bettingDisabled ? 'bg-emerald-500' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          !bettingDisabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
                   </div>
 
                   <div className="space-y-3">

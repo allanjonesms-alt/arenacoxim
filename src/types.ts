@@ -27,6 +27,7 @@ export interface Player {
   overallStats?: OverallStats;
   overallValue?: number; // Calculated grade value for sorting
   birthDate?: string;
+  bettingDisabled?: boolean;
 }
 
 export interface Match {
