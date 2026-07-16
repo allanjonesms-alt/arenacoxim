@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, getDocs, doc, getDoc, addDoc, updateDoc, setDoc, serverTimestamp, query, orderBy, limit } from 'firebase/firestore';
 import { Player, Location, Match, Card, OddsEngineConfig, AdminData, OddsSimulationHistory } from '../types';
-import { MapPin, Swords, ArrowRightLeft, Target, Trophy, Percent, Shield, Zap, CalendarDays, Settings2, Activity, ArrowUp, ArrowDown, Save, History, Wallet, ArrowUpRight } from 'lucide-react';
+import { MapPin, Swords, ArrowRightLeft, Target, Trophy, Percent, Shield, Zap, CalendarDays, Settings2, Activity, ArrowUp, ArrowDown, Save, History, Wallet, ArrowUpRight, Search } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getPositionAbbr, getPositionColor, getPlayerFinalOverall } from '../utils/playerUtils';
@@ -34,9 +34,10 @@ export default function SimuladorConfrontos({ adminData }: Props) {
   const [loading, setLoading] = useState(true);
 
   const [oddsConfig, setOddsConfig] = useState<OddsEngineConfig | null>(null);
-  const [betSettings, setBetSettings] = useState<{ matchWinner?: boolean, playerGoals?: boolean, playerAssists?: boolean }>({});
+  const [betSettings, setBetSettings] = useState<any>({});
   const [simulationHistory, setSimulationHistory] = useState<OddsSimulationHistory[]>([]);
   const [isSavingHistory, setIsSavingHistory] = useState(false);
+  const [longTermSearch, setLongTermSearch] = useState('');
 
 
   // Load data
@@ -456,6 +457,300 @@ export default function SimuladorConfrontos({ adminData }: Props) {
     })
     .slice(0, 6);
 
+  const MONTH_NAMES_PT: { [key: string]: string } = {
+    '01': 'Janeiro',
+    '02': 'Fevereiro',
+    '03': 'Março',
+    '04': 'Abril',
+    '05': 'Maio',
+    '06': 'Junho',
+    '07': 'Julho',
+    '08': 'Agosto',
+    '09': 'Setembro',
+    '10': 'Outubro',
+    '11': 'Novembro',
+    '12': 'Dezembro'
+  };
+
+  const getMonthlyGoalsData = () => {
+    const data: { [playerId: string]: { [monthKey: string]: number } } = {};
+    const finishedMatches = matches.filter(m => m.status === 'finished');
+    
+    players.forEach(p => {
+      data[p.id] = {};
+    });
+
+    finishedMatches.forEach(match => {
+      if (!match.date || !match.events) return;
+      const monthKey = match.date.substring(0, 7);
+      
+      match.events.forEach(event => {
+        if (event.type === 'goal' && event.playerId) {
+          if (!data[event.playerId]) {
+            data[event.playerId] = {};
+          }
+          data[event.playerId][monthKey] = (data[event.playerId][monthKey] || 0) + 1;
+        }
+      });
+    });
+
+    return data;
+  };
+
+  const getMonthlyConcededData = () => {
+    const data: { [playerId: string]: { [monthKey: string]: number } } = {};
+    const finishedMatches = matches.filter(m => m.status === 'finished');
+    
+    players.forEach(p => {
+      data[p.id] = {};
+    });
+
+    finishedMatches.forEach(match => {
+      if (!match.date) return;
+      const monthKey = match.date.substring(0, 7);
+      
+      if (match.goalkeeperAId) {
+        if (!data[match.goalkeeperAId]) data[match.goalkeeperAId] = {};
+        data[match.goalkeeperAId][monthKey] = (data[match.goalkeeperAId][monthKey] || 0) + (match.scoreB || 0);
+      }
+      if (match.goalkeeperBId) {
+        if (!data[match.goalkeeperBId]) data[match.goalkeeperBId] = {};
+        data[match.goalkeeperBId][monthKey] = (data[match.goalkeeperBId][monthKey] || 0) + (match.scoreA || 0);
+      }
+    });
+
+    return data;
+  };
+
+  const getRemainingMatchesInMonth = (isGoalkeeper: boolean) => {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth(); // 0-indexed
+    const currentDay = today.getDate();
+    const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+    let matchesLeft = 0;
+    // Loop from today to the last day of the month
+    for (let d = currentDay; d <= lastDayOfMonth; d++) {
+      const tempDate = new Date(currentYear, currentMonth, d);
+      const dayOfWeek = tempDate.getDay();
+      if (dayOfWeek === 2 || dayOfWeek === 4) { // Tuesday (2) or Thursday (4)
+        matchesLeft++;
+      }
+    }
+
+    return isGoalkeeper ? matchesLeft * 2 : matchesLeft;
+  };
+
+  const getActiveMonths = () => {
+    const monthsSet = new Set<string>();
+    const finishedMatches = matches.filter(m => m.status === 'finished');
+    
+    finishedMatches.forEach(match => {
+      if (match.date) {
+        const monthKey = match.date.substring(0, 7);
+        monthsSet.add(monthKey);
+      }
+    });
+
+    const todayStr = new Date().toISOString().substring(0, 7);
+    monthsSet.add(todayStr);
+
+    return Array.from(monthsSet).sort();
+  };
+
+  const playerMonthlyGoals = getMonthlyGoalsData();
+  const playerMonthlyConceded = getMonthlyConcededData();
+  const activeMonths = getActiveMonths();
+
+  const calculateLongTermOdds = (player: Player) => {
+    const currentDateObj = new Date();
+    const currentMonthKey = currentDateObj.toISOString().substring(0, 7); // e.g. "2026-07"
+    
+    // Career statistics
+    const careerMatchesCount = player.stats?.matches || 0;
+    const careerAvgPerMatch = careerMatchesCount > 0 ? ((player.stats?.goals || 0) / careerMatchesCount) : 0;
+    
+    // Position-based average goals per match expectation
+    let positionBasePerMatch = 0.30;
+    if (player.position === 'centroavante') positionBasePerMatch = 0.60;
+    else if (player.position === 'meio-campo') positionBasePerMatch = 0.40;
+    else if (player.position === 'lateral') positionBasePerMatch = 0.20;
+    else if (player.position === 'zagueiro') positionBasePerMatch = 0.10;
+    else if (player.position === 'goleiro') positionBasePerMatch = 0.01;
+
+    // Credibility weighting (blend career stats with position baselines)
+    const weight = Math.min(1.0, careerMatchesCount / 25);
+    const blendedGoalsPerMatch = (careerAvgPerMatch * weight) + (positionBasePerMatch * (1 - weight));
+
+    // Remaining matches of the month
+    const remainingMatches = getRemainingMatchesInMonth(false);
+    const ExpectedRemaining = blendedGoalsPerMatch * remainingMatches;
+
+    // Current goals scored in this month so far
+    const C = playerMonthlyGoals[player.id]?.[currentMonthKey] || 0;
+    const ExpectedTotal = C + ExpectedRemaining;
+
+    // Custom Over/Under Line
+    const L = Math.max(C + 0.5, Math.floor(ExpectedTotal) + 0.5);
+
+    // Poisson Distribution P(X > k)
+    const targetRemaining = L - C; // Ends in 0.5 (e.g. 2.5)
+    const k = Math.floor(targetRemaining);
+
+    const poissonGreater = (lambda: number, limitVal: number) => {
+      if (limitVal < 0) return 0.99;
+      let cumulative = 0;
+      let p = Math.exp(-lambda);
+      for (let i = 0; i <= limitVal; i++) {
+        if (i > 0) p = p * lambda / i;
+        cumulative += p;
+      }
+      return Math.max(0.01, Math.min(0.99, 1 - cumulative));
+    };
+
+    const probOverRaw = poissonGreater(ExpectedRemaining, k);
+    const probUnderRaw = Math.max(0.01, 1 - probOverRaw);
+
+    // Suavização para evitar odds extremamente desreguladas (ex: 4.01 vs 1.11)
+    const smoothingWeight = 0.50; 
+    const probOver = probOverRaw * smoothingWeight + (1 - smoothingWeight) * 0.5;
+    const probUnder = probUnderRaw * smoothingWeight + (1 - smoothingWeight) * 0.5;
+
+    // 15% sportsbook margin
+    const margin = 1.15;
+    const rawOddOver = 1 / (probOver * margin);
+    const rawOddUnder = 1 / (probUnder * margin);
+
+    const maxLtOdd = oddsConfig?.maxOdd ?? 12.00;
+    const formatLtOdd = (odd: number) => {
+      if (odd < 1.05) return '1.05';
+      if (odd > maxLtOdd) return maxLtOdd.toFixed(2);
+      return odd.toFixed(2);
+    };
+
+    // To display monthly projection baseline in the UI
+    const blendedMonthlyAvg = blendedGoalsPerMatch * 8; // run-rate of 8 games
+
+    return {
+      currentGoals: C,
+      line: L,
+      oddOver: formatLtOdd(rawOddOver),
+      oddUnder: formatLtOdd(rawOddUnder),
+      probOver: (probOver * 100).toFixed(1),
+      probUnder: (probUnder * 100).toFixed(1),
+      blendedMonthlyAvg,
+      expectedRemaining: ExpectedRemaining
+    };
+  };
+
+  const calculateLongTermConcededOdds = (player: Player) => {
+    const currentDateObj = new Date();
+    const currentMonthKey = currentDateObj.toISOString().substring(0, 7); // e.g. "2026-07"
+    
+    // Career conceded statistics from finished matches
+    const finishedMatches = matches.filter(m => m.status === 'finished');
+    let goalkeeperCareerConceded = 0;
+    let goalkeeperCareerMatches = 0;
+
+    finishedMatches.forEach(match => {
+      if (match.goalkeeperAId === player.id) {
+        goalkeeperCareerConceded += match.scoreB || 0;
+        goalkeeperCareerMatches++;
+      } else if (match.goalkeeperBId === player.id) {
+        goalkeeperCareerConceded += match.scoreA || 0;
+        goalkeeperCareerMatches++;
+      }
+    });
+
+    const gkMatchesCount = goalkeeperCareerMatches > 0 ? goalkeeperCareerMatches : (player.stats?.matches || 0);
+    const careerConcededAvgPerMatch = gkMatchesCount > 0 
+      ? (goalkeeperCareerConceded / gkMatchesCount) 
+      : 2.0; // default expectation of 2 goals per match
+
+    // Baseline conceded average per match
+    const positionBaseConcededPerMatch = 2.0;
+
+    // Blended average per match (credibility weighting)
+    const gkWeight = Math.min(1.0, gkMatchesCount / 20);
+    const blendedConcededPerMatch = (careerConcededAvgPerMatch * gkWeight) + (positionBaseConcededPerMatch * (1 - gkWeight));
+
+    // Remaining matches of the month for Goalkeepers (10 matches)
+    const remainingGKMatches = getRemainingMatchesInMonth(true);
+    const ExpectedRemaining = blendedConcededPerMatch * remainingGKMatches;
+
+    // Current goals conceded in this month so far
+    const C = playerMonthlyConceded[player.id]?.[currentMonthKey] || 0;
+    const ExpectedTotal = C + ExpectedRemaining;
+
+    // Custom Over/Under Line
+    const L = Math.max(C + 0.5, Math.floor(ExpectedTotal) + 0.5);
+
+    // Poisson Distribution P(X > k)
+    const targetRemaining = L - C; // Ends in 0.5 (e.g. 2.5)
+    const k = Math.floor(targetRemaining);
+
+    const poissonGreater = (lambda: number, limitVal: number) => {
+      if (limitVal < 0) return 0.99;
+      let cumulative = 0;
+      let p = Math.exp(-lambda);
+      for (let i = 0; i <= limitVal; i++) {
+        if (i > 0) p = p * lambda / i;
+        cumulative += p;
+      }
+      return Math.max(0.01, Math.min(0.99, 1 - cumulative));
+    };
+
+    const probOverRaw = poissonGreater(ExpectedRemaining, k);
+    const probUnderRaw = Math.max(0.01, 1 - probOverRaw);
+
+    // Suavização para evitar odds extremamente desreguladas (ex: 4.01 vs 1.11)
+    const smoothingWeight = 0.50; 
+    const probOver = probOverRaw * smoothingWeight + (1 - smoothingWeight) * 0.5;
+    const probUnder = probUnderRaw * smoothingWeight + (1 - smoothingWeight) * 0.5;
+
+    // 15% sportsbook margin
+    const margin = 1.15;
+    const rawOddOver = 1 / (probOver * margin);
+    const rawOddUnder = 1 / (probUnder * margin);
+
+    const maxLtOdd = oddsConfig?.maxOdd ?? 12.00;
+    const formatLtOdd = (odd: number) => {
+      if (odd < 1.05) return '1.05';
+      if (odd > maxLtOdd) return maxLtOdd.toFixed(2);
+      return odd.toFixed(2);
+    };
+
+    const blendedMonthlyAvg = blendedConcededPerMatch * 8; // run-rate of 8 games
+
+    return {
+      currentGoals: C,
+      line: L,
+      oddOver: formatLtOdd(rawOddOver),
+      oddUnder: formatLtOdd(rawOddUnder),
+      probOver: (probOver * 100).toFixed(1),
+      probUnder: (probUnder * 100).toFixed(1),
+      blendedMonthlyAvg,
+      expectedRemaining: ExpectedRemaining
+    };
+  };
+
+  const handleToggleLongTermMarket = async () => {
+    try {
+      const current = betSettings.longTermMonthlyGoals?.enabled || false;
+      const ref = doc(db, 'settings', 'bets');
+      await setDoc(ref, { 
+        longTermMonthlyGoals: { 
+          enabled: !current 
+        } 
+      }, { merge: true });
+      alert(!current ? 'Mercado de Longo Prazo habilitado para o público!' : 'Mercado de Longo Prazo desabilitado.');
+    } catch (error: any) {
+      console.error(error);
+      alert("Erro ao atualizar o mercado de longo prazo: " + error.message);
+    }
+  };
+
   const handleSelectMatch = (match: Match) => {
     setSelectedMatch(match);
     const tA = match.teamA.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[];
@@ -831,6 +1126,289 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                    })}
                  </div>
                 )}
+            </div>
+          </div>
+
+          {/* SEÇÃO APONTAMENTOS DE LONGO PRAZO */}
+          <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-lg mt-8 relative overflow-hidden">
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-blue-500"></div>
+            
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <div>
+                <h3 className="text-lg font-black uppercase tracking-tight text-gray-900 flex items-center gap-2">
+                  <CalendarDays className="w-5 h-5 text-emerald-500" />
+                  Apostas de Longo Prazo - Gols do Mês
+                </h3>
+                <p className="text-xs text-gray-500 font-medium mt-1">
+                  Odds de Over/Under para gols de cada atleta no mês atual, atualizadas automaticamente a cada partida.
+                </p>
+              </div>
+              
+              <button 
+                onClick={handleToggleLongTermMarket}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all ${
+                  betSettings.longTermMonthlyGoals?.enabled
+                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+              >
+                {betSettings.longTermMonthlyGoals?.enabled ? (
+                  <><Zap className="w-4 h-4" /> Público: Ativo (ON)</>
+                ) : (
+                  <><Shield className="w-4 h-4" /> Público: Inativo (OFF)</>
+                )}
+              </button>
+            </div>
+
+            {/* Filtro de Busca */}
+            <div className="relative mb-6">
+              <input
+                type="text"
+                placeholder="Buscar jogador para ver odds de longo prazo..."
+                value={longTermSearch}
+                onChange={e => setLongTermSearch(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-2xl pl-12 pr-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
+              />
+              <Search className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
+            </div>
+
+            {/* Listagem de Jogadores e Odds por Categoria */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* SUBSEÇÃO GOLS NO MÊS */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-black uppercase tracking-wider text-emerald-600 border-b border-gray-150 pb-2 flex items-center justify-between">
+                  <span>Gols no Mês (Linha)</span>
+                  <span className="text-[10px] text-gray-400 font-bold lowercase">atleta de linha - ordenado por gols</span>
+                </h4>
+                <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                  {(() => {
+                    const linePlayers = players.filter(p => p.position !== 'goleiro' && (p.stats?.matches || 0) >= 10);
+                    const sortedLine = [...linePlayers]
+                      .filter(p => {
+                        const term = longTermSearch.toLowerCase();
+                        return p.name.toLowerCase().includes(term) || p.nickname?.toLowerCase().includes(term);
+                      })
+                      .map(p => ({ player: p, ltOdds: calculateLongTermOdds(p) }))
+                      .sort((a, b) => b.ltOdds.currentGoals - a.ltOdds.currentGoals);
+
+                    if (sortedLine.length === 0) {
+                      return <p className="text-xs text-gray-400 italic text-center py-4">Nenhum atleta de linha encontrado.</p>;
+                    }
+
+                    return sortedLine.map(({ player, ltOdds }) => {
+                      const currentMonthKey = new Date().toISOString().substring(0, 7);
+                      const currentMonthName = MONTH_NAMES_PT[currentMonthKey.split('-')[1]] || 'Julho';
+
+                      return (
+                        <div key={player.id} className="bg-gray-50 border border-gray-100 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md transition-all gap-4">
+                          <div>
+                            {/* Identidade do Atleta */}
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-6 h-6 rounded flex items-center justify-center text-[9px] font-black text-white ${getPositionColor(player.position)}`}>
+                                  {getPositionAbbr(player.position)}
+                                </span>
+                                <span className="text-sm font-black text-gray-800 uppercase tracking-tight">
+                                  {player.nickname || player.name}
+                                </span>
+                              </div>
+                              <span className="text-xs bg-white border border-gray-200 px-2 py-0.5 rounded-full font-black text-gray-500">
+                                Rating: {getPlayerFinalOverall(player, cards)}
+                              </span>
+                            </div>
+
+                            {/* Histórico Recente de Gols por Mês */}
+                            <div className="bg-white border border-gray-150 rounded-xl p-2.5 mb-3">
+                              <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-2">
+                                Histórico de Gols ({new Date().getFullYear()})
+                              </div>
+                              <div className="flex gap-2 flex-wrap">
+                                {activeMonths.map(mKey => {
+                                  const mNum = mKey.split('-')[1];
+                                  const mNameAbbr = MONTH_NAMES_PT[mNum]?.substring(0, 3).toUpperCase() || mNum;
+                                  const goalsInM = playerMonthlyGoals[player.id]?.[mKey] || 0;
+                                  const isCurrent = mKey === currentMonthKey;
+
+                                  return (
+                                    <div 
+                                      key={mKey} 
+                                      className={`flex-1 min-w-[55px] text-center p-1 rounded-lg border ${
+                                        isCurrent 
+                                          ? 'bg-emerald-50/50 border-emerald-200' 
+                                          : 'bg-gray-50 border-gray-100'
+                                      }`}
+                                    >
+                                      <div className={`text-[8px] font-bold ${isCurrent ? 'text-emerald-700' : 'text-gray-400'}`}>
+                                        {mNameAbbr}
+                                      </div>
+                                      <div className={`text-xs font-black ${isCurrent ? 'text-emerald-800' : 'text-gray-700'}`}>
+                                        {goalsInM} G
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Dados Estatísticos e Projeção */}
+                            <div className="text-[10px] text-gray-500 font-semibold space-y-1 mb-4 bg-gray-100/50 p-2.5 rounded-xl border border-gray-200/50">
+                              <div className="flex justify-between">
+                                <span>Média Histórica Estimada:</span>
+                                <span className="font-bold text-gray-700">{ltOdds.blendedMonthlyAvg.toFixed(1)} gols/mês</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Expectativa Restante ({Math.round((new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() - new Date().getDate() + 1) / new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() * 105)}% do mês):</span>
+                                <span className="font-bold text-gray-700">+{ltOdds.expectedRemaining.toFixed(1)} gols</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Gols Atuais no Mês:</span>
+                                <span className="font-bold text-gray-700">{ltOdds.currentGoals} gols</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Mercado de Over/Under */}
+                          <div className="bg-white border border-gray-200 rounded-xl p-3">
+                            <div className="text-center text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">
+                              Mercado: Gols em {currentMonthName}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-center">
+                                <span className="block text-[9.5px] font-black uppercase text-white mb-0.5 tracking-wider">+{ltOdds.line}</span>
+                                <span className="text-sm font-black text-primary-yellow">@ {ltOdds.oddOver}</span>
+                                <span className="block text-[8px] text-gray-400 font-semibold mt-0.5">Prob: {ltOdds.probOver}%</span>
+                              </div>
+                              <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-center">
+                                <span className="block text-[9.5px] font-black uppercase text-white mb-0.5 tracking-wider">-{ltOdds.line}</span>
+                                <span className="text-sm font-black text-primary-yellow">@ {ltOdds.oddUnder}</span>
+                                <span className="block text-[8px] text-gray-400 font-semibold mt-0.5">Prob: {ltOdds.probUnder}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              {/* SUBSEÇÃO GOLS SOFRIDOS */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-black uppercase tracking-wider text-indigo-600 border-b border-gray-150 pb-2 flex items-center justify-between">
+                  <span>Gols Sofridos (Goleiros)</span>
+                  <span className="text-[10px] text-gray-400 font-bold lowercase">goleiro - ordenado por sofridos</span>
+                </h4>
+                <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                  {(() => {
+                    const goalkeepers = players.filter(p => p.position === 'goleiro' && (p.stats?.matches || 0) >= 20);
+                    const sortedGK = [...goalkeepers]
+                      .filter(p => {
+                        const term = longTermSearch.toLowerCase();
+                        return p.name.toLowerCase().includes(term) || p.nickname?.toLowerCase().includes(term);
+                      })
+                      .map(p => ({ player: p, ltOdds: calculateLongTermConcededOdds(p) }))
+                      .sort((a, b) => b.ltOdds.currentGoals - a.ltOdds.currentGoals);
+
+                    if (sortedGK.length === 0) {
+                      return <p className="text-xs text-gray-400 italic text-center py-4">Nenhum goleiro encontrado.</p>;
+                    }
+
+                    return sortedGK.map(({ player, ltOdds }) => {
+                      const currentMonthKey = new Date().toISOString().substring(0, 7);
+                      const currentMonthName = MONTH_NAMES_PT[currentMonthKey.split('-')[1]] || 'Julho';
+
+                      return (
+                        <div key={player.id} className="bg-gray-50 border border-gray-100 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md transition-all gap-4">
+                          <div>
+                            {/* Identidade do Atleta */}
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <span className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-black text-white bg-blue-600">
+                                  GK
+                                </span>
+                                <span className="text-sm font-black text-gray-800 uppercase tracking-tight">
+                                  {player.nickname || player.name}
+                                </span>
+                              </div>
+                              <span className="text-xs bg-white border border-gray-200 px-2 py-0.5 rounded-full font-black text-gray-500">
+                                Rating: {getPlayerFinalOverall(player, cards)}
+                              </span>
+                            </div>
+
+                            {/* Histórico Recente de Gols por Mês */}
+                            <div className="bg-white border border-gray-150 rounded-xl p-2.5 mb-3">
+                              <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-2">
+                                Histórico de Gols Sofridos ({new Date().getFullYear()})
+                              </div>
+                              <div className="flex gap-2 flex-wrap">
+                                {activeMonths.map(mKey => {
+                                  const mNum = mKey.split('-')[1];
+                                  const mNameAbbr = MONTH_NAMES_PT[mNum]?.substring(0, 3).toUpperCase() || mNum;
+                                  const concededInM = playerMonthlyConceded[player.id]?.[mKey] || 0;
+                                  const isCurrent = mKey === currentMonthKey;
+
+                                  return (
+                                    <div 
+                                      key={mKey} 
+                                      className={`flex-1 min-w-[55px] text-center p-1 rounded-lg border ${
+                                        isCurrent 
+                                          ? 'bg-indigo-50/50 border-indigo-200' 
+                                          : 'bg-gray-50 border-gray-100'
+                                      }`}
+                                    >
+                                      <div className={`text-[8px] font-bold ${isCurrent ? 'text-indigo-700' : 'text-gray-400'}`}>
+                                        {mNameAbbr}
+                                      </div>
+                                      <div className={`text-xs font-black ${isCurrent ? 'text-indigo-800' : 'text-gray-700'}`}>
+                                        {concededInM} G
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Dados Estatísticos e Projeção */}
+                            <div className="text-[10px] text-gray-500 font-semibold space-y-1 mb-4 bg-gray-100/50 p-2.5 rounded-xl border border-gray-200/50">
+                              <div className="flex justify-between">
+                                <span>Média Histórica Estimada:</span>
+                                <span className="font-bold text-gray-700">{ltOdds.blendedMonthlyAvg.toFixed(1)} sofridos/mês</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Expectativa Restante ({Math.round((new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() - new Date().getDate() + 1) / new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() * 105)}% do mês):</span>
+                                <span className="font-bold text-gray-700">+{ltOdds.expectedRemaining.toFixed(1)} sofridos</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Gols Sofridos Atuais no Mês:</span>
+                                <span className="font-bold text-red-500">{ltOdds.currentGoals} sofridos</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Mercado de Over/Under */}
+                          <div className="bg-white border border-gray-200 rounded-xl p-3">
+                            <div className="text-center text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-2">
+                              Mercado: Gols Sofridos em {currentMonthName}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-center">
+                                <span className="block text-[9.5px] font-black uppercase text-white mb-0.5 tracking-wider">+{ltOdds.line}</span>
+                                <span className="text-sm font-black text-primary-yellow">@ {ltOdds.oddOver}</span>
+                                <span className="block text-[8px] text-gray-400 font-semibold mt-0.5">Prob: {ltOdds.probOver}%</span>
+                              </div>
+                              <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-center">
+                                <span className="block text-[9.5px] font-black uppercase text-white mb-0.5 tracking-wider">-{ltOdds.line}</span>
+                                <span className="text-sm font-black text-primary-yellow">@ {ltOdds.oddUnder}</span>
+                                <span className="block text-[8px] text-gray-400 font-semibold mt-0.5">Prob: {ltOdds.probUnder}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
             </div>
           </div>
         </div>

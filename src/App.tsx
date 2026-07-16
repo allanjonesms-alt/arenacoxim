@@ -36,6 +36,7 @@ import MonthlyAwardsManagement from './pages/MonthlyAwardsManagement';
 import Diagnostic from './pages/Diagnostic';
 import SimuladorConfrontos from './pages/SimuladorConfrontos';
 import PublicMonthlyAwards from './pages/PublicMonthlyAwards';
+import ApostasUsuario from './pages/ApostasUsuario';
 
 export enum OperationType {
   CREATE = 'create',
@@ -480,6 +481,7 @@ export default function App() {
         <main className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${routerLocation.pathname === '/' ? 'pb-8 pt-0' : 'py-8'}`}>
           <Routes>
             <Route path="/" element={<HomeHub user={user} isAdmin={isAdmin} adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
+            <Route path="/apostas" element={<ApostasUsuario user={user} isMaster={isAdmin && adminData?.role === 'master'} />} />
             <Route path="/dashboard" element={<PublicDashboard adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
             <Route path="/melhores-do-mes" element={<PublicMonthlyAwards />} />
             <Route path="/players" element={<PlayerManagement adminData={adminData} adminId={user?.uid} sharedLocations={locations} />} />

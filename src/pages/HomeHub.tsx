@@ -267,13 +267,13 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
           
           {user && (
         <div className="py-2 flex justify-center">
-          <button 
-            onClick={() => setShowBettingModal(true)}
+          <Link 
+            to="/apostas"
             className="bg-primary-blue text-white px-8 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-900 transition-all shadow-md active:scale-95 flex items-center justify-center gap-3 w-full max-w-sm border border-white/10"
           >
             <TrendingUp className="w-5 h-5 text-primary-yellow" />
             Apostas
-          </button>
+          </Link>
         </div>
       )}
       
@@ -405,28 +405,6 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
              }
            />
         </div>
-
-            {showBettingModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2rem] w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200 flex flex-col">
-            <div className="flex-shrink-0 bg-white/90 backdrop-blur-md border-b border-gray-100 p-4 flex items-center justify-between z-20">
-              <h3 className="font-black text-lg text-primary-blue flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-primary-yellow" />
-                Apostas
-              </h3>
-              <button 
-                onClick={() => setShowBettingModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-4 md:p-6 overflow-y-auto flex-grow">
-              <UserBettingDashboard user={user} isMaster={isMaster} />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Admin Pages Section */}
       {isAdmin && (
