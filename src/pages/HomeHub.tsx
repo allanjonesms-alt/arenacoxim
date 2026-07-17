@@ -266,7 +266,7 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
         <div className="space-y-8">
           
           {user && (
-        <div className="py-2 flex justify-center">
+        <div className="py-2 hidden md:flex justify-center">
           <Link 
             to="/apostas"
             className="bg-primary-blue text-white px-8 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-900 transition-all shadow-md active:scale-95 flex items-center justify-center gap-3 w-full max-w-sm border border-white/10"
@@ -282,7 +282,7 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            className="grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4"
+            className="hidden md:grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4"
           >
             {publicCards.map((card, idx) => {
               const IconComponent = card.icon;

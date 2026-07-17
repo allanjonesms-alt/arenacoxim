@@ -11,7 +11,7 @@ import {
 } from 'firebase/auth';
 import { auth, db } from './firebase';
 import { doc, getDoc, setDoc, getDocFromServer, collection, query, where, getDocs, deleteDoc, updateDoc, onSnapshot } from 'firebase/firestore';
-import { Trophy, Users, Calendar, LayoutDashboard, LogIn, LogOut, Menu, X, ShieldCheck, MapPin, TrendingUp, User as UserIcon, Lock, Key, Eye, EyeOff, Loader2, Home } from 'lucide-react';
+import { Trophy, Users, Calendar, LayoutDashboard, LogIn, LogOut, Menu, X, ShieldCheck, MapPin, TrendingUp, User as UserIcon, Lock, Key, Eye, EyeOff, Loader2, Home, Star, Award } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AdminData, Location, Team, ScoringRules, Player } from './types';
 
@@ -478,7 +478,7 @@ export default function App() {
         </nav>
 
         {/* Main Content */}
-        <main className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${routerLocation.pathname === '/' ? 'pb-8 pt-0' : 'py-8'}`}>
+        <main className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-28 md:pb-8 ${routerLocation.pathname === '/' ? 'pt-0' : 'py-8'}`}>
           <Routes>
             <Route path="/" element={<HomeHub user={user} isAdmin={isAdmin} adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
             <Route path="/apostas" element={<ApostasUsuario user={user} isMaster={isAdmin && adminData?.role === 'master'} />} />
@@ -523,6 +523,69 @@ export default function App() {
             <Route path="*" element={<div className="text-center py-20"><h1 className="text-4xl font-bold">404</h1><p className="text-gray-400">Página não encontrada ou acesso restrito.</p></div>} />
           </Routes>
         </main>
+
+        {/* Menu Flutuante Inferior para Mobile */}
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-gray-150 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] py-3 px-2 pb-[calc(10px+env(safe-area-inset-bottom))] md:hidden flex justify-around items-center">
+          <Link
+            to="/apostas"
+            className={`flex flex-col items-center gap-1 flex-1 text-center transition-all ${
+              routerLocation.pathname === '/apostas' || routerLocation.pathname === '/admin/simulador'
+                ? 'text-primary-blue font-black scale-105'
+                : 'text-gray-400 font-semibold'
+            }`}
+          >
+            <TrendingUp className={`w-5 h-5 ${routerLocation.pathname === '/apostas' || routerLocation.pathname === '/admin/simulador' ? 'text-primary-blue' : ''}`} />
+            <span className="text-[9px] uppercase tracking-wider font-extrabold">Apostas</span>
+          </Link>
+
+          <Link
+            to="/players"
+            className={`flex flex-col items-center gap-1 flex-1 text-center transition-all ${
+              routerLocation.pathname === '/players' || routerLocation.pathname === '/admin/players'
+                ? 'text-primary-blue font-black scale-105'
+                : 'text-gray-400 font-semibold'
+            }`}
+          >
+            <Users className={`w-5 h-5 ${routerLocation.pathname === '/players' || routerLocation.pathname === '/admin/players' ? 'text-primary-blue' : ''}`} />
+            <span className="text-[9px] uppercase tracking-wider font-extrabold">Atletas</span>
+          </Link>
+
+          <Link
+            to="/score-table"
+            className={`flex flex-col items-center gap-1 flex-1 text-center transition-all ${
+              routerLocation.pathname === '/score-table' || routerLocation.pathname === '/admin/score-table'
+                ? 'text-primary-blue font-black scale-105'
+                : 'text-gray-400 font-semibold'
+            }`}
+          >
+            <Trophy className={`w-5 h-5 ${routerLocation.pathname === '/score-table' || routerLocation.pathname === '/admin/score-table' ? 'text-primary-blue' : ''}`} />
+            <span className="text-[9px] uppercase tracking-wider font-extrabold">Tabela</span>
+          </Link>
+
+          <Link
+            to="/melhores-do-mes"
+            className={`flex flex-col items-center gap-1 flex-1 text-center transition-all ${
+              routerLocation.pathname === '/melhores-do-mes' || routerLocation.pathname === '/admin/awards'
+                ? 'text-primary-blue font-black scale-105'
+                : 'text-gray-400 font-semibold'
+            }`}
+          >
+            <Star className={`w-5 h-5 ${routerLocation.pathname === '/melhores-do-mes' || routerLocation.pathname === '/admin/awards' ? 'text-primary-blue' : ''}`} />
+            <span className="text-[9px] uppercase tracking-wider font-extrabold">Melhores Mês</span>
+          </Link>
+
+          <Link
+            to="/resenha"
+            className={`flex flex-col items-center gap-1 flex-1 text-center transition-all ${
+              routerLocation.pathname === '/resenha'
+                ? 'text-primary-blue font-black scale-105'
+                : 'text-gray-400 font-semibold'
+            }`}
+          >
+            <Award className={`w-5 h-5 ${routerLocation.pathname === '/resenha' ? 'text-primary-blue' : ''}`} />
+            <span className="text-[9px] uppercase tracking-wider font-extrabold">M. e Piores</span>
+          </Link>
+        </div>
 
         {/* Modals */}
         <AnimatePresence>

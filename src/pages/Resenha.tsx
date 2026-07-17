@@ -144,14 +144,60 @@ export default function Resenha({ locations }: ResenhaProps) {
     })
     .filter(p => p.matches >= 10);
 
-  const worstGoleiro = barcaPlayers.filter(p => (p.position || '').toLowerCase() === 'goleiro').sort((a,b) => a.aproveitamento - b.aproveitamento).slice(0,1);
-  const worstLinha = barcaPlayers.filter(p => (p.position || '').toLowerCase() !== 'goleiro').sort((a,b) => a.aproveitamento - b.aproveitamento).slice(0,6);
+  const worstGoleiro = barcaPlayers
+    .filter(p => (p.position || '').toLowerCase() === 'goleiro')
+    .sort((a, b) => {
+      if (a.aproveitamento !== b.aproveitamento) {
+        return a.aproveitamento - b.aproveitamento;
+      }
+      if (a.wins !== b.wins) {
+        return a.wins - b.wins;
+      }
+      return a.matches - b.matches;
+    })
+    .slice(0, 1);
+
+  const worstLinha = barcaPlayers
+    .filter(p => (p.position || '').toLowerCase() !== 'goleiro')
+    .sort((a, b) => {
+      if (a.aproveitamento !== b.aproveitamento) {
+        return a.aproveitamento - b.aproveitamento;
+      }
+      if (a.wins !== b.wins) {
+        return a.wins - b.wins;
+      }
+      return a.matches - b.matches;
+    })
+    .slice(0, 6);
 
   const barca = [...worstGoleiro, ...worstLinha];
 
   // Most Victorious Players (Seleção de Ouro) calculated in the same positional pattern
-  const bestGoleiro = barcaPlayers.filter(p => (p.position || '').toLowerCase() === 'goleiro').sort((a,b) => b.aproveitamento - a.aproveitamento).slice(0,1);
-  const bestLinha = barcaPlayers.filter(p => (p.position || '').toLowerCase() !== 'goleiro').sort((a,b) => b.aproveitamento - a.aproveitamento).slice(0,6);
+  const bestGoleiro = barcaPlayers
+    .filter(p => (p.position || '').toLowerCase() === 'goleiro')
+    .sort((a, b) => {
+      if (b.aproveitamento !== a.aproveitamento) {
+        return b.aproveitamento - a.aproveitamento;
+      }
+      if (b.wins !== a.wins) {
+        return b.wins - a.wins;
+      }
+      return b.matches - a.matches;
+    })
+    .slice(0, 1);
+
+  const bestLinha = barcaPlayers
+    .filter(p => (p.position || '').toLowerCase() !== 'goleiro')
+    .sort((a, b) => {
+      if (b.aproveitamento !== a.aproveitamento) {
+        return b.aproveitamento - a.aproveitamento;
+      }
+      if (b.wins !== a.wins) {
+        return b.wins - a.wins;
+      }
+      return b.matches - a.matches;
+    })
+    .slice(0, 6);
 
   const vitoriosos = [...bestGoleiro, ...bestLinha];
 
@@ -309,7 +355,15 @@ export default function Resenha({ locations }: ResenhaProps) {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {[...barcaPlayers]
-                    .sort((a, b) => b.aproveitamento - a.aproveitamento)
+                    .sort((a, b) => {
+                      if (b.aproveitamento !== a.aproveitamento) {
+                        return b.aproveitamento - a.aproveitamento;
+                      }
+                      if (b.wins !== a.wins) {
+                        return b.wins - a.wins;
+                      }
+                      return b.matches - a.matches;
+                    })
                     .map((p, index) => {
                       const isSelecao = vitoriosos.some(v => v.id === p.id);
                       const isBarca = barca.some(b => b.id === p.id);
