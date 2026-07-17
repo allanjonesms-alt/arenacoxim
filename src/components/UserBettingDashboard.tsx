@@ -10,6 +10,47 @@ interface UserBettingDashboardProps {
   isMaster?: boolean;
 }
 
+const getDynamicPixCode = (amountStr: string) => {
+  const basePart1 = "00020126360014BR.GOV.BCB.PIX0114+5567984373039520400005303986";
+  const basePart2 = "5802BR5901N6001C62140510ARENACOXIM6304";
+  
+  if (!amountStr) {
+    return "00020126360014BR.GOV.BCB.PIX0114+55679843730395204000053039865802BR5901N6001C62140510ARENACOXIM6304EBCB";
+  }
+  
+  const amountNum = Number(amountStr);
+  if (isNaN(amountNum) || amountNum <= 0) {
+    return "00020126360014BR.GOV.BCB.PIX0114+55679843730395204000053039865802BR5901N6001C62140510ARENACOXIM6304EBCB";
+  }
+  
+  const formattedAmount = amountNum.toFixed(2);
+  const lenStr = formattedAmount.length.toString().padStart(2, '0');
+  const amountField = `54${lenStr}${formattedAmount}`;
+  
+  const rawPayload = basePart1 + amountField + basePart2;
+  
+  let crc = 0xFFFF;
+  const polynomial = 0x1021;
+  for (let i = 0; i < rawPayload.length; i++) {
+    const b = rawPayload.charCodeAt(i);
+    for (let j = 0; j < 8; j++) {
+      const bit = ((b >> (7 - j)) & 1) === 1;
+      const c15 = ((crc >> 15) & 1) === 1;
+      crc <<= 1;
+      if (c15 !== bit) {
+        crc ^= polynomial;
+      }
+    }
+  }
+  crc &= 0xFFFF;
+  let hex = crc.toString(16).toUpperCase();
+  while (hex.length < 4) {
+    hex = '0' + hex;
+  }
+  
+  return rawPayload + hex;
+};
+
 export function UserBettingDashboard({ user, isMaster }: UserBettingDashboardProps) {
   const [balance, setBalance] = useState<number>(0);
   const [bets, setBets] = useState<any[]>([]);
@@ -18,7 +59,7 @@ export function UserBettingDashboard({ user, isMaster }: UserBettingDashboardPro
   const [depositAmount, setDepositAmount] = useState('');
   const [copied, setCopied] = useState(false);
   
-  const pixCode = "00020126360014BR.GOV.BCB.PIX0114+55679843730395204000053039865802BR5901N6001C62140510ARENACOXIM6304EBCB";
+  const pixCode = getDynamicPixCode(depositAmount);
 
   
   const handlePixEfetivado = async () => {

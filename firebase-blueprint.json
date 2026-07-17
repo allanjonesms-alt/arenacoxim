@@ -131,7 +131,8 @@
         "title": { "type": "string" },
         "content": { "type": "string" },
         "imageUrl": { "type": "string" },
-        "createdAt": { "type": "integer" }
+        "createdAt": { "type": "integer" },
+        "link": { "type": "string", "description": "Optional news external or detail link" }
       },
       "required": ["title", "content", "createdAt"]
     },

@@ -11,6 +11,7 @@ export default function NewsManagement() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [link, setLink] = useState('');
   
   // Custom Date and Time states
   const [date, setDate] = useState(() => {
@@ -159,6 +160,7 @@ export default function NewsManagement() {
           imageUrl,
           date,
           time,
+          link: link.trim() || '',
         });
       } else {
         await addDoc(collection(db, 'news'), {
@@ -167,6 +169,7 @@ export default function NewsManagement() {
           imageUrl,
           date,
           time,
+          link: link.trim() || '',
           createdAt: Date.now()
         });
       }
@@ -193,6 +196,7 @@ export default function NewsManagement() {
     setContent('');
     setImageUrl('');
     setImageSizeKb(null);
+    setLink('');
     const today = new Date();
     const localDate = new Date(today.getTime() - (today.getTimezoneOffset()*60*1000));
     setDate(localDate.toISOString().split('T')[0]);
@@ -208,6 +212,7 @@ export default function NewsManagement() {
     setContent(item.content);
     setImageUrl(item.imageUrl || '');
     setImageSizeKb(null); // We don't have kb for loaded images without recalculating
+    setLink(item.link || '');
     
     if (item.date) {
       setDate(item.date);
@@ -324,6 +329,17 @@ export default function NewsManagement() {
             />
           </div>
 
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest pl-1">Link de Acesso (Opcional)</label>
+            <input
+              type="text"
+              placeholder="https://exemplo.com/noticia-completa"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-4 px-5 focus:border-emerald-500 outline-none text-primary-gray font-medium text-sm transition-all shadow-inner"
+            />
+          </div>
+
           {/* DND and Click Image Uploader */}
           <div className="space-y-2">
             <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest pl-1 block">Imagem da Notícia</label>
@@ -423,6 +439,11 @@ export default function NewsManagement() {
                   <div className="space-y-1">
                     <h3 className="font-black text-sm text-primary-blue uppercase tracking-tight line-clamp-1">{item.title}</h3>
                     <p className="text-xs text-gray-400 font-medium leading-relaxed line-clamp-3">{item.content}</p>
+                    {item.link && (
+                      <div className="text-[10px] text-emerald-650 font-black uppercase tracking-wider bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-lg w-fit truncate max-w-full">
+                        Link: {item.link}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex justify-end border-t border-gray-50 mt-4 pt-3 gap-2">

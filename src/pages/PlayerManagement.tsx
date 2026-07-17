@@ -783,17 +783,6 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
                 {isAdmin && (
                   <div className="absolute top-[6%] right-[6%] z-20 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all translate-y-0 sm:translate-y-1 sm:group-hover:translate-y-0 flex gap-1">
                     <button 
-                      onClick={(e) => handleTogglePlayerBetting(e, player)}
-                      title={player.bettingDisabled ? "Ativar Apostas" : "Desativar Apostas"}
-                      className={`p-2 sm:p-1.5 rounded-xl sm:rounded-lg transition-all shadow-md sm:shadow-sm cursor-pointer ${
-                        !player.bettingDisabled
-                          ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
-                          : 'bg-gray-500 hover:bg-gray-600 text-white'
-                      }`}
-                    >
-                      <Coins className="w-4 h-4 sm:w-3 sm:h-3" />
-                    </button>
-                    <button 
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDelete(player.id);

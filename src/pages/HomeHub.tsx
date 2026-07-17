@@ -51,7 +51,7 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const [promoConfig, setPromoConfig] = useState({
-    active: true,
+    active: false,
     imageUrl: '',
     link: 'https://docs.google.com/forms/d/e/1FAIpQLSfJFjmpcdmGpk6Ayc_m6ksYbjY7REyDgTd1OHIbGFYAyNKEfQ/viewform?usp=header',
     title: '10º Torneio e Churrasco ACS',
@@ -67,7 +67,7 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
         if (docSnap.exists()) {
           const data = docSnap.data();
           setPromoConfig({
-            active: data.active ?? true,
+            active: data.active ?? false,
             imageUrl: data.imageUrl || '',
             link: data.link || 'https://docs.google.com/forms/d/e/1FAIpQLSfJFjmpcdmGpk6Ayc_m6ksYbjY7REyDgTd1OHIbGFYAyNKEfQ/viewform?usp=header',
             title: data.title || '10º Torneio e Churrasco ACS',
@@ -346,54 +346,96 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
                  </h2>
                  {news.length > 0 ? (
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     {news.slice(0, 2).map(item => (
-                       <div key={item.id} className="flex bg-white rounded-2xl p-4 border border-gray-100 shadow-sm gap-4 items-center relative group">
-                         {item.imageUrl && (
-                           <div className="w-20 h-20 flex-shrink-0 rounded-xl overflow-hidden bg-gray-50 border border-gray-100">
+                     {news.slice(0, 2).map(item => {
+                       const CardContent = (
+                         <>
+                           {item.imageUrl && (
+                             <div className="w-20 h-20 flex-shrink-0 rounded-xl overflow-hidden bg-gray-50 border border-gray-100">
                               <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
-                           </div>
-                         )}
-                         <div className="flex flex-col flex-1 min-w-0 pr-6">
-                           {item.date && (
-                             <span className="text-[9px] font-black text-emerald-650 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md uppercase tracking-wider w-fit mb-1">
-                               {item.date} {item.time ? `às ${item.time}` : ''}
-                             </span>
-                           )}
-                           <h3 className="text-sm font-black uppercase text-primary-blue line-clamp-2 leading-tight">{item.title}</h3>
-                           <p className="text-[10px] text-gray-500 leading-snug line-clamp-2 mt-1">{item.content}</p>
-                         </div>
-                         {isAdmin && (
-                           confirmDeleteId === item.id ? (
-                             <div className="absolute top-3 right-3 bg-white border border-rose-150 p-2 rounded-2xl flex items-center gap-1.5 shadow-lg z-10 animate-in fade-in zoom-in-95 duration-150">
-                               <span className="text-[9px] font-black text-rose-600 uppercase tracking-tighter mr-1">Apagar?</span>
-                               <button
-                                 onClick={() => {
-                                   handleDeleteNews(item.id);
-                                   setConfirmDeleteId(null);
-                                 }}
-                                 className="bg-rose-500 hover:bg-rose-600 text-white text-[9px] font-black uppercase px-2 py-1 rounded-xl shadow-sm transition-all"
-                               >
-                                 Sim
-                               </button>
-                               <button
-                                 onClick={() => setConfirmDeleteId(null)}
-                                 className="bg-gray-100 hover:bg-gray-200 text-gray-500 text-[9px] font-black uppercase px-2 py-1 rounded-xl transition-all"
-                               >
-                                 Não
-                               </button>
                              </div>
-                           ) : (
-                             <button
-                               onClick={() => setConfirmDeleteId(item.id)}
-                               title="Excluir Notícia"
-                               className="absolute top-4 right-4 p-1.5 text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition-all shadow-sm flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100"
-                             >
-                               <Trash2 className="w-4 h-4" />
-                             </button>
-                           )
-                         )}
-                       </div>
-                     ))}
+                           )}
+                           <div className="flex flex-col flex-1 min-w-0 pr-6">
+                             {item.date && (
+                               <span className="text-[9px] font-black text-emerald-650 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md uppercase tracking-wider w-fit mb-1">
+                                 {item.date} {item.time ? `às ${item.time}` : ''}
+                               </span>
+                             )}
+                             <h3 className="text-sm font-black uppercase text-primary-blue line-clamp-2 leading-tight flex items-center gap-1">
+                               {item.title}
+                               {item.link && <span className="text-emerald-600 inline-block">↗</span>}
+                             </h3>
+                             <p className="text-[10px] text-gray-500 leading-snug line-clamp-2 mt-1">{item.content}</p>
+                             {item.link && (
+                               <span className="text-[9px] text-emerald-600 font-bold mt-1 inline-block hover:underline">
+                                 Ler notícia completa ↗
+                               </span>
+                             )}
+                           </div>
+                           {isAdmin && (
+                             <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} className="absolute top-4 right-4 z-20">
+                               {confirmDeleteId === item.id ? (
+                                 <div className="bg-white border border-rose-150 p-2 rounded-2xl flex items-center gap-1.5 shadow-lg animate-in fade-in zoom-in-95 duration-150">
+                                   <span className="text-[9px] font-black text-rose-600 uppercase tracking-tighter mr-1">Apagar?</span>
+                                   <button
+                                     onClick={(e) => {
+                                       e.preventDefault();
+                                       e.stopPropagation();
+                                       handleDeleteNews(item.id);
+                                       setConfirmDeleteId(null);
+                                     }}
+                                     className="bg-rose-500 hover:bg-rose-600 text-white text-[9px] font-black uppercase px-2 py-1 rounded-xl shadow-sm transition-all"
+                                   >
+                                     Sim
+                                   </button>
+                                   <button
+                                     onClick={(e) => {
+                                       e.preventDefault();
+                                       e.stopPropagation();
+                                       setConfirmDeleteId(null);
+                                     }}
+                                     className="bg-gray-100 hover:bg-gray-200 text-gray-500 text-[9px] font-black uppercase px-2 py-1 rounded-xl transition-all"
+                                   >
+                                     Não
+                                   </button>
+                                 </div>
+                               ) : (
+                                 <button
+                                   onClick={(e) => {
+                                     e.preventDefault();
+                                     e.stopPropagation();
+                                     setConfirmDeleteId(item.id);
+                                   }}
+                                   title="Excluir Notícia"
+                                   className="p-1.5 text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition-all shadow-sm flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                 >
+                                   <Trash2 className="w-4 h-4" />
+                                 </button>
+                               )}
+                             </div>
+                           )}
+                         </>
+                       );
+
+                       if (item.link) {
+                         return (
+                           <a 
+                             key={item.id} 
+                             href={item.link} 
+                             target="_blank" 
+                             rel="noopener noreferrer" 
+                             className="flex bg-white rounded-2xl p-4 border border-gray-150 shadow-sm gap-4 items-center relative group hover:border-emerald-250 hover:shadow-md transition-all cursor-pointer"
+                           >
+                             {CardContent}
+                           </a>
+                         );
+                       }
+
+                       return (
+                         <div key={item.id} className="flex bg-white rounded-2xl p-4 border border-gray-150 shadow-sm gap-4 items-center relative group">
+                           {CardContent}
+                         </div>
+                       );
+                     })}
                    </div>
                  ) : (
                    <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl flex flex-col gap-2 items-center justify-center text-center">

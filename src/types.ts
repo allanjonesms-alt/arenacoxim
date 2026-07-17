@@ -128,6 +128,7 @@ export interface News {
   createdAt: number;
   date?: string;
   time?: string;
+  link?: string;
 }
 
 export interface OddsEngineConfig {

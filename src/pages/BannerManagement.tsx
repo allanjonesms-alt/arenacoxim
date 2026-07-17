@@ -34,7 +34,7 @@ export default function BannerManagement() {
   });
 
   const [promoConfig, setPromoConfig] = useState({
-    active: true,
+    active: false,
     imageUrl: '',
     link: 'https://docs.google.com/forms/d/e/1FAIpQLSfJFjmpcdmGpk6Ayc_m6ksYbjY7REyDgTd1OHIbGFYAyNKEfQ/viewform?usp=header',
     title: '10º Torneio e Churrasco ACS',
@@ -55,7 +55,7 @@ export default function BannerManagement() {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setPromoConfig({
-          active: data.active ?? true,
+          active: data.active ?? false,
           imageUrl: data.imageUrl || '',
           link: data.link || 'https://docs.google.com/forms/d/e/1FAIpQLSfJFjmpcdmGpk6Ayc_m6ksYbjY7REyDgTd1OHIbGFYAyNKEfQ/viewform?usp=header',
           title: data.title || '10º Torneio e Churrasco ACS',

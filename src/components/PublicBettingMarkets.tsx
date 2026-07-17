@@ -5,6 +5,20 @@ import { Match, OddsEngineConfig, Player, Card } from '../types';
 import { TrendingUp, Shield, Trophy, Target, Zap, CalendarDays, Search } from 'lucide-react';
 import { getPositionAbbr, getPositionColor, getPlayerFinalOverall } from '../utils/playerUtils';
 
+const isMatchWithin30MinOrPast = (matchDate: string, matchTime: string) => {
+  if (!matchDate || !matchTime) return false;
+  try {
+    const [year, month, day] = matchDate.split('-').map(Number);
+    const [hours, minutes] = matchTime.split(':').map(Number);
+    const matchDateTime = new Date(year, month - 1, day, hours, minutes, 0);
+    const now = new Date();
+    const diffInMinutes = (matchDateTime.getTime() - now.getTime()) / (1000 * 60);
+    return diffInMinutes <= 30;
+  } catch (e) {
+    return false;
+  }
+};
+
 interface Props {
   user: any;
   balance: number;
@@ -599,10 +613,14 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
 
   // Filter matches that have at least one betting market enabled and are not finished
   const activeBettableMatches = matches.filter(match => {
+    const timeLocked = isMatchWithin30MinOrPast(match.date, match.time);
+    const isGoalsEnabled = match.bettingMarkets?.playerGoals?.enabled && !timeLocked;
+    const isAssistsEnabled = match.bettingMarkets?.playerAssists?.enabled && !timeLocked;
+    const isWinnerEnabled = match.bettingMarkets?.matchWinner?.enabled;
     return (match.status === 'scheduled' || match.status === 'live') && (
-           match.bettingMarkets?.matchWinner?.enabled || 
-           match.bettingMarkets?.playerGoals?.enabled || 
-           match.bettingMarkets?.playerAssists?.enabled
+           isWinnerEnabled || 
+           isGoalsEnabled || 
+           isAssistsEnabled
     );
   });
 
@@ -635,9 +653,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {activeBettableMatches.map(match => {
+              const timeLocked = isMatchWithin30MinOrPast(match.date, match.time);
               const isWinnerEnabled = match.bettingMarkets?.matchWinner?.enabled;
-              const isGoalsEnabled = match.bettingMarkets?.playerGoals?.enabled;
-              const isAssistsEnabled = match.bettingMarkets?.playerAssists?.enabled;
+              const isGoalsEnabled = match.bettingMarkets?.playerGoals?.enabled && !timeLocked;
+              const isAssistsEnabled = match.bettingMarkets?.playerAssists?.enabled && !timeLocked;
 
               const odds = calculateFloatingOdds(match);
 
