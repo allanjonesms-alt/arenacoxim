@@ -790,7 +790,7 @@ export default function PublicDashboard({
           </div>
         </div>
 
-        <div className={isCompact ? "grid grid-cols-1 md:grid-cols-2 gap-4" : "space-y-4"}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {matches.length === 0 ? (
             <div className="bg-app-card p-12 rounded-3xl border border-gray-100 text-center shadow-sm">
               <CalendarIcon className="w-12 h-12 text-gray-200 mx-auto mb-4" />
@@ -804,13 +804,14 @@ export default function PublicDashboard({
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.1 }}
                   key={match.id} 
+                  onClick={() => setSelectedMatch(match)}
                   className={`${
                     match.status === 'finished' ? 'bg-app-card' : 
                     match.status === 'scheduled' ? 'bg-blue-50' :
                     'bg-app-card'
-                  } ${isCompact ? 'rounded-2xl' : 'rounded-3xl'} border ${match.status === 'scheduled' ? 'border-blue-100' : 'border-gray-100'} overflow-hidden hover:border-primary-blue/30 transition-all group shadow-sm hover:shadow-md`}
+                  } ${isCompact ? 'rounded-2xl' : 'rounded-3xl'} border ${match.status === 'scheduled' ? 'border-blue-100' : 'border-gray-100'} overflow-hidden hover:border-primary-blue/30 hover:shadow-md transition-all group shadow-sm cursor-pointer hover:scale-[1.01] active:scale-[0.99]`}
                 >
-                  <div className="flex flex-row">
+                  <div className="flex flex-row h-full">
                     {/* Location Logo - Left Side */}
                     {(() => {
                       const loc = sharedLocations.find(l => l.id === match.locationId);
@@ -821,72 +822,60 @@ export default function PublicDashboard({
                       ) : null;
                     })()}
 
-                    <div className="flex-1 min-w-0">
-                      {/* Match Header */}
-                      <div className={`${
-                        match.status === 'finished' ? 'bg-gray-50' : 
-                        match.status === 'scheduled' ? 'bg-blue-100/50' :
-                        'bg-gray-50'
-                      } ${isCompact ? 'px-3 py-1.5 text-[8px] md:text-[9px]' : 'px-4 md:px-5 py-2 md:py-2.5 text-[9px] md:text-[10px]'} uppercase tracking-widest font-black text-gray-400 border-b border-gray-100 flex items-center justify-between`}>
-                        <div className="flex items-center gap-1.5 md:gap-3 overflow-hidden font-bold">
-                          <span className="flex items-center gap-1 truncate">
-                            <MapPin className={isCompact ? "w-2 h-2 text-primary-blue flex-shrink-0" : "w-2.5 h-2.5 md:w-3 md:h-3 text-primary-blue flex-shrink-0"} /> 
-                            <span className="truncate">{getLocationName(match.locationId)}</span>
+                    <div className="flex-1 min-w-0 flex flex-col justify-between">
+                      <div>
+                        {/* Match Header */}
+                        <div className={`${
+                          match.status === 'finished' ? 'bg-gray-50' : 
+                          match.status === 'scheduled' ? 'bg-blue-100/50' :
+                          'bg-gray-50'
+                        } ${isCompact ? 'px-3 py-1.5 text-[8px] md:text-[9px]' : 'px-4 md:px-5 py-2 md:py-2.5 text-[9px] md:text-[10px]'} uppercase tracking-widest font-black text-gray-400 border-b border-gray-100 flex items-center justify-between`}>
+                          <div className="flex items-center gap-1.5 md:gap-3 overflow-hidden font-bold">
+                            <span className="flex items-center gap-1 truncate">
+                              <MapPin className={isCompact ? "w-2 h-2 text-primary-blue flex-shrink-0" : "w-2.5 h-2.5 md:w-3 md:h-3 text-primary-blue flex-shrink-0"} /> 
+                              <span className="truncate">{getLocationName(match.locationId)}</span>
+                            </span>
+                            <span className="flex items-center gap-1 flex-shrink-0"><CalendarIcon className={isCompact ? "w-2 h-2 text-primary-blue" : "w-2.5 h-2.5 md:w-3 md:h-3 text-primary-blue"} /> {format(new Date(match.date + 'T00:00:00'), 'dd MMM yyyy', { locale: ptBR })}</span>
+                          </div>
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] flex-shrink-0 ${
+                            match.status === 'finished' ? 'bg-gray-200 text-gray-600' : 
+                            match.status === 'live' ? 'bg-red-500 text-white animate-pulse font-black' : 
+                            'bg-primary-blue/10 text-primary-blue'
+                          }`}>
+                            {match.status === 'finished' ? 'Fim' : match.status === 'live' ? 'VIVO' : 'Agend'}
                           </span>
-                          <span className="flex items-center gap-1 flex-shrink-0"><CalendarIcon className={isCompact ? "w-2 h-2 text-primary-blue" : "w-2.5 h-2.5 md:w-3 md:h-3 text-primary-blue"} /> {format(new Date(match.date + 'T00:00:00'), 'dd MMM yyyy', { locale: ptBR })}</span>
                         </div>
-                        <span className={`px-1.5 py-0.5 rounded text-[8px] flex-shrink-0 ${
-                          match.status === 'finished' ? 'bg-gray-200 text-gray-600' : 
-                          match.status === 'live' ? 'bg-red-500 text-white animate-pulse font-black' : 
-                          'bg-primary-blue/10 text-primary-blue'
-                        }`}>
-                          {match.status === 'finished' ? 'Fim' : match.status === 'live' ? 'VIVO' : 'Agend'}
-                        </span>
-                      </div>
 
-                      {/* Scoreboard Area */}
-                      <div className={isCompact ? "p-3 md:p-4 flex items-center justify-between gap-1" : "p-4 md:p-8 flex items-center justify-between gap-2"}>
-                        <div className="flex-1 text-center min-w-0">
-                          <div className={isCompact ? "flex flex-col items-center gap-1" : "flex flex-col items-center gap-2 md:gap-3"}>
-                            <div className={isCompact ? "w-6 h-6 md:w-7 md:h-7" : "w-8 h-8 md:w-10 md:h-10"}>
-                              <SoccerJersey color={teams.find(t => t.id === match.teamAId)?.color || '#555'} />
+                        {/* Scoreboard Area */}
+                        <div className={isCompact ? "p-3 md:p-4 flex items-center justify-between gap-1" : "p-4 md:p-8 flex items-center justify-between gap-2"}>
+                          <div className="flex-1 text-center min-w-0">
+                            <div className={isCompact ? "flex flex-col items-center gap-1" : "flex flex-col items-center gap-2 md:gap-3"}>
+                              <div className={isCompact ? "w-6 h-6 md:w-7 md:h-7" : "w-8 h-8 md:w-10 md:h-10"}>
+                                <SoccerJersey color={teams.find(t => t.id === match.teamAId)?.color || '#555'} />
+                              </div>
+                              <div className={`${isCompact ? 'text-[10px] md:text-xs' : 'text-xs md:text-lg'} font-black uppercase tracking-tight text-primary-blue truncate w-full px-1`}>
+                                {teams.find(t => t.id === match.teamAId)?.name || 'Time A'}
+                              </div>
                             </div>
-                            <div className={`${isCompact ? 'text-[10px] md:text-xs' : 'text-xs md:text-lg'} font-black uppercase tracking-tight text-primary-blue truncate w-full px-1`}>
-                              {teams.find(t => t.id === match.teamAId)?.name || 'Time A'}
+                          </div>
+
+                          <div className={isCompact ? "flex items-center gap-1 px-1" : "flex items-center gap-3 md:gap-10 px-2 md:px-8"}>
+                            <div className={isCompact ? "text-xl md:text-3xl font-black italic text-primary-blue tabular-nums drop-shadow-sm" : "text-3xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm"}>{match.scoreA}</div>
+                            <div className={isCompact ? "text-[8px] font-black text-primary-yellow opacity-30 italic" : "text-[10px] md:text-sm font-black text-primary-yellow opacity-30 italic"}>X</div>
+                            <div className={isCompact ? "text-xl md:text-3xl font-black italic text-primary-blue tabular-nums drop-shadow-sm" : "text-3xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm"}>{match.scoreB}</div>
+                          </div>
+
+                          <div className="flex-1 text-center min-w-0">
+                            <div className={isCompact ? "flex flex-col items-center gap-1" : "flex flex-col items-center gap-2 md:gap-3"}>
+                              <div className={isCompact ? "w-6 h-6 md:w-7 md:h-7" : "w-8 h-8 md:w-10 md:h-10"}>
+                                <SoccerJersey color={teams.find(t => t.id === match.teamBId)?.color || '#555'} />
+                              </div>
+                              <div className={`${isCompact ? 'text-[10px] md:text-xs' : 'text-xs md:text-lg'} font-black uppercase tracking-tight text-primary-blue truncate w-full px-1`}>
+                                {teams.find(t => t.id === match.teamBId)?.name || 'Time B'}
+                              </div>
                             </div>
                           </div>
                         </div>
-
-                        <div className={isCompact ? "flex items-center gap-1 px-1" : "flex items-center gap-3 md:gap-10 px-2 md:px-8"}>
-                          <div className={isCompact ? "text-xl md:text-3xl font-black italic text-primary-blue tabular-nums drop-shadow-sm" : "text-3xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm"}>{match.scoreA}</div>
-                          <div className={isCompact ? "text-[8px] font-black text-primary-yellow opacity-30 italic" : "text-[10px] md:text-sm font-black text-primary-yellow opacity-30 italic"}>X</div>
-                          <div className={isCompact ? "text-xl md:text-3xl font-black italic text-primary-blue tabular-nums drop-shadow-sm" : "text-3xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm"}>{match.scoreB}</div>
-                        </div>
-
-                        <div className="flex-1 text-center min-w-0">
-                          <div className={isCompact ? "flex flex-col items-center gap-1" : "flex flex-col items-center gap-2 md:gap-3"}>
-                            <div className={isCompact ? "w-6 h-6 md:w-7 md:h-7" : "w-8 h-8 md:w-10 md:h-10"}>
-                              <SoccerJersey color={teams.find(t => t.id === match.teamBId)?.color || '#555'} />
-                            </div>
-                            <div className={`${isCompact ? 'text-[10px] md:text-xs' : 'text-xs md:text-lg'} font-black uppercase tracking-tight text-primary-blue truncate w-full px-1`}>
-                              {teams.find(t => t.id === match.teamBId)?.name || 'Time B'}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Match Footer / Action */}
-                      <div 
-                        onClick={() => setSelectedMatch(match)}
-                        className={`${
-                          match.status === 'finished' ? 'bg-gray-50/50' : 
-                          match.status === 'scheduled' ? 'bg-blue-50/50' :
-                          'bg-gray-50/50'
-                        } ${isCompact ? 'px-3 py-1.5 md:py-2' : 'px-4 py-3 md:py-4'} flex items-center justify-center border-t border-gray-100 group-hover:bg-primary-blue/5 transition-colors cursor-pointer`}
-                      >
-                        <span className={`${isCompact ? 'text-[8px] md:text-[9px]' : 'text-[10px]'} font-black uppercase tracking-widest text-primary-blue flex items-center gap-1.5 group-hover:translate-x-1 transition-transform`}>
-                          Ver Detalhes da Partida <ChevronRight className={isCompact ? "w-3 h-3" : "w-4 h-4"} />
-                        </span>
                       </div>
                     </div>
                   </div>
