@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, TrendingUp, History, PlusCircle, ArrowUpRight, ArrowDownRight, Clock, CheckCircle2, XCircle, Copy, X, QrCode } from 'lucide-react';
+import { Wallet, TrendingUp, History, PlusCircle, ArrowUpRight, ArrowDownRight, Clock, CheckCircle2, XCircle, Copy, X, QrCode, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { doc, getDoc, setDoc, collection, query, where, orderBy, onSnapshot, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -61,16 +61,29 @@ export function UserBettingDashboard({ user, isMaster }: UserBettingDashboardPro
   
   const pixCode = getDynamicPixCode(depositAmount);
 
+  const activeBetsAmount = bets
+    .filter(b => b.status === 'pending')
+    .reduce((acc, b) => acc + (b.amount || 0), 0);
+
+  const totalValue = balance + activeBetsAmount;
+  const maxDepositAllowed = Math.max(0, 20.00 - totalValue);
+
   
   const handlePixEfetivado = async () => {
-    if (!depositAmount || Number(depositAmount) <= 0) return;
+    const amountNum = Number(depositAmount);
+    if (!depositAmount || amountNum <= 0) return;
+
+    if (amountNum > maxDepositAllowed) {
+      alert(`O valor máximo que você pode depositar no momento é R$ ${maxDepositAllowed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`);
+      return;
+    }
     
     try {
       await addDoc(collection(db, 'transactions'), {
         userId: user.uid,
         userEmail: user.email,
         userName: user.displayName || user.email,
-        amount: Number(depositAmount),
+        amount: amountNum,
         type: 'deposit',
         status: 'pending',
         createdAt: new Date().toISOString()
@@ -92,6 +105,7 @@ export function UserBettingDashboard({ user, isMaster }: UserBettingDashboardPro
   useEffect(() => {
     if (!user) return;
 
+    let unsubscribeUser: () => void;
     let unsubscribeBets: () => void;
 
     const loadUserData = async () => {
@@ -99,9 +113,7 @@ export function UserBettingDashboard({ user, isMaster }: UserBettingDashboardPro
         const userRef = doc(db, 'users', user.uid);
         const userSnap = await getDoc(userRef);
 
-        if (userSnap.exists()) {
-          setBalance(userSnap.data().balance || 0);
-        } else {
+        if (!userSnap.exists()) {
           // Initialize user
           await setDoc(userRef, {
             email: user.email,
@@ -110,8 +122,13 @@ export function UserBettingDashboard({ user, isMaster }: UserBettingDashboardPro
             balance: 0,
             createdAt: new Date().toISOString()
           });
-          setBalance(0);
         }
+
+        unsubscribeUser = onSnapshot(userRef, (snap) => {
+          if (snap.exists()) {
+            setBalance(snap.data().balance || 0);
+          }
+        });
 
         // Listen to bets
         const betsRef = collection(db, 'bets');
@@ -139,6 +156,7 @@ export function UserBettingDashboard({ user, isMaster }: UserBettingDashboardPro
     loadUserData();
 
     return () => {
+      if (unsubscribeUser) unsubscribeUser();
       if (unsubscribeBets) unsubscribeBets();
     };
   }, [user]);
@@ -173,6 +191,21 @@ export function UserBettingDashboard({ user, isMaster }: UserBettingDashboardPro
             </div>
             
             <div className="p-6 space-y-6">
+              {/* Informative limit notice */}
+              <div className="bg-blue-50 text-blue-900 text-xs p-3.5 rounded-2xl border border-blue-100 flex flex-col gap-1.5 shadow-sm">
+                <div className="flex items-center gap-1.5 font-black uppercase tracking-wider text-blue-800 text-[10px]">
+                  <AlertCircle className="w-4 h-4 text-primary-blue shrink-0" /> Limite Máximo de Depósito
+                </div>
+                <p className="font-bold">
+                  Você pode depositar no máximo <span className="text-primary-blue font-black text-sm">R$ {maxDepositAllowed.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>.
+                </p>
+                <div className="text-gray-500 font-semibold leading-relaxed text-[10px] space-y-0.5 border-t border-blue-100/50 pt-1.5 mt-0.5">
+                  <p>• O teto total é de R$ 20,00.</p>
+                  <p>• Seu saldo atual: R$ {balance.toFixed(2)}</p>
+                  <p>• Suas apostas ativas: R$ {activeBetsAmount.toFixed(2)}</p>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <label className="text-xs font-black uppercase tracking-widest text-gray-500">Valor do Depósito (R$)</label>
                 <div className="relative">
@@ -181,15 +214,21 @@ export function UserBettingDashboard({ user, isMaster }: UserBettingDashboardPro
                   </div>
                   <input
                     type="number"
+                    max={maxDepositAllowed}
                     value={depositAmount}
                     onChange={(e) => setDepositAmount(e.target.value)}
                     placeholder="0,00"
                     className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent transition-all"
                   />
                 </div>
+                {Number(depositAmount) > maxDepositAllowed && (
+                  <p className="text-[11px] font-black text-rose-600 uppercase tracking-wide flex items-center gap-1 mt-1">
+                    <AlertCircle className="w-3.5 h-3.5" /> Atenção: O valor máximo permitido é R$ {maxDepositAllowed.toFixed(2)}.
+                  </p>
+                )}
               </div>
 
-              {depositAmount && Number(depositAmount) > 0 && (
+              {depositAmount && Number(depositAmount) > 0 && Number(depositAmount) <= maxDepositAllowed && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                   <div className="flex justify-center p-4 bg-gray-50 rounded-2xl border border-gray-100">
                     <img 
@@ -242,14 +281,14 @@ export function UserBettingDashboard({ user, isMaster }: UserBettingDashboardPro
                     setShowDepositModal(false);
                     setDepositAmount('');
                   }}
-                  className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors"
+                  className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
-                {depositAmount && Number(depositAmount) > 0 && (
+                {depositAmount && Number(depositAmount) > 0 && Number(depositAmount) <= maxDepositAllowed && (
                   <button 
                     onClick={handlePixEfetivado} 
-                    className="flex-1 bg-emerald-500 text-white font-black py-3 rounded-xl hover:bg-emerald-600 transition-colors shadow-md flex items-center justify-center gap-2"
+                    className="flex-1 bg-emerald-500 text-white font-black py-3 rounded-xl hover:bg-emerald-600 transition-colors shadow-md flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <CheckCircle2 className="w-5 h-5" /> PIX Efetivado
                   </button>
@@ -277,16 +316,30 @@ export function UserBettingDashboard({ user, isMaster }: UserBettingDashboardPro
             </div>
           </div>
           
-          <div className="relative z-10 flex gap-3 mt-8">
-            <button 
-              onClick={() => setShowDepositModal(true)}
-              className="flex-1 bg-primary-yellow text-primary-blue py-3 px-4 rounded-xl font-black text-xs md:text-sm uppercase tracking-wider hover:bg-yellow-400 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
-            >
-              <PlusCircle className="w-4 h-4" /> Depositar
-            </button>
-            <button className="flex-1 bg-white/10 text-white py-3 px-4 rounded-xl font-black text-xs md:text-sm uppercase tracking-wider hover:bg-white/20 transition-all active:scale-95 flex items-center justify-center gap-2 border border-white/10">
-              <ArrowDownRight className="w-4 h-4" /> Sacar
-            </button>
+          <div className="relative z-10 mt-8 space-y-3">
+            <div className="flex gap-3">
+              <button 
+                disabled={totalValue >= 20.00}
+                onClick={() => setShowDepositModal(true)}
+                className="flex-1 bg-primary-yellow text-primary-blue py-3 px-4 rounded-xl font-black text-xs md:text-sm uppercase tracking-wider hover:bg-yellow-400 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <PlusCircle className="w-4 h-4" /> Depositar
+              </button>
+              <button className="flex-1 bg-white/10 text-white py-3 px-4 rounded-xl font-black text-xs md:text-sm uppercase tracking-wider hover:bg-white/20 transition-all active:scale-95 flex items-center justify-center gap-2 border border-white/10">
+                <ArrowDownRight className="w-4 h-4" /> Sacar
+              </button>
+            </div>
+
+            {totalValue >= 20.00 ? (
+              <p className="text-[11px] text-amber-300 font-bold bg-amber-500/10 p-2 rounded-xl flex items-center gap-1.5 border border-amber-500/20">
+                <AlertCircle className="w-3.5 h-3.5 text-primary-yellow shrink-0" />
+                Limite total de R$ 20,00 atingido (Saldo: R$ {balance.toFixed(2)} + Apostas Ativas: R$ {activeBetsAmount.toFixed(2)}). Novos depósitos estão suspensos.
+              </p>
+            ) : (
+              <p className="text-[11px] text-blue-200 font-semibold bg-white/5 p-2 rounded-xl">
+                Você pode depositar até <span className="text-white font-black">R$ {maxDepositAllowed.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> (Teto de R$ 20,00 considerando Saldo + Apostas Ativas).
+              </p>
+            )}
           </div>
         </div>
 

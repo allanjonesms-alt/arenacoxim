@@ -641,10 +641,20 @@ export default function PublicDashboard({
     }
   }, [sharedCards]);
 
+  // Sync selected match if it gets updated in the background
+  useEffect(() => {
+    if (selectedMatch) {
+      const updated = matches.find(m => m.id === selectedMatch.id);
+      if (updated && JSON.stringify(updated) !== JSON.stringify(selectedMatch)) {
+        setSelectedMatch(updated);
+      }
+    }
+  }, [matches, selectedMatch]);
+
+  // 1. Matches subscription
   useEffect(() => {
     let qMatches = query(collection(db, 'matches'), orderBy('date', 'desc'), limit(25));
     
-    // Server-side filtering by location if not master admin
     if (adminData && adminData.role !== 'master' && adminData.locationId) {
       qMatches = query(
         collection(db, 'matches'), 
@@ -657,19 +667,12 @@ export default function PublicDashboard({
     const unsubscribeMatches = onSnapshot(qMatches, async (snapshot) => {
       let matchesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match));
       
-      // Memory sort by time to avoid composite index requirement
       matchesData.sort((a, b) => {
         if (a.date !== b.date) return b.date.localeCompare(a.date);
         return (b.time || '').localeCompare(a.time || '');
       });
 
       setMatches(matchesData);
-      
-      // Update selected match if it exists in the new list to reflect changes
-      if (selectedMatch) {
-        const updated = matchesData.find(m => m.id === selectedMatch.id);
-        if (updated) setSelectedMatch(updated);
-      }
     }, async (err) => {
       if (err.message?.includes('index') || err.code === 'failed-precondition') {
         console.warn("Secondary fallback triggered for index issue.");
@@ -681,33 +684,44 @@ export default function PublicDashboard({
       }
     });
 
-    let unsubscribePlayers = () => {};
+    return () => unsubscribeMatches();
+  }, [adminData?.locationId, adminData?.role]);
+
+  // 2. Players subscription (only if not shared)
+  useEffect(() => {
     if (sharedPlayers && sharedPlayers.length > 0) {
       setPlayers(sharedPlayers);
       setLoading(false);
-    } else {
-      let qPlayers = query(collection(db, 'players'));
-      if (adminData && adminData.role !== 'master' && adminData.locationId) {
-        qPlayers = query(
-          collection(db, 'players'), 
-          where('locationId', '==', adminData.locationId)
-        );
-      }
-      unsubscribePlayers = onSnapshot(qPlayers, async (snapshot) => {
-        let playersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
-        setPlayers(playersData);
-        setLoading(false);
-      }, async (err) => {
-        const snap = await getDocs(collection(db, 'players'));
-        let playersData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
-        if (adminData && adminData.role !== 'master' && adminData.locationId) {
-          playersData = playersData.filter(p => p.locationId === adminData.locationId);
-        }
-        setPlayers(playersData);
-        setLoading(false);
-      });
+      return;
     }
 
+    let qPlayers = query(collection(db, 'players'));
+    if (adminData && adminData.role !== 'master' && adminData.locationId) {
+      qPlayers = query(
+        collection(db, 'players'), 
+        where('locationId', '==', adminData.locationId)
+      );
+    }
+
+    const unsubscribePlayers = onSnapshot(qPlayers, async (snapshot) => {
+      let playersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
+      setPlayers(playersData);
+      setLoading(false);
+    }, async (err) => {
+      const snap = await getDocs(collection(db, 'players'));
+      let playersData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
+      if (adminData && adminData.role !== 'master' && adminData.locationId) {
+        playersData = playersData.filter(p => p.locationId === adminData.locationId);
+      }
+      setPlayers(playersData);
+      setLoading(false);
+    });
+
+    return () => unsubscribePlayers();
+  }, [adminData?.locationId, adminData?.role, sharedPlayers]);
+
+  // 3. Monthly Awards subscription
+  useEffect(() => {
     let qAwards = query(collection(db, 'monthlyAwards'), orderBy('createdAt', 'desc'));
     if (adminData && adminData.role !== 'master' && adminData.locationId) {
       qAwards = query(
@@ -721,24 +735,24 @@ export default function PublicDashboard({
       console.error("Error fetching monthly awards:", err);
     });
 
-    let unsubscribeCards = () => {};
+    return () => unsubscribeAwards();
+  }, [adminData?.locationId, adminData?.role]);
+
+  // 4. Cards subscription (only if not shared)
+  useEffect(() => {
     if (sharedCards && sharedCards.length > 0) {
       setCards(sharedCards);
-    } else {
-      unsubscribeCards = onSnapshot(collection(db, 'cards'), (snapshot) => {
-        setCards(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Card)));
-      }, (err) => {
-        console.error("Error fetching cards:", err);
-      });
+      return;
     }
 
-    return () => {
-      unsubscribeMatches();
-      unsubscribePlayers();
-      unsubscribeAwards();
-      unsubscribeCards();
-    };
-  }, [adminData, sharedPlayers, sharedCards]);
+    const unsubscribeCards = onSnapshot(collection(db, 'cards'), (snapshot) => {
+      setCards(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Card)));
+    }, (err) => {
+      console.error("Error fetching cards:", err);
+    });
+
+    return () => unsubscribeCards();
+  }, [sharedCards]);
 
   const getAveragePoints = (p: Player) => {
     if (!p.stats.matches || p.stats.matches === 0) return 0;

@@ -28,6 +28,10 @@ export default function AdminBettingSettings() {
   }, []);
 
   const handleSave = async () => {
+    if (config.maxBetAmount > 1.00) {
+      alert('A aposta máxima permitida pelo sistema é de R$ 1,00.');
+      return;
+    }
     setSaving(true);
     try {
       await setDoc(doc(db, 'settings', 'bettingParams'), config, { merge: true });
@@ -68,22 +72,27 @@ export default function AdminBettingSettings() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
-              <label className="block text-xs font-black uppercase tracking-widest text-gray-500 mb-2">
-                Aposta Máxima (R$)
-              </label>
-              <input
-                type="number"
-                step="0.5"
-                min="0.1"
-                value={config.maxBetAmount}
-                onChange={e => setConfig(prev => ({ ...prev, maxBetAmount: Number(e.target.value) }))}
-                className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-lg font-black text-gray-800 focus:ring-2 focus:ring-primary-blue outline-none transition-all"
-              />
-              <p className="text-[11px] text-gray-500 mt-3 flex items-start gap-1.5">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-500" />
-                Define o teto de gastos por aposta para todos os usuários públicos.
-              </p>
-            </div>
+               <label className="block text-xs font-black uppercase tracking-widest text-gray-500 mb-2">
+                 Aposta Máxima (R$)
+               </label>
+               <input
+                 type="number"
+                 step="0.1"
+                 min="0.1"
+                 max="1.0"
+                 value={config.maxBetAmount}
+                 onChange={e => {
+                   let val = Number(e.target.value);
+                   if (val > 1.00) val = 1.00;
+                   setConfig(prev => ({ ...prev, maxBetAmount: val }));
+                 }}
+                 className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-lg font-black text-gray-800 focus:ring-2 focus:ring-primary-blue outline-none transition-all"
+               />
+               <p className="text-[11px] text-gray-500 mt-3 flex items-start gap-1.5">
+                 <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-500" />
+                 Define o teto de gastos por aposta para todos os usuários públicos (Máximo permitido: R$ 1,00).
+               </p>
+             </div>
           </div>
         </div>
 

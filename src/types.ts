@@ -63,6 +63,16 @@ export interface Match {
     playerAssists?: {
       enabled: boolean;
     };
+    matchGoals?: {
+      enabled: boolean;
+      options?: {
+        line: string;
+        probOver: string;
+        probUnder: string;
+        oddOver: string;
+        oddUnder: string;
+      }[];
+    };
   };
   createdAt: number;
 }

@@ -111,7 +111,7 @@ export function ScheduledMatchesOdds({ teams, players: playersProp, cards: cards
         // Parallelized fetching of matches and config to eliminate sequential await waterfalls
         const [matchesSnap, configDoc] = await Promise.all([
           getDocs(query(collection(db, 'matches'), where('status', '==', 'scheduled'))),
-          getDoc(doc(db, 'config', 'odds_engine'))
+          getDoc(doc(db, 'settings', 'oddsEngine'))
         ]);
 
         const fetchedMatches = matchesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Match)).sort((a, b) => a.date.localeCompare(b.date));
@@ -124,6 +124,18 @@ export function ScheduledMatchesOdds({ teams, players: playersProp, cards: cards
         // Reuse props if present to save on queries and avoid redudant massive reads
         let fetchedPlayers = playersProp || [];
         let fetchedCards = cardsProp || [];
+
+        const hasPlayersProp = !!playersProp;
+        const hasCardsProp = !!cardsProp;
+
+        if (hasPlayersProp && fetchedPlayers.length === 0) {
+          // Wait for the parent snapshot to load to avoid double/triple waterfalls
+          return;
+        }
+        if (hasCardsProp && fetchedCards.length === 0) {
+          // Wait for the parent snapshot to load to avoid double/triple waterfalls
+          return;
+        }
 
         if (fetchedPlayers.length === 0 || fetchedCards.length === 0) {
           const [playersSnap, cardsSnap] = await Promise.all([

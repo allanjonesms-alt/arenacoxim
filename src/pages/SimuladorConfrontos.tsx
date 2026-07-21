@@ -294,6 +294,205 @@ export default function SimuladorConfrontos({ adminData }: Props) {
 
   const baseOdds = calculateOdds(true);
 
+  const getGkAverageConceded = (gk: Player) => {
+    const finishedMatches = matches.filter(m => m.status === 'finished');
+    let goalkeeperCareerConceded = 0;
+    let goalkeeperCareerMatches = 0;
+
+    finishedMatches.forEach(match => {
+      if (match.goalkeeperAId === gk.id) {
+        goalkeeperCareerConceded += match.scoreB || 0;
+        goalkeeperCareerMatches++;
+      } else if (match.goalkeeperBId === gk.id) {
+        goalkeeperCareerConceded += match.scoreA || 0;
+        goalkeeperCareerMatches++;
+      }
+    });
+
+    const gkMatchesCount = goalkeeperCareerMatches > 0 ? goalkeeperCareerMatches : (gk.stats?.matches || 0);
+    const careerConcededAvgPerMatch = gkMatchesCount > 0 
+      ? (goalkeeperCareerConceded / gkMatchesCount) 
+      : 2.0;
+
+    const positionBaseConcededPerMatch = 2.0;
+    const gkWeight = Math.min(1.0, gkMatchesCount / 20);
+    const blendedConcededPerMatch = (careerConcededAvgPerMatch * gkWeight) + (positionBaseConcededPerMatch * (1 - gkWeight));
+
+    return blendedConcededPerMatch;
+  };
+
+  const getPlayerAverageGoals = (player: Player) => {
+    let baseG = oddsConfig?.baseGoals.default ?? 0.6;
+    if (player.position === 'centroavante') { 
+        baseG = oddsConfig?.baseGoals.centroavante ?? 1.20; 
+    } else if (player.position === 'meio-campo') { 
+        baseG = oddsConfig?.baseGoals.meioCampo ?? 0.80; 
+    } else if (player.position === 'zagueiro') { 
+        baseG = oddsConfig?.baseGoals.zagueiro ?? 0.20; 
+    } else if (player.position === 'lateral') { 
+        baseG = oddsConfig?.baseGoals.lateral ?? 0.40; 
+    } else if (player.position === 'goleiro') { 
+        baseG = oddsConfig?.baseGoals.goleiro ?? 0.02; 
+    }
+
+    const mCount = player.stats?.matches || 0;
+    const gCount = player.stats?.goals || 0;
+    const playerAvgG = mCount > 0 ? gCount / mCount : baseG;
+
+    const weight = Math.min(1, mCount / 5);
+    const blendedG = (playerAvgG * weight) + (baseG * (1 - weight));
+    return blendedG;
+  };
+
+  const calculateTotalLambda = (currentTeamA: Player[], currentTeamB: Player[], currentMatch: Match | null) => {
+    // 1. Calcular a média geral de gols das partidas finalizadas
+    const finishedMatches = matches.filter(m => m.status === 'finished');
+    const generalMatchAvg = finishedMatches.length > 0
+      ? finishedMatches.reduce((sum, m) => sum + (m.scoreA || 0) + (m.scoreB || 0), 0) / finishedMatches.length
+      : 6.5; // Padrão realista para futebol society se não houver histórico
+
+    // Média de gols sofridos por goleiro como baseline
+    const baseGkConceded = finishedMatches.length > 0 ? (generalMatchAvg / 2) : 2.5;
+
+    // 2. Poder ofensivo de linha baseado na soma das médias de gols dos atletas escalados
+    const outfieldA = currentTeamA.filter(p => p.position !== 'goleiro');
+    const baseOffensivePowerA = outfieldA.length > 0 
+      ? outfieldA.reduce((sum, p) => sum + getPlayerAverageGoals(p), 0)
+      : (generalMatchAvg / 2);
+
+    const outfieldB = currentTeamB.filter(p => p.position !== 'goleiro');
+    const baseOffensivePowerB = outfieldB.length > 0 
+      ? outfieldB.reduce((sum, p) => sum + getPlayerAverageGoals(p), 0)
+      : (generalMatchAvg / 2);
+
+    // 3. Médias de gols sofridos dos goleiros
+    const gkA = currentTeamA.find(p => p.position === 'goleiro') || (currentMatch?.goalkeeperAId ? players.find(p => p.id === currentMatch.goalkeeperAId) : null);
+    const gkB = currentTeamB.find(p => p.position === 'goleiro') || (currentMatch?.goalkeeperBId ? players.find(p => p.id === currentMatch.goalkeeperBId) : null);
+
+    const gkA_avg = gkA ? getGkAverageConceded(gkA) : baseGkConceded;
+    const gkB_avg = gkB ? getGkAverageConceded(gkB) : baseGkConceded;
+
+    // 4. Projeção inicial (poder de ataque contra a defesa do goleiro adversário)
+    let expectedA = baseOffensivePowerA * (gkB_avg / baseGkConceded);
+    let expectedB = baseOffensivePowerB * (gkA_avg / baseGkConceded);
+
+    // 5. Calibração e ancoragem: o futebol society compartilha oportunidades de gol,
+    // então a simples soma das individualidades pode ficar um pouco inflada se o elenco for muito goleador.
+    // Combinamos 60% da projeção individual com 40% da média histórica geral do torneio para garantir estabilidade e realidade.
+    const playerBasedTotal = expectedA + expectedB;
+    const calibratedTotal = (playerBasedTotal * 0.6) + (generalMatchAvg * 0.4);
+
+    // Redistribui o total calibrado proporcionalmente entre os times
+    if (playerBasedTotal > 0) {
+      expectedA = calibratedTotal * (expectedA / playerBasedTotal);
+      expectedB = calibratedTotal * (expectedB / playerBasedTotal);
+    } else {
+      expectedA = calibratedTotal / 2;
+      expectedB = calibratedTotal / 2;
+    }
+
+    return {
+      expectedA,
+      expectedB,
+      totalLambda: calibratedTotal,
+      gkA_avg,
+      gkB_avg,
+      baseOffensivePowerA,
+      baseOffensivePowerB
+    };
+  };
+
+  const calculatePoissonMatchGoals = (lambda: number) => {
+    const poissonProb = (l: number, k: number) => {
+      let p = Math.exp(-l);
+      let cumulative = 0;
+      for (let i = 0; i <= k; i++) {
+        if (i > 0) p = p * l / i;
+        cumulative += p;
+      }
+      return cumulative; // P(X <= k)
+    };
+
+    const getOverUnderOdds = (k: number) => {
+      const probUnder = poissonProb(lambda, k);
+      const probOver = Math.max(0.01, Math.min(0.99, 1 - probUnder));
+      const safeProbUnder = Math.max(0.01, Math.min(0.99, probUnder));
+
+      const margin = 1.25; // 25% house margin
+      let oddOver = 1 / (probOver * margin);
+      let oddUnder = 1 / (safeProbUnder * margin);
+
+      const maxOdd = oddsConfig?.maxOdd ?? 12.00;
+      
+      return {
+        line: `${k}.5`,
+        probOver: (probOver * 100).toFixed(1),
+        probUnder: (safeProbUnder * 100).toFixed(1),
+        oddOver: Math.max(1.01, Math.min(maxOdd, oddOver)).toFixed(2),
+        oddUnder: Math.max(1.01, Math.min(maxOdd, oddUnder)).toFixed(2)
+      };
+    };
+
+    return [
+      getOverUnderOdds(2), // +2.5
+      getOverUnderOdds(3), // +3.5
+      getOverUnderOdds(4), // +4.5
+      getOverUnderOdds(5)  // +5.5
+    ];
+  };
+
+  const lambdaDetails = calculateTotalLambda(teamA, teamB, selectedMatch);
+  const matchGoalsOdds = calculatePoissonMatchGoals(lambdaDetails.totalLambda);
+
+  const handleToggleMatchGoalsMarket = async () => {
+    if (!selectedMatch) {
+      alert("Selecione uma partida.");
+      return;
+    }
+    const isCurrentlyEnabled = selectedMatch.bettingMarkets?.matchGoals?.enabled || false;
+    const newEnabled = !isCurrentlyEnabled;
+
+    try {
+      const matchRef = doc(db, 'matches', selectedMatch.id);
+      const newMarkets = {
+        ...(selectedMatch.bettingMarkets || {}),
+        matchGoals: {
+          enabled: newEnabled,
+          options: matchGoalsOdds
+        }
+      };
+      await updateDoc(matchRef, { bettingMarkets: newMarkets });
+      alert(newEnabled ? 'Mercado de Gols Marcados (por partida) habilitado!' : 'Mercado de Gols Marcados (por partida) desabilitado.');
+      setSelectedMatch({...selectedMatch, bettingMarkets: newMarkets});
+    } catch (err: any) {
+      console.error(err);
+      alert("Erro ao atualizar mercado de gols marcados: " + err.message);
+    }
+  };
+
+  const handleUpdateMatchGoalsOddsOnly = async () => {
+    if (!selectedMatch) {
+      alert("Selecione uma partida.");
+      return;
+    }
+    try {
+      const matchRef = doc(db, 'matches', selectedMatch.id);
+      const newMarkets = {
+        ...(selectedMatch.bettingMarkets || {}),
+        matchGoals: {
+          enabled: selectedMatch.bettingMarkets?.matchGoals?.enabled || false,
+          options: matchGoalsOdds
+        }
+      };
+      await updateDoc(matchRef, { bettingMarkets: newMarkets });
+      alert('Odds de Gols Marcados atualizadas com sucesso no banco!');
+      setSelectedMatch({...selectedMatch, bettingMarkets: newMarkets});
+    } catch (err: any) {
+      console.error(err);
+      alert("Erro ao atualizar odds de gols marcados: " + err.message);
+    }
+  };
+
   
   
   const handleToggleBetMarket = async (marketName: 'matchWinner' | 'playerGoals' | 'playerAssists') => {
@@ -797,69 +996,110 @@ export default function SimuladorConfrontos({ adminData }: Props) {
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
-      {isMaster && (
-        <div className="bg-gradient-to-br from-gray-900 to-black rounded-3xl p-6 md:p-8 text-white shadow-xl relative overflow-hidden border border-white/10 mb-8">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-primary-yellow/10 rounded-full blur-3xl -mt-20 -mr-20" />
-          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="space-y-2 text-center md:text-left">
-              <h2 className="text-2xl font-black uppercase tracking-tight italic flex items-center justify-center md:justify-start gap-3">
-                <Wallet className="w-7 h-7 text-primary-yellow" />
-                Banco do Sistema
+      {isMaster ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Banco Master Card */}
+          <div className="bg-gradient-to-br from-gray-900 to-black rounded-3xl p-5 text-white shadow-xl relative overflow-hidden border border-white/10 flex items-center justify-between min-h-[110px]">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-primary-yellow/10 rounded-full blur-2xl -mt-10 -mr-10 pointer-events-none" />
+            <div className="relative z-10 flex items-center gap-3">
+              <div className="bg-white/10 p-2 rounded-xl border border-white/15">
+                <Wallet className="w-5 h-5 text-primary-yellow" />
+              </div>
+              <h2 className="text-base sm:text-lg font-black uppercase tracking-tight italic">
+                Banco Master
               </h2>
-              <p className="text-gray-400 text-sm font-semibold max-w-md">
-                Acesso exclusivo Master para gerenciamento global de saldos, aprovação de saques e fluxo de caixa das apostas.
+            </div>
+            <button 
+              onClick={() => navigate('/admin/banco')} 
+              className="relative z-10 bg-primary-yellow text-primary-blue px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-yellow-400 transition-all shadow-[0_0_15px_rgba(249,212,35,0.2)] active:scale-95 flex items-center gap-1.5 cursor-pointer"
+            >
+              Acessar <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Simulador de Confrontos Card */}
+          <div className="bg-gradient-to-br from-slate-900 to-primary-blue rounded-3xl p-5 text-white shadow-xl relative overflow-hidden border border-white/10 flex items-center justify-between min-h-[110px]">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
+            <div className="relative z-10 flex items-center gap-3">
+              <div className="bg-white/10 p-2 rounded-xl border border-white/15">
+                <Swords className="w-5 h-5 text-primary-yellow" />
+              </div>
+              <h1 className="text-base sm:text-lg font-black uppercase tracking-tight italic">
+                Simulador de Confrontos
+              </h1>
+            </div>
+            
+            <div className="relative z-10 flex items-center gap-2">
+              {adminData?.role === 'master' && (
+                <Link 
+                  to="/admin/odds-engine" 
+                  className="bg-white/10 hover:bg-white/20 transition-all p-2.5 rounded-xl flex items-center justify-center border border-white/20 backdrop-blur-md text-white font-bold text-xs uppercase"
+                  title="Motor de Odds"
+                >
+                  <Settings2 className="w-4 h-4 text-primary-yellow" />
+                </Link>
+              )}
+              <div className="bg-white/10 p-1.5 rounded-xl flex items-center gap-1 border border-white/20 backdrop-blur-md">
+                <MapPin className="w-4 h-4 text-primary-yellow shrink-0" />
+                <select
+                  value={selectedLocationId}
+                  onChange={(e) => {
+                    setSelectedLocationId(e.target.value);
+                    setTeamA([]);
+                    setTeamB([]);
+                  }}
+                  className="bg-transparent text-white font-bold text-xs uppercase outline-none cursor-pointer border-none appearance-none pr-1"
+                >
+                  <option value="all" className="text-gray-900 bg-white">Todos</option>
+                  {locations.map(loc => (
+                    <option key={loc.id} value={loc.id} className="text-gray-900 bg-white">
+                      {loc.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Regular Header when not master */
+        <div className="bg-gradient-to-br from-slate-900 to-primary-blue rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20"></div>
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <h1 className="text-2xl sm:text-3xl font-black uppercase italic tracking-tighter flex items-center gap-3">
+                <Swords className="w-8 h-8 text-primary-yellow" />
+                Simulador de Confrontos
+              </h1>
+              <p className="text-white/80 text-sm font-medium max-w-lg">
+                Escale duas equipes virtuais com atletas reais e calcule as probabilidades e as cotações (odds) de apostas esportivas para a partida simulada.
               </p>
             </div>
-            <button onClick={() => navigate('/admin/banco')} className="bg-primary-yellow text-primary-blue px-8 py-3.5 rounded-xl font-black text-sm uppercase tracking-widest hover:bg-yellow-400 transition-all shadow-[0_0_20px_rgba(249,212,35,0.3)] hover:shadow-[0_0_30px_rgba(249,212,35,0.5)] active:scale-95 flex items-center gap-2">
-              Acessar Banco <ArrowUpRight className="w-4 h-4" />
-            </button>
+            
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="bg-white/10 p-1.5 rounded-2xl flex items-center gap-2 border border-white/20 backdrop-blur-md">
+                <MapPin className="w-5 h-5 text-primary-yellow ml-3" />
+                <select
+                  value={selectedLocationId}
+                  onChange={(e) => {
+                    setSelectedLocationId(e.target.value);
+                    setTeamA([]);
+                    setTeamB([]);
+                  }}
+                  className="bg-transparent text-white font-bold text-sm uppercase outline-none cursor-pointer py-2 pr-4 border-none appearance-none"
+                >
+                  <option value="all" className="text-gray-900">Todas as Sedes</option>
+                  {locations.map(loc => (
+                    <option key={loc.id} value={loc.id} className="text-gray-900">
+                      {loc.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
         </div>
       )}
-
-      {/* Header */}
-      <div className="bg-gradient-to-br from-slate-900 to-primary-blue rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20"></div>
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <h1 className="text-2xl sm:text-3xl font-black uppercase italic tracking-tighter flex items-center gap-3">
-              <Swords className="w-8 h-8 text-primary-yellow" />
-              Simulador de Confrontos
-            </h1>
-            <p className="text-white/80 text-sm font-medium max-w-lg">
-              Escale duas equipes virtuais com atletas reais e calcule as probabilidades e as cotações (odds) de apostas esportivas para a partida simulada.
-            </p>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            {adminData?.role === 'master' && (
-              <Link to="/admin/odds-engine" className="bg-white/10 hover:bg-white/20 transition-colors p-2.5 rounded-2xl flex items-center justify-center gap-2 border border-white/20 backdrop-blur-md text-white font-bold text-sm uppercase">
-                <Settings2 className="w-4 h-4 text-primary-yellow" />
-                Motor de Odds
-              </Link>
-            )}
-            <div className="bg-white/10 p-1.5 rounded-2xl flex items-center gap-2 border border-white/20 backdrop-blur-md">
-              <MapPin className="w-5 h-5 text-primary-yellow ml-3" />
-              <select
-                value={selectedLocationId}
-                onChange={(e) => {
-                  setSelectedLocationId(e.target.value);
-                  setTeamA([]);
-                  setTeamB([]);
-                }}
-                className="bg-transparent text-white font-bold text-sm uppercase outline-none cursor-pointer py-2 pr-4 border-none appearance-none"
-              >
-                <option value="all" className="text-gray-900">Todas as Sedes</option>
-                {locations.map(loc => (
-                  <option key={loc.id} value={loc.id} className="text-gray-900">
-                    {loc.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Match Selector */}
       {filteredMatches.length > 0 && (
@@ -1016,6 +1256,88 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                   <h4 className="text-lg font-black uppercase tracking-tighter text-gray-900">Amarelo</h4>
                   <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full mt-2">Power: <span className="text-amber-600">{odds.avgB}</span></span>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Seção Gols Marcados (Por Partida) */}
+          {odds && (
+            <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-lg relative overflow-hidden">
+              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-500"></div>
+              
+              <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <h3 className="text-sm font-black uppercase tracking-wider text-gray-800">Gols Marcados (Por Partida)</h3>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  {selectedMatch && (
+                    <button 
+                      onClick={handleUpdateMatchGoalsOddsOnly}
+                      className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all"
+                      title="Salvar/Sincronizar Odds atuais de Gols no Banco"
+                    >
+                      Sincronizar Odds 🔄
+                    </button>
+                  )}
+                  <button 
+                    onClick={handleToggleMatchGoalsMarket}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-wider transition-all ${
+                      selectedMatch?.bettingMarkets?.matchGoals?.enabled
+                        ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    }`}
+                  >
+                    {selectedMatch?.bettingMarkets?.matchGoals?.enabled ? <><Zap className="w-3 h-3" /> Público (ON)</> : <><Shield className="w-3 h-3" /> Público (OFF)</>}
+                  </button>
+                </div>
+              </div>
+
+              {/* Informações detalhadas do cálculo */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <div className="text-center md:text-left">
+                  <span className="block text-[10px] text-gray-400 font-bold uppercase tracking-wider">Média Gols Atletas Linha</span>
+                  <span className="text-xs font-black text-slate-700">
+                    Azul: {lambdaDetails.baseOffensivePowerA.toFixed(2)} | Amarelo: {lambdaDetails.baseOffensivePowerB.toFixed(2)}
+                  </span>
+                </div>
+                <div className="text-center">
+                  <span className="block text-[10px] text-gray-400 font-bold uppercase tracking-wider">Média Concedida Goleiros</span>
+                  <span className="text-xs font-black text-slate-700">
+                    Goleiro Azul: {lambdaDetails.gkA_avg.toFixed(2)} | Goleiro Amarelo: {lambdaDetails.gkB_avg.toFixed(2)}
+                  </span>
+                </div>
+                <div className="text-center md:text-right">
+                  <span className="block text-[10px] text-gray-400 font-bold uppercase tracking-wider">Projeção Total (Lambda)</span>
+                  <span className="text-sm font-black text-emerald-600">
+                    {lambdaDetails.totalLambda.toFixed(2)} Gols/Partida
+                  </span>
+                </div>
+              </div>
+
+              {/* Tabela de Odds de Over/Under */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {matchGoalsOdds.map((opt) => (
+                  <div key={opt.line} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 shadow-md relative overflow-hidden">
+                    <div className="text-center border-b border-slate-800 pb-2">
+                      <span className="text-xs font-black text-primary-yellow uppercase tracking-widest">Total: {opt.line}</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-center">
+                      <div className="bg-slate-800/50 p-2 rounded-xl">
+                        <span className="block text-[9px] text-slate-400 font-bold uppercase">Mais de</span>
+                        <span className="block text-sm font-black text-white">@ {opt.oddOver}</span>
+                        <span className="block text-[8px] text-emerald-400 font-bold">{opt.probOver}%</span>
+                      </div>
+                      <div className="bg-slate-800/50 p-2 rounded-xl">
+                        <span className="block text-[9px] text-slate-400 font-bold uppercase">Menos de</span>
+                        <span className="block text-sm font-black text-white">@ {opt.oddUnder}</span>
+                        <span className="block text-[8px] text-amber-500 font-bold">{opt.probUnder}%</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

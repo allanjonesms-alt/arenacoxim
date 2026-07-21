@@ -96,6 +96,131 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
     };
   }, []);
 
+  const getGkAverageConceded = (gk: Player) => {
+    const finishedMatches = matches.filter(m => m.status === 'finished');
+    let goalkeeperCareerConceded = 0;
+    let goalkeeperCareerMatches = 0;
+
+    finishedMatches.forEach(match => {
+      if (match.goalkeeperAId === gk.id) {
+        goalkeeperCareerConceded += match.scoreB || 0;
+        goalkeeperCareerMatches++;
+      } else if (match.goalkeeperBId === gk.id) {
+        goalkeeperCareerConceded += match.scoreA || 0;
+        goalkeeperCareerMatches++;
+      }
+    });
+
+    const gkMatchesCount = goalkeeperCareerMatches > 0 ? goalkeeperCareerMatches : (gk.stats?.matches || 0);
+    const careerConcededAvgPerMatch = gkMatchesCount > 0 
+      ? (goalkeeperCareerConceded / gkMatchesCount) 
+      : 2.0;
+
+    const positionBaseConcededPerMatch = 2.0;
+    const gkWeight = Math.min(1.0, gkMatchesCount / 20);
+    const blendedConcededPerMatch = (careerConcededAvgPerMatch * gkWeight) + (positionBaseConcededPerMatch * (1 - gkWeight));
+
+    return blendedConcededPerMatch;
+  };
+
+  const getPlayerAverageGoals = (player: Player) => {
+    let baseG = 0.6;
+    if (player.position === 'centroavante') baseG = 1.20; 
+    else if (player.position === 'meio-campo') baseG = 0.80; 
+    else if (player.position === 'zagueiro') baseG = 0.20; 
+    else if (player.position === 'lateral') baseG = 0.40; 
+    else if (player.position === 'goleiro') baseG = 0.02; 
+
+    const mCount = player.stats?.matches || 0;
+    const gCount = player.stats?.goals || 0;
+    const playerAvgG = mCount > 0 ? gCount / mCount : baseG;
+
+    const weight = Math.min(1, mCount / 5);
+    const blendedG = (playerAvgG * weight) + (baseG * (1 - weight));
+    return blendedG;
+  };
+
+  const calculatePoissonMatchGoals = (match: Match) => {
+    if (match.bettingMarkets?.matchGoals?.options && match.bettingMarkets.matchGoals.options.length > 0) {
+      return match.bettingMarkets.matchGoals.options;
+    }
+
+    const currentTeamA = match.teamA.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[];
+    const currentTeamB = match.teamB.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[];
+
+    // 1. Calcular a média geral de gols das partidas finalizadas
+    const finishedMatches = matches.filter(m => m.status === 'finished');
+    const generalMatchAvg = finishedMatches.length > 0
+      ? finishedMatches.reduce((sum, m) => sum + (m.scoreA || 0) + (m.scoreB || 0), 0) / finishedMatches.length
+      : 6.5; // Padrão realista para futebol society se não houver histórico
+
+    // Média de gols sofridos por goleiro como baseline
+    const baseGkConceded = finishedMatches.length > 0 ? (generalMatchAvg / 2) : 2.5;
+
+    // 2. Poder ofensivo de linha baseado na soma das médias de gols dos atletas escalados
+    const outfieldA = currentTeamA.filter(p => p.position !== 'goleiro');
+    const baseOffensivePowerA = outfieldA.length > 0 
+      ? outfieldA.reduce((sum, p) => sum + getPlayerAverageGoals(p), 0)
+      : (generalMatchAvg / 2);
+
+    const outfieldB = currentTeamB.filter(p => p.position !== 'goleiro');
+    const baseOffensivePowerB = outfieldB.length > 0 
+      ? outfieldB.reduce((sum, p) => sum + getPlayerAverageGoals(p), 0)
+      : (generalMatchAvg / 2);
+
+    // 3. Médias de gols sofridos dos goleiros
+    const gkA = currentTeamA.find(p => p.position === 'goleiro') || (match?.goalkeeperAId ? players.find(p => p.id === match.goalkeeperAId) : null);
+    const gkB = currentTeamB.find(p => p.position === 'goleiro') || (match?.goalkeeperBId ? players.find(p => p.id === match.goalkeeperBId) : null);
+
+    const gkA_avg = gkA ? getGkAverageConceded(gkA) : baseGkConceded;
+    const gkB_avg = gkB ? getGkAverageConceded(gkB) : baseGkConceded;
+
+    // 4. Projeção inicial (poder de ataque contra a defesa do goleiro adversário)
+    let expectedA = baseOffensivePowerA * (gkB_avg / baseGkConceded);
+    let expectedB = baseOffensivePowerB * (gkA_avg / baseGkConceded);
+
+    // 5. Calibração e ancoragem: combinamos 60% da projeção individual com 40% da média histórica geral do torneio para garantir estabilidade e realidade.
+    const playerBasedTotal = expectedA + expectedB;
+    const lambda = (playerBasedTotal * 0.6) + (generalMatchAvg * 0.4);
+
+    const poissonProb = (l: number, k: number) => {
+      let p = Math.exp(-l);
+      let cumulative = 0;
+      for (let i = 0; i <= k; i++) {
+        if (i > 0) p = p * l / i;
+        cumulative += p;
+      }
+      return cumulative;
+    };
+
+    const getOverUnderOdds = (k: number) => {
+      const probUnder = poissonProb(lambda, k);
+      const probOver = Math.max(0.01, Math.min(0.99, 1 - probUnder));
+      const safeProbUnder = Math.max(0.01, Math.min(0.99, probUnder));
+
+      const margin = 1.25;
+      let oddOver = 1 / (probOver * margin);
+      let oddUnder = 1 / (safeProbUnder * margin);
+
+      const maxOdd = 12.00;
+      
+      return {
+        line: `${k}.5`,
+        probOver: (probOver * 100).toFixed(1),
+        probUnder: (safeProbUnder * 100).toFixed(1),
+        oddOver: Math.max(1.01, Math.min(maxOdd, oddOver)).toFixed(2),
+        oddUnder: Math.max(1.01, Math.min(maxOdd, oddUnder)).toFixed(2)
+      };
+    };
+
+    return [
+      getOverUnderOdds(2),
+      getOverUnderOdds(3),
+      getOverUnderOdds(4),
+      getOverUnderOdds(5)
+    ];
+  };
+
   const calculateFloatingOdds = (match: Match) => {
     const market = match.bettingMarkets?.matchWinner;
     if (!market) return null;
@@ -562,7 +687,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
   };
 
   const handlePlaceBet = async () => {
-    const finalBetAmt = bettingParams?.maxBetAmount || 1.00;
+    const finalBetAmt = Math.min(1.00, bettingParams?.maxBetAmount || 1.00);
     if (!selectedBet || finalBetAmt <= 0) return;
     if (finalBetAmt > balance) {
       alert("Saldo insuficiente!");
@@ -617,10 +742,12 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
     const isGoalsEnabled = match.bettingMarkets?.playerGoals?.enabled && !timeLocked;
     const isAssistsEnabled = match.bettingMarkets?.playerAssists?.enabled && !timeLocked;
     const isWinnerEnabled = match.bettingMarkets?.matchWinner?.enabled;
+    const isMatchGoalsEnabled = match.bettingMarkets?.matchGoals?.enabled && !timeLocked;
     return (match.status === 'scheduled' || match.status === 'live') && (
            isWinnerEnabled || 
            isGoalsEnabled || 
-           isAssistsEnabled
+           isAssistsEnabled ||
+           isMatchGoalsEnabled
     );
   });
 
@@ -657,6 +784,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
               const isWinnerEnabled = match.bettingMarkets?.matchWinner?.enabled;
               const isGoalsEnabled = match.bettingMarkets?.playerGoals?.enabled && !timeLocked;
               const isAssistsEnabled = match.bettingMarkets?.playerAssists?.enabled && !timeLocked;
+              const isMatchGoalsEnabled = match.bettingMarkets?.matchGoals?.enabled && !timeLocked;
 
               const odds = calculateFloatingOdds(match);
 
@@ -723,6 +851,53 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                           <span className="text-[9px] text-slate-400 uppercase font-black mb-1">Time Amarelo</span>
                           <span className="text-lg font-black">{odds.oddB}</span>
                         </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SECTION 1.5: Match Goals (Gols Marcados por Partida) */}
+                  {isMatchGoalsEnabled && (
+                    <div className="space-y-3 pt-2 border-t border-gray-50">
+                      <div className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] text-center bg-gray-50 py-2 rounded-xl flex items-center justify-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 text-emerald-500" /> Gols Marcados (Por Partida)
+                      </div>
+
+                      <div className="space-y-2">
+                        {calculatePoissonMatchGoals(match).map((opt) => (
+                          <div key={opt.line} className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-2xl p-3 gap-2">
+                            <span className="text-xs font-black text-slate-700 tracking-wider">Total: {opt.line} Gols</span>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => setSelectedBet({
+                                  match,
+                                  market: 'matchGoals',
+                                  selection: `over_${opt.line}`,
+                                  odd: opt.oddOver,
+                                  matchInfo: 'Azul vs Amarelo',
+                                  selectedOutcome: `Mais de ${opt.line} Gols`
+                                })}
+                                className="bg-slate-900 hover:bg-slate-800 text-white font-black text-[10px] px-3 py-1.5 rounded-xl transition-all flex flex-col items-center min-w-[75px] cursor-pointer"
+                              >
+                                <span className="text-[8px] text-slate-400 font-bold uppercase">Mais de</span>
+                                <span className="text-xs">@ {opt.oddOver}</span>
+                              </button>
+                              <button
+                                onClick={() => setSelectedBet({
+                                  match,
+                                  market: 'matchGoals',
+                                  selection: `under_${opt.line}`,
+                                  odd: opt.oddUnder,
+                                  matchInfo: 'Azul vs Amarelo',
+                                  selectedOutcome: `Menos de ${opt.line} Gols`
+                                })}
+                                className="bg-slate-900 hover:bg-slate-800 text-white font-black text-[10px] px-3 py-1.5 rounded-xl transition-all flex flex-col items-center min-w-[75px] cursor-pointer"
+                              >
+                                <span className="text-[8px] text-slate-400 font-bold uppercase">Menos de</span>
+                                <span className="text-xs">@ {opt.oddUnder}</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
@@ -1096,13 +1271,13 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                   </div>
                   <input
                     type="number"
-                    value={bettingParams?.maxBetAmount || 1.00}
+                    value={Math.min(1.00, bettingParams?.maxBetAmount || 1.00)}
                     readOnly
                     className="w-full pl-12 pr-4 py-3 bg-gray-100 border border-gray-200 rounded-xl font-bold text-gray-500 focus:outline-none cursor-not-allowed"
                   />
                 </div>
                 <div className="text-right text-xs font-bold text-gray-500 mt-2">
-                  Retorno Potencial: <span className="text-emerald-500 font-black">R$ {(((bettingParams?.maxBetAmount || 1.00) || 0) * Number(selectedBet.odd)).toFixed(2)}</span>
+                  Retorno Potencial: <span className="text-emerald-500 font-black">R$ {(Math.min(1.00, bettingParams?.maxBetAmount || 1.00) * Number(selectedBet.odd)).toFixed(2)}</span>
                 </div>
               </div>
 
@@ -1113,7 +1288,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                 >
                   Cancelar
                 </button>
-                {balance >= (bettingParams?.maxBetAmount || 1.00) ? (
+                {balance >= Math.min(1.00, bettingParams?.maxBetAmount || 1.00) ? (
                   <button 
                     onClick={handlePlaceBet}
                     className="flex-1 bg-emerald-500 text-white font-black py-3 rounded-xl hover:bg-emerald-600 transition-colors cursor-pointer"
