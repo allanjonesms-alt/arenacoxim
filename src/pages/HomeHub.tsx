@@ -75,8 +75,8 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
             description: data.description || 'Um dia de futebol, amizade e bom churrasco!'
           });
         }
-      } catch (e) {
-        console.error("Error loading promo config in HomeHub:", e);
+      } catch (e: any) {
+        console.warn("Notice loading promo config in HomeHub (using default if offline):", e?.message || e);
       }
     };
     fetchPromoConfig();

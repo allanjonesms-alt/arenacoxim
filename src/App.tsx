@@ -374,8 +374,8 @@ export default function App() {
             setIsAdmin(false);
             setAdminData(null);
           }
-        } catch (error) {
-          console.error("Admin check failed:", error);
+        } catch (error: any) {
+          console.warn("Admin check notice (using local fallback if offline):", error?.message || error);
           const isMaster = currentUser.email?.toLowerCase() === MASTER_EMAIL;
           setIsAdmin(isMaster);
           setAdminData(isMaster ? {
