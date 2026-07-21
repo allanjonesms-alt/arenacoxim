@@ -1286,10 +1286,15 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
     <div className="space-y-8 mt-8">
       {/* SECTION 1: PROXIMOS CONFRONTOS */}
       <div className="space-y-4">
-        <h3 className="text-xl font-black uppercase italic tracking-tight text-primary-blue flex items-center gap-2 border-b border-gray-100 pb-3">
-          <TrendingUp className="w-6 h-6 text-primary-yellow" />
-          Próximos Confrontos
-        </h3>
+        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+          <h3 className="text-xl font-black uppercase italic tracking-tight text-primary-blue flex items-center gap-2">
+            <TrendingUp className="w-6 h-6 text-primary-yellow" />
+            Próximos Confrontos
+          </h3>
+          <span className="text-xs font-bold text-gray-400 uppercase">
+            Clique na partida para ver todos os mercados
+          </span>
+        </div>
 
         {sortedBettableMatches.length === 0 ? (
           <div className="bg-gray-50 border border-gray-100 rounded-3xl p-8 text-center flex flex-col items-center justify-center gap-2">
@@ -1297,129 +1302,170 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
             <p className="text-sm font-bold text-gray-600">Nenhum confronto disponível para apostas no momento</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {sortedBettableMatches.map((match, index) => {
-              const gameNumber = index + 1;
-              const gameTitle = `JOGO ${gameNumber}`;
-              const timeLocked = isMatchWithin30MinOrPast(match.date, match.time);
-              const isWinnerEnabled = match.bettingMarkets?.matchWinner?.enabled;
-              const isGoalsEnabled = match.bettingMarkets?.playerGoals?.enabled && !timeLocked;
-              const isAssistsEnabled = match.bettingMarkets?.playerAssists?.enabled && !timeLocked;
-              const isMatchGoalsEnabled = match.bettingMarkets?.matchGoals?.enabled && !timeLocked;
+          <div className="bg-slate-900 text-white rounded-3xl overflow-hidden shadow-xl border border-slate-800">
+            {/* Sportsbook Header Bar */}
+            <div className="bg-slate-950/80 px-4 py-3 border-b border-slate-800/80 flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-slate-400">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-primary-yellow" />
+                <span>Partida / Confronto</span>
+              </div>
+              <div className="flex items-center text-center font-black">
+                <div className="w-20 sm:w-24 text-amber-400">1</div>
+                <div className="w-20 sm:w-24 text-amber-400">X</div>
+                <div className="w-20 sm:w-24 text-amber-400">2</div>
+              </div>
+            </div>
 
-              const odds = calculateFloatingOdds(match);
+            {/* Match Rows */}
+            <div className="divide-y divide-slate-800/60">
+              {sortedBettableMatches.map((match, index) => {
+                const gameNumber = index + 1;
+                const gameTitle = `JOGO ${gameNumber}`;
+                const timeLocked = isMatchWithin30MinOrPast(match.date, match.time);
+                const isWinnerEnabled = match.bettingMarkets?.matchWinner?.enabled;
+                const isGoalsEnabled = match.bettingMarkets?.playerGoals?.enabled && !timeLocked;
+                const isAssistsEnabled = match.bettingMarkets?.playerAssists?.enabled && !timeLocked;
+                const isMatchGoalsEnabled = match.bettingMarkets?.matchGoals?.enabled && !timeLocked;
 
-              return (
-                <div 
-                  key={match.id} 
-                  className="bg-white rounded-[2rem] p-6 shadow-sm hover:shadow-md transition-all border border-gray-100 hover:border-primary-blue/30 flex flex-col justify-between gap-5 group cursor-pointer"
-                  onClick={() => {
-                    setSelectedMatchId(match.id);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                >
-                  {/* Card Header info */}
-                  <div className="flex justify-between items-center border-b border-gray-50 pb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-black uppercase tracking-wider text-white bg-primary-blue px-3 py-1 rounded-xl shadow-xs border border-blue-900/10 flex items-center gap-1.5">
-                        <Trophy className="w-3.5 h-3.5 text-primary-yellow" />
-                        {gameTitle}
-                      </span>
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse ml-1" />
-                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">Disponível</span>
-                    </div>
-                    <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-gray-50 px-2.5 py-1 rounded-lg border border-gray-100 flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-primary-blue" />
-                      {match.date} às {match.time}
-                    </div>
-                  </div>
+                const odds = calculateFloatingOdds(match);
 
-                  {/* Team vs Team Visual Banner */}
-                  <div className="bg-gradient-to-r from-blue-50/70 via-slate-50 to-amber-50/70 rounded-2xl p-4 border border-slate-100/80 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-primary-blue text-white font-black text-xs flex items-center justify-center shadow-xs">
-                        AZU
+                // Calculate additional markets count for badge like "8 »"
+                let marketCount = 0;
+                if (isWinnerEnabled) marketCount += 1;
+                if (isMatchGoalsEnabled) marketCount += calculatePoissonMatchGoals(match).length * 2;
+                if (isGoalsEnabled || isAssistsEnabled) {
+                  const totalPlayers = (match.teamA?.length || 0) + (match.teamB?.length || 0);
+                  if (isGoalsEnabled) marketCount += totalPlayers * 2;
+                  if (isAssistsEnabled) marketCount += totalPlayers * 2;
+                }
+
+                return (
+                  <div 
+                    key={match.id}
+                    onClick={() => {
+                      setSelectedMatchId(match.id);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="p-4 sm:p-5 hover:bg-slate-800/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer group"
+                  >
+                    {/* Left: Teams & Match Info */}
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-primary-yellow bg-primary-blue/60 px-2.5 py-0.5 rounded-md border border-blue-500/20">
+                          {gameTitle}
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-400">
+                          {match.date}
+                        </span>
                       </div>
-                      <div>
-                        <span className="text-xs font-black text-primary-blue uppercase tracking-wider block">Time Azul</span>
-                        <span className="text-[10px] text-gray-400 font-semibold">{match.teamA?.length || 0} Jogadores</span>
-                      </div>
-                    </div>
 
-                    <div className="text-center px-2">
-                      <span className="text-xs font-black text-gray-400 uppercase tracking-widest italic bg-white px-2.5 py-1 rounded-full border border-gray-100 shadow-xs">
-                        VS
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3 text-right">
-                      <div>
-                        <span className="text-xs font-black text-amber-600 uppercase tracking-wider block">Time Amarelo</span>
-                        <span className="text-[10px] text-gray-400 font-semibold">{match.teamB?.length || 0} Jogadores</span>
-                      </div>
-                      <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white font-black text-xs flex items-center justify-center shadow-xs">
-                        AMA
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Quick Odds Preview */}
-                  {isWinnerEnabled && odds && (
-                    <div className="bg-slate-50/80 rounded-2xl p-3 border border-slate-100 space-y-1.5">
-                      <div className="text-[9px] font-black text-gray-400 uppercase tracking-wider flex items-center justify-between px-1">
-                        <span>Cotações Flutuantes (1X2)</span>
-                        <span className="text-emerald-600 font-bold">Ao Vivo</span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="bg-white rounded-xl py-1.5 px-2 text-center border border-slate-200/80 shadow-2xs">
-                          <div className="text-[8px] font-black text-gray-400 uppercase">Azul</div>
-                          <div className="text-xs font-black text-emerald-600">@ {odds.oddA}</div>
+                      <div className="space-y-1.5 pl-0.5">
+                        <div className="flex items-center gap-2.5">
+                          <span className="w-3 h-3 rounded-full bg-blue-500 shrink-0 shadow-xs shadow-blue-500/50" />
+                          <span className="text-sm sm:text-base font-black text-white group-hover:text-amber-300 transition-colors">
+                            Time Azul
+                          </span>
                         </div>
-                        <div className="bg-white rounded-xl py-1.5 px-2 text-center border border-slate-200/80 shadow-2xs">
-                          <div className="text-[8px] font-black text-gray-400 uppercase">Empate</div>
-                          <div className="text-xs font-black text-emerald-600">@ {odds.oddDraw}</div>
-                        </div>
-                        <div className="bg-white rounded-xl py-1.5 px-2 text-center border border-slate-200/80 shadow-2xs">
-                          <div className="text-[8px] font-black text-gray-400 uppercase">Amarelo</div>
-                          <div className="text-xs font-black text-emerald-600">@ {odds.oddB}</div>
+                        <div className="flex items-center gap-2.5">
+                          <span className="w-3 h-3 rounded-full bg-amber-400 shrink-0 shadow-xs shadow-amber-400/50" />
+                          <span className="text-sm sm:text-base font-black text-white group-hover:text-amber-300 transition-colors">
+                            Time Amarelo
+                          </span>
                         </div>
                       </div>
+
+                      {/* Time & Markets Badge */}
+                      <div className="flex items-center gap-2 pt-1 text-xs font-bold text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-slate-500" />
+                          {match.time}
+                        </span>
+                        {marketCount > 0 && (
+                          <span 
+                            className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 text-[10px] font-black px-2 py-0.5 rounded-md border border-emerald-500/30 flex items-center gap-1 transition-all"
+                            title="Ver todos os mercados"
+                          >
+                            <span>+{marketCount}</span>
+                            <ChevronRight className="w-3 h-3 text-emerald-400" />
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  )}
 
-                  {/* Active Markets Badges */}
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {isWinnerEnabled && (
-                      <span className="text-[9px] font-black uppercase text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100 flex items-center gap-1">
-                        <Trophy className="w-3 h-3 text-primary-yellow" /> Vencedor 1X2
-                      </span>
-                    )}
-                    {isMatchGoalsEnabled && (
-                      <span className="text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 flex items-center gap-1">
-                        <Zap className="w-3 h-3 text-emerald-500" /> Total Gols
-                      </span>
-                    )}
-                    {(isGoalsEnabled || isAssistsEnabled) && (
-                      <span className="text-[9px] font-black uppercase text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-100 flex items-center gap-1">
-                        <Target className="w-3 h-3 text-rose-500" /> Desempenho Individual
-                      </span>
-                    )}
+                    {/* Right: Odds Columns (1 X 2) */}
+                    <div 
+                      className="flex items-center justify-end gap-2 sm:gap-3"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {isWinnerEnabled && odds ? (
+                        <>
+                          {/* 1 - Vitória Azul */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedBet({
+                                match,
+                                market: 'matchWinner',
+                                selection: 'teamA',
+                                odd: odds.oddA,
+                                matchInfo: `${gameTitle} - Azul vs Amarelo`,
+                                selectedOutcome: 'Vitória Azul (1)'
+                              });
+                            }}
+                            className="w-20 sm:w-24 py-2.5 bg-slate-800/90 hover:bg-slate-700 hover:border-amber-400 border border-slate-700/80 rounded-xl text-center transition-all cursor-pointer shadow-xs active:scale-95 group/btn"
+                          >
+                            <span className="text-[9px] font-black uppercase text-slate-400 block group-hover/btn:text-slate-300">Azul</span>
+                            <span className="text-sm sm:text-base font-black text-amber-400 group-hover/btn:text-amber-300">{odds.oddA}</span>
+                          </button>
+
+                          {/* X - Empate */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedBet({
+                                match,
+                                market: 'matchWinner',
+                                selection: 'draw',
+                                odd: odds.oddDraw,
+                                matchInfo: `${gameTitle} - Azul vs Amarelo`,
+                                selectedOutcome: 'Empate (X)'
+                              });
+                            }}
+                            className="w-20 sm:w-24 py-2.5 bg-slate-800/90 hover:bg-slate-700 hover:border-amber-400 border border-slate-700/80 rounded-xl text-center transition-all cursor-pointer shadow-xs active:scale-95 group/btn"
+                          >
+                            <span className="text-[9px] font-black uppercase text-slate-400 block group-hover/btn:text-slate-300">Empate</span>
+                            <span className="text-sm sm:text-base font-black text-amber-400 group-hover/btn:text-amber-300">{odds.oddDraw}</span>
+                          </button>
+
+                          {/* 2 - Vitória Amarelo */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedBet({
+                                match,
+                                market: 'matchWinner',
+                                selection: 'teamB',
+                                odd: odds.oddB,
+                                matchInfo: `${gameTitle} - Azul vs Amarelo`,
+                                selectedOutcome: 'Vitória Amarelo (2)'
+                              });
+                            }}
+                            className="w-20 sm:w-24 py-2.5 bg-slate-800/90 hover:bg-slate-700 hover:border-amber-400 border border-slate-700/80 rounded-xl text-center transition-all cursor-pointer shadow-xs active:scale-95 group/btn"
+                          >
+                            <span className="text-[9px] font-black uppercase text-slate-400 block group-hover/btn:text-slate-300">Amarelo</span>
+                            <span className="text-sm sm:text-base font-black text-amber-400 group-hover/btn:text-amber-300">{odds.oddB}</span>
+                          </button>
+                        </>
+                      ) : (
+                        <div className="text-xs font-bold text-slate-500 py-2">
+                          Mercado indisponível
+                        </div>
+                      )}
+                    </div>
                   </div>
-
-                  {/* Action CTA Button */}
-                  <div className="pt-3 border-t border-gray-50 flex items-center justify-between">
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider group-hover:text-primary-blue transition-colors">
-                      Todas as Apostas da Partida
-                    </span>
-                    <button className="bg-primary-blue group-hover:bg-blue-900 text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer">
-                      <span>Apostar no {gameTitle}</span>
-                      <ChevronRight className="w-4 h-4 text-primary-yellow group-hover:translate-x-1 transition-transform" />
-                    </button>
-                  </div>
-
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
