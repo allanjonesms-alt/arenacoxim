@@ -22,7 +22,6 @@ import { collection, query, orderBy, onSnapshot, deleteDoc, doc, where, getDoc }
 import { db } from '../firebase';
 import { handleFirestoreError, OperationType } from '../App';
 import PublicDashboard from './PublicDashboard';
-import { ScheduledMatchesOdds } from '../components/ScheduledMatchesOdds';
 import ShopeeBanner from '../components/ShopeeBanner';
 import churrascoPoster from '../assets/images/churrasco_torneio_poster_1784130670700.jpg';
 
@@ -318,9 +317,6 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
         </div>
 
 
-
-      {/* Seção Odds Agendadas */}
-        <ScheduledMatchesOdds teams={sharedTeams} players={players} cards={cards} />
 
       {/* 3. Seção Resultados e Jogos */}
         <div className="pt-2 border-t border-gray-100">

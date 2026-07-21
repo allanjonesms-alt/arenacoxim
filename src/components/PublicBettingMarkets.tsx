@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, query, where, getDoc, doc, addDoc, runTransaction } from 'firebase/firestore';
 import { Match, OddsEngineConfig, Player, Card } from '../types';
-import { TrendingUp, Shield, Trophy, Target, Zap, CalendarDays, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { TrendingUp, Shield, Trophy, Target, Zap, CalendarDays, Search, ChevronDown, ChevronUp, ArrowLeft, ChevronRight, Clock, Users } from 'lucide-react';
 import { getPositionAbbr, getPositionColor, getPlayerFinalOverall } from '../utils/playerUtils';
 import { calculateMatchPoints } from '../utils/scoringEngine';
 
@@ -43,6 +43,9 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
   const [showAllGolsSofridos, setShowAllGolsSofridos] = useState(false);
   const [isScorerCollapsed, setIsScorerCollapsed] = useState(false);
   const [showAllScorer, setShowAllScorer] = useState(false);
+
+  // Selected match for dedicated match betting view
+  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
 
   // For placing a bet
   const [selectedBet, setSelectedBet] = useState<any | null>(null);
@@ -884,7 +887,17 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
     );
   });
 
-  const isAnyMarketOpen = activeBettableMatches.length > 0 || (betSettings.longTermMonthlyGoals?.enabled);
+  // Sort matches chronologically by date and time (Jogo 1, Jogo 2, etc.)
+  const sortedBettableMatches = [...activeBettableMatches].sort((a, b) => {
+    const dateA = a.date || '';
+    const dateB = b.date || '';
+    if (dateA !== dateB) return dateA.localeCompare(dateB);
+    const timeA = a.time || '00:00';
+    const timeB = b.time || '00:00';
+    return timeA.localeCompare(timeB);
+  });
+
+  const isAnyMarketOpen = sortedBettableMatches.length > 0 || (betSettings.longTermMonthlyGoals?.enabled);
 
   if (!isAnyMarketOpen) {
     return (
@@ -896,6 +909,379 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
     );
   }
 
+  // Find selected match index if selectedMatchId is active
+  const selectedMatchIndex = selectedMatchId ? sortedBettableMatches.findIndex(m => m.id === selectedMatchId) : -1;
+  const selectedMatch = selectedMatchIndex >= 0 ? sortedBettableMatches[selectedMatchIndex] : null;
+
+  // DEDICATED MATCH BETTING VIEW
+  if (selectedMatch) {
+    const gameNumber = selectedMatchIndex + 1;
+    const gameTitle = `JOGO ${gameNumber}`;
+    const timeLocked = isMatchWithin30MinOrPast(selectedMatch.date, selectedMatch.time);
+    const isWinnerEnabled = selectedMatch.bettingMarkets?.matchWinner?.enabled;
+    const isGoalsEnabled = selectedMatch.bettingMarkets?.playerGoals?.enabled && !timeLocked;
+    const isAssistsEnabled = selectedMatch.bettingMarkets?.playerAssists?.enabled && !timeLocked;
+    const isMatchGoalsEnabled = selectedMatch.bettingMarkets?.matchGoals?.enabled && !timeLocked;
+    const odds = calculateFloatingOdds(selectedMatch);
+
+    return (
+      <div className="space-y-8 mt-8 animate-in fade-in duration-300">
+        {/* Dedicated Match Page Header */}
+        <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+          <div className="space-y-3">
+            <button
+              onClick={() => setSelectedMatchId(null)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all font-black text-xs uppercase tracking-wider cursor-pointer active:scale-95 shadow-2xs"
+            >
+              <ArrowLeft className="w-4 h-4 text-primary-blue" />
+              <span>Voltar para Próximos Confrontos</span>
+            </button>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="text-xs font-black uppercase tracking-wider text-white bg-primary-blue px-3 py-1 rounded-xl shadow-xs border border-blue-900/10 flex items-center gap-1.5">
+                <Trophy className="w-3.5 h-3.5 text-primary-yellow" />
+                {gameTitle}
+              </span>
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md">
+                Disponível para Apostas
+              </span>
+            </div>
+
+            <h2 className="text-2xl sm:text-3xl font-black text-primary-blue uppercase italic tracking-tight">
+              Confronto Azul vs Amarelo
+            </h2>
+
+            <div className="flex items-center gap-3 text-xs font-bold text-gray-500">
+              <span className="flex items-center gap-1.5 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100">
+                <CalendarDays className="w-4 h-4 text-primary-yellow" />
+                {selectedMatch.date} às {selectedMatch.time}
+              </span>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setSelectedMatchId(null)}
+            className="bg-primary-blue hover:bg-blue-900 text-white font-black text-xs uppercase tracking-wider px-6 py-3 rounded-xl transition-all shadow-md active:scale-95 cursor-pointer self-start sm:self-center flex items-center gap-2"
+          >
+            <ArrowLeft className="w-4 h-4 text-primary-yellow" />
+            <span>Voltar</span>
+          </button>
+        </div>
+
+        {/* Dedicated Match Markets Container */}
+        <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-gray-100 space-y-8">
+          {/* 1. Vencedor da Partida (1X2) */}
+          {isWinnerEnabled && odds && (
+            <div className="space-y-4">
+              <div className="text-xs font-black text-primary-blue uppercase tracking-[0.2em] bg-blue-50/80 border border-blue-100 py-3 px-4 rounded-2xl flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-primary-yellow" /> Vencedor da Partida ({gameTitle})
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button 
+                  onClick={() => setSelectedBet({ 
+                    match: selectedMatch, 
+                    market: 'matchWinner', 
+                    selection: 'teamA', 
+                    odd: odds.oddA,
+                    matchInfo: `${gameTitle} - Azul vs Amarelo`,
+                    selectedOutcome: 'Vitória Azul (1)'
+                  })}
+                  className="bg-white border-2 border-slate-200 text-slate-800 rounded-2xl p-4 flex flex-col items-center hover:border-primary-blue hover:bg-blue-50/20 transition-all cursor-pointer shadow-sm active:scale-95 group"
+                >
+                  <span className="text-xs text-slate-500 uppercase font-black mb-1 group-hover:text-primary-blue">Time Azul</span>
+                  <span className="text-2xl font-black text-emerald-600">@ {odds.oddA}</span>
+                </button>
+
+                <button 
+                  onClick={() => setSelectedBet({ 
+                    match: selectedMatch, 
+                    market: 'matchWinner', 
+                    selection: 'draw', 
+                    odd: odds.oddDraw,
+                    matchInfo: `${gameTitle} - Azul vs Amarelo`,
+                    selectedOutcome: 'Empate (X)'
+                  })}
+                  className="bg-white border-2 border-slate-200 text-slate-800 rounded-2xl p-4 flex flex-col items-center hover:border-primary-blue hover:bg-blue-50/20 transition-all cursor-pointer shadow-sm active:scale-95 group"
+                >
+                  <span className="text-xs text-slate-500 uppercase font-black mb-1 group-hover:text-primary-blue">Empate</span>
+                  <span className="text-2xl font-black text-emerald-600">@ {odds.oddDraw}</span>
+                </button>
+
+                <button 
+                  onClick={() => setSelectedBet({ 
+                    match: selectedMatch, 
+                    market: 'matchWinner', 
+                    selection: 'teamB', 
+                    odd: odds.oddB,
+                    matchInfo: `${gameTitle} - Azul vs Amarelo`,
+                    selectedOutcome: 'Vitória Amarelo (2)'
+                  })}
+                  className="bg-white border-2 border-slate-200 text-slate-800 rounded-2xl p-4 flex flex-col items-center hover:border-amber-400 hover:bg-amber-50/20 transition-all cursor-pointer shadow-sm active:scale-95 group"
+                >
+                  <span className="text-xs text-slate-500 uppercase font-black mb-1 group-hover:text-amber-600">Time Amarelo</span>
+                  <span className="text-2xl font-black text-emerald-600">@ {odds.oddB}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 2. Match Goals (Linhas por partida) */}
+          {isMatchGoalsEnabled && (
+            <div className="space-y-4 pt-4 border-t border-gray-100">
+              <div className="text-xs font-black text-primary-blue uppercase tracking-[0.2em] bg-emerald-50/80 border border-emerald-100 py-3 px-4 rounded-2xl flex items-center gap-2">
+                <Zap className="w-4 h-4 text-emerald-500" /> Total de Gols Marcados no {gameTitle}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {calculatePoissonMatchGoals(selectedMatch).map((opt) => (
+                  <div key={opt.line} className="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-2xl p-3 gap-3">
+                    <span className="text-sm font-black text-slate-800 tracking-wider">Total: {opt.line} Gols</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setSelectedBet({
+                          match: selectedMatch,
+                          market: 'matchGoals',
+                          selection: `over_${opt.line}`,
+                          odd: opt.oddOver,
+                          matchInfo: `${gameTitle} - Azul vs Amarelo`,
+                          selectedOutcome: `Mais de ${opt.line} Gols`
+                        })}
+                        className="bg-white hover:bg-emerald-50 text-slate-800 hover:border-emerald-500 border border-slate-200 font-black text-xs px-4 py-2 rounded-xl transition-all flex flex-col items-center min-w-[85px] cursor-pointer shadow-xs active:scale-95"
+                      >
+                        <span className="text-[9px] text-slate-500 font-bold uppercase mb-0.5">Mais de</span>
+                        <span className="text-sm font-black text-emerald-600">@ {opt.oddOver}</span>
+                      </button>
+                      <button
+                        onClick={() => setSelectedBet({
+                          match: selectedMatch,
+                          market: 'matchGoals',
+                          selection: `under_${opt.line}`,
+                          odd: opt.oddUnder,
+                          matchInfo: `${gameTitle} - Azul vs Amarelo`,
+                          selectedOutcome: `Menos de ${opt.line} Gols`
+                        })}
+                        className="bg-white hover:bg-emerald-50 text-slate-800 hover:border-emerald-500 border border-slate-200 font-black text-xs px-4 py-2 rounded-xl transition-all flex flex-col items-center min-w-[85px] cursor-pointer shadow-xs active:scale-95"
+                      >
+                        <span className="text-[9px] text-slate-500 font-bold uppercase mb-0.5">Menos de</span>
+                        <span className="text-sm font-black text-emerald-600">@ {opt.oddUnder}</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 3. Desempenho Individual de Jogadores */}
+          {(isGoalsEnabled || isAssistsEnabled) && (
+            <div className="space-y-4 pt-4 border-t border-gray-100">
+              <div className="text-xs font-black text-primary-blue uppercase tracking-[0.2em] bg-rose-50/80 border border-rose-100 py-3 px-4 rounded-2xl flex items-center gap-2">
+                <Target className="w-4 h-4 text-rose-500" /> Desempenho Individual de Jogadores ({gameTitle})
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {['teamA', 'teamB'].map(teamKey => {
+                  const playerIds = teamKey === 'teamA' ? selectedMatch.teamA : selectedMatch.teamB;
+                  const teamName = teamKey === 'teamA' ? 'Azul' : 'Amarelo';
+                  const teamBadgeColor = teamKey === 'teamA' ? 'text-primary-blue bg-blue-50 border-blue-200' : 'text-amber-700 bg-amber-50 border-amber-200';
+
+                  // Opposing team stats
+                  const oppIds = teamKey === 'teamA' ? selectedMatch.teamB : selectedMatch.teamA;
+                  const oppTotal = oppIds.reduce((sum, id) => {
+                    const p = players.find(x => x.id === id);
+                    return sum + (p ? getPlayerFinalOverall(p, cards) : 75);
+                  }, 0);
+                  const oppAvg = oppIds.length > 0 ? oppTotal / oppIds.length : 75;
+
+                  const activePlayers = playerIds.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[];
+
+                  if (activePlayers.length === 0) return null;
+
+                  return (
+                    <div key={teamKey} className="space-y-3 bg-slate-50/60 p-4 rounded-2xl border border-slate-100">
+                      <div className={`text-xs font-black uppercase tracking-wider px-3 py-1 rounded-xl border inline-block ${teamBadgeColor}`}>
+                        Time {teamName}
+                      </div>
+
+                      <div className="space-y-2.5">
+                        {activePlayers.map(player => {
+                          const pOdds = calculatePlayerPropOdds(player, oppAvg);
+                          return (
+                            <div key={player.id} className="flex flex-col sm:flex-row sm:items-center justify-between border border-gray-200/70 rounded-2xl p-3 bg-white gap-3 shadow-xs">
+                              <div className="flex items-center gap-2.5">
+                                <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[9px] font-black text-white ${getPositionColor(player.position)}`}>
+                                  {getPositionAbbr(player.position)}
+                                </span>
+                                <span className="text-xs font-black text-gray-800 uppercase">{player.nickname || player.name}</span>
+                              </div>
+
+                              <div className="flex flex-col gap-2">
+                                {isGoalsEnabled && (
+                                  <div className="flex items-center gap-2 justify-between sm:justify-end">
+                                    <span className="text-[9px] font-black text-gray-400 uppercase w-10">Gols</span>
+                                    <button 
+                                      onClick={() => setSelectedBet({
+                                        match: selectedMatch,
+                                        market: 'playerGoals',
+                                        selection: `${player.nickname || player.name} +0.5 Gols`,
+                                        odd: pOdds.g1,
+                                        matchInfo: `${gameTitle} (Time ${teamName}) - ${player.nickname || player.name}`,
+                                        selectedOutcome: `Marcar +0.5 Gols`
+                                      })}
+                                      className="bg-slate-50 border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-slate-800 rounded-xl px-2.5 py-1 text-center min-w-[55px] transition-all cursor-pointer active:scale-95"
+                                    >
+                                      <div className="text-[8px] text-slate-500 font-bold leading-none mb-0.5">+0.5</div>
+                                      <div className="text-xs font-black leading-none text-emerald-600">@ {pOdds.g1}</div>
+                                    </button>
+                                    <button 
+                                      onClick={() => setSelectedBet({
+                                        match: selectedMatch,
+                                        market: 'playerGoals',
+                                        selection: `${player.nickname || player.name} +1.5 Gols`,
+                                        odd: pOdds.g2,
+                                        matchInfo: `${gameTitle} (Time ${teamName}) - ${player.nickname || player.name}`,
+                                        selectedOutcome: `Marcar +1.5 Gols`
+                                      })}
+                                      className="bg-slate-50 border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-slate-800 rounded-xl px-2.5 py-1 text-center min-w-[55px] transition-all cursor-pointer active:scale-95"
+                                    >
+                                      <div className="text-[8px] text-slate-500 font-bold leading-none mb-0.5">+1.5</div>
+                                      <div className="text-xs font-black leading-none text-emerald-600">@ {pOdds.g2}</div>
+                                    </button>
+                                  </div>
+                                )}
+
+                                {isAssistsEnabled && (
+                                  <div className="flex items-center gap-2 justify-between sm:justify-end">
+                                    <span className="text-[9px] font-black text-gray-400 uppercase w-10">Assist.</span>
+                                    <button 
+                                      onClick={() => setSelectedBet({
+                                        match: selectedMatch,
+                                        market: 'playerAssists',
+                                        selection: `${player.nickname || player.name} +0.5 Assistências`,
+                                        odd: pOdds.a1,
+                                        matchInfo: `${gameTitle} (Time ${teamName}) - ${player.nickname || player.name}`,
+                                        selectedOutcome: `Dar +0.5 Assistência`
+                                      })}
+                                      className="bg-slate-50 border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-slate-800 rounded-xl px-2.5 py-1 text-center min-w-[55px] transition-all cursor-pointer active:scale-95"
+                                    >
+                                      <div className="text-[8px] text-slate-500 font-bold leading-none mb-0.5">+0.5</div>
+                                      <div className="text-xs font-black leading-none text-emerald-600">@ {pOdds.a1}</div>
+                                    </button>
+                                    <button 
+                                      onClick={() => setSelectedBet({
+                                        match: selectedMatch,
+                                        market: 'playerAssists',
+                                        selection: `${player.nickname || player.name} +1.5 Assistências`,
+                                        odd: pOdds.a2,
+                                        matchInfo: `${gameTitle} (Time ${teamName}) - ${player.nickname || player.name}`,
+                                        selectedOutcome: `Dar +1.5 Assistência`
+                                      })}
+                                      className="bg-slate-50 border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-slate-800 rounded-xl px-2.5 py-1 text-center min-w-[55px] transition-all cursor-pointer active:scale-95"
+                                    >
+                                      <div className="text-[8px] text-slate-500 font-bold leading-none mb-0.5">+1.5</div>
+                                      <div className="text-xs font-black leading-none text-emerald-600">@ {pOdds.a2}</div>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Back Button Footer */}
+        <div className="flex justify-center pt-4">
+          <button
+            onClick={() => setSelectedMatchId(null)}
+            className="flex items-center gap-2 px-6 py-3 bg-white hover:bg-gray-50 text-gray-700 rounded-2xl border border-gray-200 shadow-sm font-black text-xs uppercase tracking-wider cursor-pointer active:scale-95"
+          >
+            <ArrowLeft className="w-4 h-4 text-primary-blue" />
+            <span>Voltar para Todos os Confrontos</span>
+          </button>
+        </div>
+
+        {/* Modal for placing bets */}
+        {selectedBet && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+            <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+              <div className="bg-gradient-to-br from-primary-blue to-blue-900 p-6 text-white relative overflow-hidden">
+                <h3 className="font-black text-xl">Confirmar Aposta</h3>
+                <p className="text-blue-100 text-xs font-semibold mt-1 uppercase tracking-wider">{selectedBet.matchInfo}</p>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Palpite</span>
+                    <span className="text-sm font-black text-gray-800">{selectedBet.selectedOutcome}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Odd</span>
+                    <span className="text-2xl font-black text-primary-blue">{selectedBet.odd}</span>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase text-gray-500">Valor da Aposta (Fixo)</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <span className="text-gray-500 font-bold">R$</span>
+                    </div>
+                    <input
+                      type="number"
+                      value={Math.min(1.00, bettingParams?.maxBetAmount || 1.00)}
+                      readOnly
+                      className="w-full pl-12 pr-4 py-3 bg-gray-100 border border-gray-200 rounded-xl font-bold text-gray-500 focus:outline-none cursor-not-allowed"
+                    />
+                  </div>
+                  <div className="text-right text-xs font-bold text-gray-500 mt-2">
+                    Retorno Potencial: <span className="text-emerald-500 font-black">R$ {(Math.min(1.00, bettingParams?.maxBetAmount || 1.00) * Number(selectedBet.odd)).toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button 
+                    onClick={() => setSelectedBet(null)}
+                    className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  {balance >= Math.min(1.00, bettingParams?.maxBetAmount || 1.00) ? (
+                    <button 
+                      onClick={handlePlaceBet}
+                      className="flex-1 bg-emerald-500 text-white font-black py-3 rounded-xl hover:bg-emerald-600 transition-colors cursor-pointer"
+                    >
+                      Confirmar Aposta
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => {
+                        setSelectedBet(null);
+                        if(onRequestDeposit) onRequestDeposit();
+                      }}
+                      className="flex-1 bg-amber-500 text-white font-black py-3 rounded-xl hover:bg-amber-600 transition-colors cursor-pointer"
+                    >
+                      Depositar Saldo
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ALL MATCHES CARDS LIST VIEW
   return (
     <div className="space-y-8 mt-8">
       {/* SECTION 1: PROXIMOS CONFRONTOS */}
@@ -905,14 +1291,16 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
           Próximos Confrontos
         </h3>
 
-        {activeBettableMatches.length === 0 ? (
+        {sortedBettableMatches.length === 0 ? (
           <div className="bg-gray-50 border border-gray-100 rounded-3xl p-8 text-center flex flex-col items-center justify-center gap-2">
             <Shield className="w-8 h-8 text-gray-300" />
             <p className="text-sm font-bold text-gray-600">Nenhum confronto disponível para apostas no momento</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {activeBettableMatches.map(match => {
+            {sortedBettableMatches.map((match, index) => {
+              const gameNumber = index + 1;
+              const gameTitle = `JOGO ${gameNumber}`;
               const timeLocked = isMatchWithin30MinOrPast(match.date, match.time);
               const isWinnerEnabled = match.bettingMarkets?.matchWinner?.enabled;
               const isGoalsEnabled = match.bettingMarkets?.playerGoals?.enabled && !timeLocked;
@@ -922,241 +1310,112 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
               const odds = calculateFloatingOdds(match);
 
               return (
-                <div key={match.id} className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 flex flex-col gap-6">
-                  {/* Match Header info */}
-                  <div className="flex justify-between items-center border-b border-gray-50 pb-4">
+                <div 
+                  key={match.id} 
+                  className="bg-white rounded-[2rem] p-6 shadow-sm hover:shadow-md transition-all border border-gray-100 hover:border-primary-blue/30 flex flex-col justify-between gap-5 group cursor-pointer"
+                  onClick={() => {
+                    setSelectedMatchId(match.id);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                >
+                  {/* Card Header info */}
+                  <div className="flex justify-between items-center border-b border-gray-50 pb-3">
                     <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="text-xs font-black uppercase tracking-wider text-white bg-primary-blue px-3 py-1 rounded-xl shadow-xs border border-blue-900/10 flex items-center gap-1.5">
+                        <Trophy className="w-3.5 h-3.5 text-primary-yellow" />
+                        {gameTitle}
+                      </span>
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse ml-1" />
                       <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">Disponível</span>
                     </div>
-                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                    <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-gray-50 px-2.5 py-1 rounded-lg border border-gray-100 flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-primary-blue" />
                       {match.date} às {match.time}
                     </div>
                   </div>
 
-                  {/* SECTION 1: Match Winner */}
+                  {/* Team vs Team Visual Banner */}
+                  <div className="bg-gradient-to-r from-blue-50/70 via-slate-50 to-amber-50/70 rounded-2xl p-4 border border-slate-100/80 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-primary-blue text-white font-black text-xs flex items-center justify-center shadow-xs">
+                        AZU
+                      </div>
+                      <div>
+                        <span className="text-xs font-black text-primary-blue uppercase tracking-wider block">Time Azul</span>
+                        <span className="text-[10px] text-gray-400 font-semibold">{match.teamA?.length || 0} Jogadores</span>
+                      </div>
+                    </div>
+
+                    <div className="text-center px-2">
+                      <span className="text-xs font-black text-gray-400 uppercase tracking-widest italic bg-white px-2.5 py-1 rounded-full border border-gray-100 shadow-xs">
+                        VS
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3 text-right">
+                      <div>
+                        <span className="text-xs font-black text-amber-600 uppercase tracking-wider block">Time Amarelo</span>
+                        <span className="text-[10px] text-gray-400 font-semibold">{match.teamB?.length || 0} Jogadores</span>
+                      </div>
+                      <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white font-black text-xs flex items-center justify-center shadow-xs">
+                        AMA
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick Odds Preview */}
                   {isWinnerEnabled && odds && (
-                    <div className="space-y-3">
-                      <div className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] text-center bg-gray-50 py-2 rounded-xl flex items-center justify-center gap-1.5">
-                        <Trophy className="w-3.5 h-3.5 text-primary-yellow" /> Vencedor da Partida
+                    <div className="bg-slate-50/80 rounded-2xl p-3 border border-slate-100 space-y-1.5">
+                      <div className="text-[9px] font-black text-gray-400 uppercase tracking-wider flex items-center justify-between px-1">
+                        <span>Cotações Flutuantes (1X2)</span>
+                        <span className="text-emerald-600 font-bold">Ao Vivo</span>
                       </div>
-                      
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => setSelectedBet({ 
-                            match, 
-                            market: 'matchWinner', 
-                            selection: 'teamA', 
-                            odd: odds.oddA,
-                            matchInfo: 'Azul vs Amarelo',
-                            selectedOutcome: 'Vitória Azul (1)'
-                          })}
-                          className="flex-1 bg-white border border-slate-200 text-slate-800 rounded-2xl py-1.5 px-3 flex flex-col items-center hover:bg-slate-50 transition-colors cursor-pointer shadow-sm active:scale-95"
-                        >
-                          <span className="text-[9px] text-slate-500 uppercase font-black mb-0.5">Time Azul</span>
-                          <span className="text-base font-black text-emerald-600">@ {odds.oddA}</span>
-                        </button>
-                        <button 
-                          onClick={() => setSelectedBet({ 
-                            match, 
-                            market: 'matchWinner', 
-                            selection: 'draw', 
-                            odd: odds.oddDraw,
-                            matchInfo: 'Azul vs Amarelo',
-                            selectedOutcome: 'Empate (X)'
-                          })}
-                          className="flex-1 bg-white border border-slate-200 text-slate-800 rounded-2xl py-1.5 px-3 flex flex-col items-center hover:bg-slate-50 transition-colors cursor-pointer shadow-sm active:scale-95"
-                        >
-                          <span className="text-[9px] text-slate-500 uppercase font-black mb-0.5">Empate</span>
-                          <span className="text-base font-black text-emerald-600">@ {odds.oddDraw}</span>
-                        </button>
-                        <button 
-                          onClick={() => setSelectedBet({ 
-                            match, 
-                            market: 'matchWinner', 
-                            selection: 'teamB', 
-                            odd: odds.oddB,
-                            matchInfo: 'Azul vs Amarelo',
-                            selectedOutcome: 'Vitória Amarelo (2)'
-                          })}
-                          className="flex-1 bg-white border border-slate-200 text-slate-800 rounded-2xl py-1.5 px-3 flex flex-col items-center hover:bg-slate-50 transition-colors cursor-pointer shadow-sm active:scale-95"
-                        >
-                          <span className="text-[9px] text-slate-500 uppercase font-black mb-0.5">Time Amarelo</span>
-                          <span className="text-base font-black text-emerald-600">@ {odds.oddB}</span>
-                        </button>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-white rounded-xl py-1.5 px-2 text-center border border-slate-200/80 shadow-2xs">
+                          <div className="text-[8px] font-black text-gray-400 uppercase">Azul</div>
+                          <div className="text-xs font-black text-emerald-600">@ {odds.oddA}</div>
+                        </div>
+                        <div className="bg-white rounded-xl py-1.5 px-2 text-center border border-slate-200/80 shadow-2xs">
+                          <div className="text-[8px] font-black text-gray-400 uppercase">Empate</div>
+                          <div className="text-xs font-black text-emerald-600">@ {odds.oddDraw}</div>
+                        </div>
+                        <div className="bg-white rounded-xl py-1.5 px-2 text-center border border-slate-200/80 shadow-2xs">
+                          <div className="text-[8px] font-black text-gray-400 uppercase">Amarelo</div>
+                          <div className="text-xs font-black text-emerald-600">@ {odds.oddB}</div>
+                        </div>
                       </div>
                     </div>
                   )}
 
-                  {/* SECTION 1.5: Match Goals (Gols Marcados por Partida) */}
-                  {isMatchGoalsEnabled && (
-                    <div className="space-y-3 pt-2 border-t border-gray-50">
-                      <div className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] text-center bg-gray-50 py-2 rounded-xl flex items-center justify-center gap-1.5">
-                        <Zap className="w-3.5 h-3.5 text-emerald-500" /> Gols Marcados (Por Partida)
-                      </div>
+                  {/* Active Markets Badges */}
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {isWinnerEnabled && (
+                      <span className="text-[9px] font-black uppercase text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100 flex items-center gap-1">
+                        <Trophy className="w-3 h-3 text-primary-yellow" /> Vencedor 1X2
+                      </span>
+                    )}
+                    {isMatchGoalsEnabled && (
+                      <span className="text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 flex items-center gap-1">
+                        <Zap className="w-3 h-3 text-emerald-500" /> Total Gols
+                      </span>
+                    )}
+                    {(isGoalsEnabled || isAssistsEnabled) && (
+                      <span className="text-[9px] font-black uppercase text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-100 flex items-center gap-1">
+                        <Target className="w-3 h-3 text-rose-500" /> Desempenho Individual
+                      </span>
+                    )}
+                  </div>
 
-                      <div className="space-y-2">
-                        {calculatePoissonMatchGoals(match).map((opt) => (
-                          <div key={opt.line} className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-2xl py-1.5 px-3 gap-2">
-                            <span className="text-xs font-black text-slate-700 tracking-wider">Total: {opt.line} Gols</span>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => setSelectedBet({
-                                  match,
-                                  market: 'matchGoals',
-                                  selection: `over_${opt.line}`,
-                                  odd: opt.oddOver,
-                                  matchInfo: 'Azul vs Amarelo',
-                                  selectedOutcome: `Mais de ${opt.line} Gols`
-                                })}
-                                className="bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/80 font-black text-[10px] px-3 py-0.5 rounded-xl transition-all flex flex-col items-center min-w-[75px] cursor-pointer shadow-sm active:scale-95"
-                              >
-                                <span className="text-[8px] text-slate-500 font-bold uppercase leading-none mb-0.5">Mais de</span>
-                                <span className="text-[11px] font-black text-emerald-600 leading-none">@ {opt.oddOver}</span>
-                              </button>
-                              <button
-                                onClick={() => setSelectedBet({
-                                  match,
-                                  market: 'matchGoals',
-                                  selection: `under_${opt.line}`,
-                                  odd: opt.oddUnder,
-                                  matchInfo: 'Azul vs Amarelo',
-                                  selectedOutcome: `Menos de ${opt.line} Gols`
-                                })}
-                                className="bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/80 font-black text-[10px] px-3 py-0.5 rounded-xl transition-all flex flex-col items-center min-w-[75px] cursor-pointer shadow-sm active:scale-95"
-                              >
-                                <span className="text-[8px] text-slate-500 font-bold uppercase leading-none mb-0.5">Menos de</span>
-                                <span className="text-[11px] font-black text-emerald-600 leading-none">@ {opt.oddUnder}</span>
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* SECTION 2: Player Props */}
-                  {(isGoalsEnabled || isAssistsEnabled) && (
-                    <div className="space-y-4 pt-2 border-t border-gray-50">
-                      <div className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] text-center bg-gray-50 py-2 rounded-xl flex items-center justify-center gap-1.5">
-                        <Target className="w-3.5 h-3.5 text-rose-500" /> Desempenho Individual
-                      </div>
-
-                      <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
-                        {['teamA', 'teamB'].map(teamKey => {
-                          const playerIds = teamKey === 'teamA' ? match.teamA : match.teamB;
-                          const teamName = teamKey === 'teamA' ? 'Azul' : 'Amarelo';
-                          const teamBadgeColor = teamKey === 'teamA' ? 'text-primary-blue bg-blue-50 border-blue-100' : 'text-amber-600 bg-amber-50 border-amber-100';
-
-                          // Opposing team stats
-                          const oppIds = teamKey === 'teamA' ? match.teamB : match.teamA;
-                          const oppTotal = oppIds.reduce((sum, id) => {
-                            const p = players.find(x => x.id === id);
-                            return sum + (p ? getPlayerFinalOverall(p, cards) : 75);
-                          }, 0);
-                          const oppAvg = oppIds.length > 0 ? oppTotal / oppIds.length : 75;
-
-                          const activePlayers = playerIds.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[];
-
-                          if (activePlayers.length === 0) return null;
-
-                          return (
-                            <div key={teamKey} className="space-y-2">
-                              <div className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded border inline-block ${teamBadgeColor}`}>
-                                Time {teamName}
-                              </div>
-
-                              <div className="space-y-2">
-                                {activePlayers.map(player => {
-                                  const pOdds = calculatePlayerPropOdds(player, oppAvg);
-                                  return (
-                                    <div key={player.id} className="flex flex-col sm:flex-row sm:items-center justify-between border border-gray-100 rounded-2xl py-1.5 px-3 bg-slate-50/50 gap-3">
-                                      <div className="flex items-center gap-2">
-                                        <span className={`w-5 h-5 rounded flex items-center justify-center text-[8px] font-black text-white ${getPositionColor(player.position)}`}>
-                                          {getPositionAbbr(player.position)}
-                                        </span>
-                                        <span className="text-xs font-bold text-gray-700 uppercase">{player.nickname || player.name}</span>
-                                      </div>
-
-                                      <div className="flex flex-col gap-2">
-                                        {isGoalsEnabled && (
-                                          <div className="flex items-center gap-1.5 justify-between sm:justify-end">
-                                            <span className="text-[8px] font-black text-gray-400 uppercase w-8">Gols</span>
-                                            <button 
-                                              onClick={() => setSelectedBet({
-                                                match,
-                                                market: 'playerGoals',
-                                                selection: `${player.nickname || player.name} +0.5 Gols`,
-                                                odd: pOdds.g1,
-                                                matchInfo: `Time ${teamName} - ${player.nickname || player.name}`,
-                                                selectedOutcome: `Marcar +0.5 Gols`
-                                              })}
-                                              className="bg-white border border-slate-200 text-slate-800 hover:bg-slate-50 rounded-lg px-2 py-0.5 text-center min-w-[50px] transition-all cursor-pointer shadow-sm active:scale-95"
-                                            >
-                                              <div className="text-[7px] text-slate-500 font-bold leading-none mb-0.5">+0.5</div>
-                                              <div className="text-xs font-black leading-none text-emerald-600">@ {pOdds.g1}</div>
-                                            </button>
-                                            <button 
-                                              onClick={() => setSelectedBet({
-                                                match,
-                                                market: 'playerGoals',
-                                                selection: `${player.nickname || player.name} +1.5 Gols`,
-                                                odd: pOdds.g2,
-                                                matchInfo: `Time ${teamName} - ${player.nickname || player.name}`,
-                                                selectedOutcome: `Marcar +1.5 Gols`
-                                              })}
-                                              className="bg-white border border-slate-200 text-slate-800 hover:bg-slate-50 rounded-lg px-2 py-0.5 text-center min-w-[50px] transition-all cursor-pointer shadow-sm active:scale-95"
-                                            >
-                                              <div className="text-[7px] text-slate-500 font-bold leading-none mb-0.5">+1.5</div>
-                                              <div className="text-xs font-black leading-none text-emerald-600">@ {pOdds.g2}</div>
-                                            </button>
-                                          </div>
-                                        )}
-
-                                        {isAssistsEnabled && (
-                                          <div className="flex items-center gap-1.5 justify-between sm:justify-end">
-                                            <span className="text-[8px] font-black text-gray-400 uppercase w-8">Assist.</span>
-                                            <button 
-                                              onClick={() => setSelectedBet({
-                                                match,
-                                                market: 'playerAssists',
-                                                selection: `${player.nickname || player.name} +0.5 Assistências`,
-                                                odd: pOdds.a1,
-                                                matchInfo: `Time ${teamName} - ${player.nickname || player.name}`,
-                                                selectedOutcome: `Dar +0.5 Assistência`
-                                              })}
-                                              className="bg-white border border-slate-200 text-slate-800 hover:bg-slate-50 rounded-lg px-2 py-0.5 text-center min-w-[50px] transition-all cursor-pointer shadow-sm active:scale-95"
-                                            >
-                                              <div className="text-[7px] text-slate-500 font-bold leading-none mb-0.5">+0.5</div>
-                                              <div className="text-xs font-black leading-none text-emerald-600">@ {pOdds.a1}</div>
-                                            </button>
-                                            <button 
-                                              onClick={() => setSelectedBet({
-                                                match,
-                                                market: 'playerAssists',
-                                                selection: `${player.nickname || player.name} +1.5 Assistências`,
-                                                odd: pOdds.a2,
-                                                matchInfo: `Time ${teamName} - ${player.nickname || player.name}`,
-                                                selectedOutcome: `Dar +1.5 Assistência`
-                                              })}
-                                              className="bg-white border border-slate-200 text-slate-800 hover:bg-slate-50 rounded-lg px-2 py-0.5 text-center min-w-[50px] transition-all cursor-pointer shadow-sm active:scale-95"
-                                            >
-                                              <div className="text-[7px] text-slate-500 font-bold leading-none mb-0.5">+1.5</div>
-                                              <div className="text-xs font-black leading-none text-emerald-600">@ {pOdds.a2}</div>
-                                            </button>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+                  {/* Action CTA Button */}
+                  <div className="pt-3 border-t border-gray-50 flex items-center justify-between">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider group-hover:text-primary-blue transition-colors">
+                      Todas as Apostas da Partida
+                    </span>
+                    <button className="bg-primary-blue group-hover:bg-blue-900 text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer">
+                      <span>Apostar no {gameTitle}</span>
+                      <ChevronRight className="w-4 h-4 text-primary-yellow group-hover:translate-x-1 transition-transform" />
+                    </button>
+                  </div>
 
                 </div>
               );
