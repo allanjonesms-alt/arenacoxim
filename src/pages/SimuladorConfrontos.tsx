@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, onSnapshot, getDocs, doc, getDoc, addDoc, updateDoc, setDoc, serverTimestamp, query, orderBy, limit } from 'firebase/firestore';
+import { collection, onSnapshot, getDocs, doc, getDoc, addDoc, updateDoc, setDoc, serverTimestamp, query, orderBy, limit, where, runTransaction } from 'firebase/firestore';
 import { Player, Location, Match, Card, OddsEngineConfig, AdminData, OddsSimulationHistory } from '../types';
-import { MapPin, Swords, ArrowRightLeft, Target, Trophy, Percent, Shield, Zap, CalendarDays, Settings2, Activity, ArrowUp, ArrowDown, Save, History, Wallet, ArrowUpRight, Search } from 'lucide-react';
+import { MapPin, Swords, ArrowRightLeft, Target, Trophy, Percent, Shield, Zap, CalendarDays, Settings2, Activity, ArrowUp, ArrowDown, Save, History, Wallet, ArrowUpRight, Search, TrendingUp, Trash2, CheckCircle2, XCircle, FileText, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getPositionAbbr, getPositionColor, getPlayerFinalOverall } from '../utils/playerUtils';
@@ -40,6 +40,102 @@ export default function SimuladorConfrontos({ adminData }: Props) {
   const [longTermSearch, setLongTermSearch] = useState('');
   const [activeBetTab, setActiveBetTab] = useState<'linha' | 'goleiro'>('linha');
 
+  const [showBetsReport, setShowBetsReport] = useState(false);
+  const [activeBets, setActiveBets] = useState<any[]>([]);
+  const [betsSearch, setBetsSearch] = useState('');
+
+  // Listen to active/pending bets in real-time
+  useEffect(() => {
+    const q = query(collection(db, 'bets'), where('status', '==', 'pending'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const loadedBets = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      loadedBets.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setActiveBets(loadedBets);
+    }, (err) => {
+      console.error("Error loading active bets:", err);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleDeleteBet = async (bet: any) => {
+    if (!window.confirm(`Tem certeza que deseja excluir esta aposta de R$ ${bet.amount.toLocaleString('pt-BR')} do usuário ${bet.userName}? O valor será reembolsado ao saldo dele.`)) {
+      return;
+    }
+    try {
+      await runTransaction(db, async (transaction) => {
+        const userRef = doc(db, 'users', bet.userId);
+        const userSnap = await transaction.get(userRef);
+        
+        const currentBalance = userSnap.exists() ? (userSnap.data().balance || 0) : 0;
+        const newBalance = currentBalance + bet.amount;
+        
+        const betRef = doc(db, 'bets', bet.id);
+        const betSnap = await transaction.get(betRef);
+        if (!betSnap.exists()) {
+          throw new Error("Aposta não encontrada.");
+        }
+        if (betSnap.data()?.status !== 'pending') {
+          throw new Error("Aposta já finalizada.");
+        }
+
+        if (userSnap.exists()) {
+          transaction.update(userRef, { balance: newBalance });
+        } else {
+          transaction.set(userRef, { balance: newBalance, createdAt: new Date().toISOString() });
+        }
+        
+        transaction.delete(betRef);
+      });
+      alert("Aposta excluída e valor reembolsado com sucesso!");
+    } catch (error: any) {
+      console.error("Erro ao excluir aposta:", error);
+      alert("Erro ao excluir aposta: " + error.message);
+    }
+  };
+
+  const handleSettleBet = async (bet: any, outcome: 'won' | 'lost') => {
+    const prize = bet.amount * (bet.odds || bet.odd || 1);
+    const confirmMsg = outcome === 'won' 
+      ? `Confirmar que o palpite GANHOU? O usuário receberá R$ ${prize.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`
+      : `Confirmar que o palpite PERDEU? O saldo do usuário não sofrerá alterações.`;
+    
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        const betRef = doc(db, 'bets', bet.id);
+        const betSnap = await transaction.get(betRef);
+        if (!betSnap.exists()) {
+          throw new Error("Aposta não encontrada.");
+        }
+        if (betSnap.data()?.status !== 'pending') {
+          throw new Error("Aposta já finalizada.");
+        }
+
+        if (outcome === 'won') {
+          const userRef = doc(db, 'users', bet.userId);
+          const userSnap = await transaction.get(userRef);
+          const currentBalance = userSnap.exists() ? (userSnap.data().balance || 0) : 0;
+          const newBalance = currentBalance + prize;
+          
+          if (userSnap.exists()) {
+            transaction.update(userRef, { balance: newBalance });
+          } else {
+            transaction.set(userRef, { balance: newBalance, createdAt: new Date().toISOString() });
+          }
+        }
+        
+        transaction.update(betRef, { status: outcome, settledAt: new Date().toISOString() });
+      });
+      alert(`Aposta finalizada como ${outcome === 'won' ? 'GANHA' : 'PERDIDA'} com sucesso!`);
+    } catch (error: any) {
+      console.error("Erro ao finalizar aposta:", error);
+      alert("Erro ao finalizar aposta: " + error.message);
+    }
+  };
 
   // Load data
   useEffect(() => {
@@ -1017,7 +1113,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
             </button>
           </div>
 
-          {/* Simulador de Confrontos Card */}
+          {/* ArenaBet Card */}
           <div className="bg-gradient-to-br from-slate-900 to-primary-blue rounded-3xl p-5 text-white shadow-xl relative overflow-hidden border border-white/10 flex items-center justify-between min-h-[110px]">
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
             <div className="relative z-10 flex items-center gap-3">
@@ -1025,11 +1121,19 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                 <Swords className="w-5 h-5 text-primary-yellow" />
               </div>
               <h1 className="text-base sm:text-lg font-black uppercase tracking-tight italic">
-                Simulador de Confrontos
+                ArenaBet
               </h1>
             </div>
             
             <div className="relative z-10 flex items-center gap-2">
+              <button 
+                onClick={() => setShowBetsReport(true)}
+                className="bg-primary-yellow text-primary-blue hover:bg-yellow-400 transition-all px-3 py-2.5 rounded-xl flex items-center justify-center gap-1.5 font-black text-xs uppercase tracking-widest shadow-md active:scale-95 cursor-pointer"
+                title="Ver Apostas Ativas"
+              >
+                <TrendingUp className="w-4 h-4 shrink-0" />
+                <span>Apostas Ativas ({activeBets.length})</span>
+              </button>
               {adminData?.role === 'master' && (
                 <Link 
                   to="/admin/odds-engine" 
@@ -1069,7 +1173,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
             <div className="space-y-2">
               <h1 className="text-2xl sm:text-3xl font-black uppercase italic tracking-tighter flex items-center gap-3">
                 <Swords className="w-8 h-8 text-primary-yellow" />
-                Simulador de Confrontos
+                ArenaBet
               </h1>
               <p className="text-white/80 text-sm font-medium max-w-lg">
                 Escale duas equipes virtuais com atletas reais e calcule as probabilidades e as cotações (odds) de apostas esportivas para a partida simulada.
@@ -1077,6 +1181,13 @@ export default function SimuladorConfrontos({ adminData }: Props) {
             </div>
             
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <button 
+                onClick={() => setShowBetsReport(true)}
+                className="bg-primary-yellow text-primary-blue hover:bg-yellow-400 transition-all px-4 py-2.5 rounded-2xl flex items-center justify-center gap-2 font-black text-xs uppercase tracking-wider shadow-md active:scale-95 cursor-pointer"
+              >
+                <TrendingUp className="w-4 h-4 shrink-0" />
+                <span>Apostas Ativas ({activeBets.length})</span>
+              </button>
               <div className="bg-white/10 p-1.5 rounded-2xl flex items-center gap-2 border border-white/20 backdrop-blur-md">
                 <MapPin className="w-5 h-5 text-primary-yellow ml-3" />
                 <select
@@ -1723,6 +1834,205 @@ export default function SimuladorConfrontos({ adminData }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Active Bets Report Modal */}
+      {showBetsReport && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-slate-900 to-primary-blue p-6 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-black uppercase italic tracking-tight flex items-center gap-2">
+                  <FileText className="text-primary-yellow w-6 h-6" /> Relatório de Apostas Ativas
+                </h2>
+                <p className="text-xs text-white/70 font-semibold mt-1">
+                  Aprovação de resultados, exclusões e controle geral de palpites pendentes.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="bg-white/10 px-4 py-2 rounded-xl text-right">
+                  <div className="text-[10px] uppercase font-black tracking-widest text-primary-yellow">Volume Ativo</div>
+                  <div className="text-sm font-black italic">
+                    R$ {activeBets.reduce((acc, b) => acc + (b.amount || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+                <button 
+                  onClick={() => {
+                    setShowBetsReport(false);
+                    setBetsSearch('');
+                  }}
+                  className="bg-white/10 hover:bg-white/20 p-2.5 rounded-full transition-all text-white border border-white/10 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Search & Filter Bar */}
+            <div className="p-4 bg-gray-50 border-b border-gray-150 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="relative w-full sm:max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Buscar por apostador, mercado ou palpite..."
+                  value={betsSearch}
+                  onChange={(e) => setBetsSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-primary-blue transition-all placeholder:text-gray-400"
+                />
+              </div>
+              <div className="text-xs text-gray-400 font-bold uppercase tracking-wider">
+                Mostrando {activeBets.filter(b => {
+                  const s = betsSearch.toLowerCase();
+                  return (b.userName || '').toLowerCase().includes(s) || 
+                         (b.userEmail || '').toLowerCase().includes(s) ||
+                         (b.market || '').toLowerCase().includes(s) ||
+                         (b.selection || '').toLowerCase().includes(s) ||
+                         (b.matchInfo || '').toLowerCase().includes(s);
+                }).length} de {activeBets.length} apostas pendentes
+              </div>
+            </div>
+
+            {/* Modal Content Body */}
+            <div className="p-6 overflow-y-auto space-y-4 flex-1 bg-slate-50">
+              {(() => {
+                const filtered = activeBets.filter(b => {
+                  const s = betsSearch.toLowerCase();
+                  return (b.userName || '').toLowerCase().includes(s) || 
+                         (b.userEmail || '').toLowerCase().includes(s) ||
+                         (b.market || '').toLowerCase().includes(s) ||
+                         (b.selection || '').toLowerCase().includes(s) ||
+                         (b.matchInfo || '').toLowerCase().includes(s);
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="text-center py-16 space-y-3 bg-white rounded-2xl border border-gray-100 shadow-sm">
+                      <div className="w-12 h-12 rounded-full bg-yellow-50 flex items-center justify-center mx-auto text-primary-yellow">
+                        <TrendingUp className="w-6 h-6" />
+                      </div>
+                      <h3 className="text-sm font-black uppercase tracking-tight text-gray-700">Nenhuma aposta ativa encontrada</h3>
+                      <p className="text-xs text-gray-400 font-semibold max-w-xs mx-auto">
+                        Não existem palpites pendentes de aprovação no momento ou nenhum resultado corresponde à busca.
+                      </p>
+                    </div>
+                  );
+                }
+
+                // Helper to map market to readable name
+                const getMarketName = (m: string) => {
+                  if (m === 'matchWinner') return 'Vencedor do Confronto';
+                  if (m === 'matchGoals') return 'Gols do Confronto';
+                  if (m === 'playerGoals') return 'Gols de Goleadores (Linha)';
+                  if (m === 'playerAssists') return 'Assistências (Linha)';
+                  if (m === 'long_term') return 'Gols/Goleiro no Mês';
+                  return m || 'Personalizado';
+                };
+
+                return (
+                  <div className="space-y-3">
+                    {filtered.map(bet => {
+                      const prize = bet.amount * (bet.odds || bet.odd || 1);
+                      const formattedDate = bet.createdAt 
+                        ? new Date(bet.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                        : 'Sem data';
+
+                      return (
+                        <div key={bet.id} className="bg-white rounded-2xl p-4 sm:p-5 border border-gray-150 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-5 group">
+                          {/* Left: User details & Date */}
+                          <div className="space-y-1 md:max-w-xs min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black text-slate-800 uppercase tracking-tight truncate">
+                                {bet.userName || 'Apostador'}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-gray-400 font-bold truncate">
+                              {bet.userEmail}
+                            </div>
+                            <div className="text-[10px] text-gray-500 font-bold flex items-center gap-1 mt-1">
+                              <span className="bg-slate-100 px-1.5 py-0.5 rounded font-black uppercase text-[9px] text-slate-500">Data</span>
+                              {formattedDate}
+                            </div>
+                          </div>
+
+                          {/* Middle: Bet Details */}
+                          <div className="space-y-1.5 flex-1 min-w-0">
+                            <div className="text-xs font-black uppercase tracking-wide text-primary-blue truncate">
+                              {bet.matchInfo || 'Azul vs Amarelo'}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full font-black uppercase tracking-wider">
+                                {getMarketName(bet.market)}
+                              </span>
+                              <span className="text-[10px] text-gray-400 font-bold">Palpite:</span>
+                              <span className="text-xs font-black text-slate-700 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-lg">
+                                {bet.selectedOutcome || bet.selection}
+                              </span>
+                              <span className="text-xs font-black text-primary-yellow bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800">
+                                @ {(bet.odds || bet.odd || 1).toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Right: Values & Actions */}
+                          <div className="flex items-center gap-4 sm:gap-6 shrink-0 justify-between md:justify-end border-t md:border-t-0 pt-3 md:pt-0 border-gray-100">
+                            <div className="text-right">
+                              <div className="text-[9px] uppercase font-black text-gray-400 tracking-wider">Valor / Retorno</div>
+                              <div className="text-xs font-bold text-gray-600">
+                                R$ {bet.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </div>
+                              <div className="text-sm font-black text-emerald-600">
+                                R$ {prize.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </div>
+                            </div>
+
+                            {/* Action buttons */}
+                            <div className="flex items-center gap-1.5">
+                              {/* Settle as Won */}
+                              <button
+                                onClick={() => handleSettleBet(bet, 'won')}
+                                className="bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all p-2 rounded-xl border border-emerald-100 flex items-center justify-center gap-1 font-black text-[10px] uppercase cursor-pointer"
+                                title="Aprovar como GANHA"
+                              >
+                                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                <span className="hidden sm:inline px-0.5">Ganha</span>
+                              </button>
+
+                              {/* Settle as Lost */}
+                              <button
+                                onClick={() => handleSettleBet(bet, 'lost')}
+                                className="bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white transition-all p-2 rounded-xl border border-rose-100 flex items-center justify-center gap-1 font-black text-[10px] uppercase cursor-pointer"
+                                title="Aprovar como PERDIDA"
+                              >
+                                <XCircle className="w-4 h-4 shrink-0" />
+                                <span className="hidden sm:inline px-0.5">Perdida</span>
+                              </button>
+
+                              {/* Exclude / Delete */}
+                              <button
+                                onClick={() => handleDeleteBet(bet)}
+                                className="bg-slate-100 text-slate-500 hover:bg-red-600 hover:text-white hover:border-red-600 transition-all p-2 rounded-xl border border-slate-200 flex items-center justify-center cursor-pointer"
+                                title="Excluir / Reembolsar Aposta"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-gray-100 border-t border-gray-200 flex items-center justify-between text-[10px] text-gray-400 font-black uppercase tracking-widest">
+              <span>Painel de Resultados ArenaBet</span>
+              <span>Total: {activeBets.length} apostas</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   </div>
   );

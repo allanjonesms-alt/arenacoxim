@@ -89,8 +89,8 @@ export default function MasterBank({ adminData }: MasterBankProps) {
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary-yellow/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
           <div className="space-y-2">
-            <Link to="/admin/simulador" className="inline-flex items-center gap-2 text-primary-yellow hover:text-yellow-400 font-bold text-sm uppercase tracking-widest mb-2 transition-colors">
-              <ArrowLeft className="w-4 h-4" /> Voltar para Simulador
+            <Link to="/admin/arenabet" className="inline-flex items-center gap-2 text-primary-yellow hover:text-yellow-400 font-bold text-sm uppercase tracking-widest mb-2 transition-colors">
+              <ArrowLeft className="w-4 h-4" /> Voltar para ArenaBet
             </Link>
             <h1 className="text-2xl sm:text-3xl font-black uppercase italic tracking-tighter flex items-center gap-3">
               <Wallet className="w-8 h-8 text-primary-yellow" />

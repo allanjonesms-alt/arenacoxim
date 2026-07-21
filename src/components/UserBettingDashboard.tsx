@@ -97,6 +97,12 @@ export function UserBettingDashboard({ user, isMaster }: UserBettingDashboardPro
             <div className="text-3xl font-black text-primary-blue">
               {bets.filter(b => b.status === 'pending').length}
             </div>
+            <button
+              onClick={() => navigate('/banco?tab=active_bets', { state: { activeTab: 'active_bets' } })}
+              className="text-xs text-primary-blue hover:text-blue-900 font-bold underline cursor-pointer inline-flex items-center gap-1 mt-1"
+            >
+              Ver apostas ativas →
+            </button>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center">
             <Clock className="w-6 h-6 text-primary-blue" />
@@ -124,77 +130,6 @@ export function UserBettingDashboard({ user, isMaster }: UserBettingDashboardPro
       </div>
 
       <PublicBettingMarkets user={user} balance={balance} onRequestDeposit={() => navigate('/banco')} />
-
-      {/* Histórico Recente */}
-      <div className="bg-white rounded-[2rem] p-6 md:p-8 shadow-sm border border-gray-100">
-        <h3 className="text-lg font-black uppercase italic tracking-tight text-primary-blue flex items-center gap-2 mb-6">
-          <History className="w-5 h-5 text-gray-400" /> Minhas Apostas
-        </h3>
-        
-        {loading ? (
-          <div className="py-10 flex justify-center text-gray-400">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-blue"></div>
-          </div>
-        ) : bets.length === 0 ? (
-          <div className="bg-gray-50 border border-gray-100 rounded-2xl p-8 text-center flex flex-col items-center justify-center gap-3">
-            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm">
-              <Wallet className="w-5 h-5 text-gray-300" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-gray-600">Nenhuma aposta realizada</p>
-              <p className="text-xs text-gray-400 mt-1 font-medium">Faça um depósito e comece a apostar nos próximos jogos.</p>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {bets.map((bet) => (
-              <div key={bet.id} className="group border border-gray-100 rounded-2xl p-4 flex flex-col sm:flex-row gap-4 justify-between hover:border-blue-100 hover:shadow-md transition-all bg-white">
-                <div className="flex items-start gap-3">
-                  <div className="mt-1">
-                    {bet.status === 'pending' && <Clock className="w-5 h-5 text-orange-400" />}
-                    {bet.status === 'won' && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
-                    {bet.status === 'lost' && <XCircle className="w-5 h-5 text-rose-500" />}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md
-                        ${bet.status === 'pending' ? 'bg-orange-100 text-orange-700' : 
-                          bet.status === 'won' ? 'bg-emerald-100 text-emerald-700' : 
-                          'bg-rose-100 text-rose-700'}
-                      `}>
-                        {bet.status === 'pending' ? 'Em andamento' : bet.status === 'won' ? 'Ganhou' : 'Perdeu'}
-                      </span>
-                      <span className="text-xs text-gray-400 font-medium">
-                        {new Date(bet.createdAt).toLocaleDateString('pt-BR')}
-                      </span>
-                    </div>
-                    <h4 className="text-sm font-black text-gray-800 mt-1">
-                      {bet.matchInfo || 'Partida'}
-                    </h4>
-                    <p className="text-xs text-gray-500 font-semibold mt-0.5">
-                      Palpite: <span className="text-primary-blue">{bet.selectedOutcome}</span> @ {bet.odds}
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 sm:border-l border-gray-50 pt-3 sm:pt-0 sm:pl-4 min-w-[120px]">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">
-                    Valor Apostado
-                  </div>
-                  <div className="text-base font-black text-gray-800">
-                    R$ {bet.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </div>
-                  {bet.status === 'won' && (
-                    <div className="text-xs font-black text-emerald-500 mt-1 flex items-center gap-1">
-                      + R$ {(bet.amount * bet.odds).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

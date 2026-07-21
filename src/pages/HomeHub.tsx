@@ -150,10 +150,10 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
   // Admin-only menu cards
   const adminCards = [
     {
-      title: 'Apostas',
+      title: 'ArenaBet',
       subtitle: 'Escale equipes, calcule probabilidades e odds de confrontos.',
       icon: TrendingUp,
-      to: '/admin/simulador',
+      to: '/admin/arenabet',
       gradient: 'from-purple-500 to-fuchsia-700',
     },
     {

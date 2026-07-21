@@ -524,7 +524,7 @@ export default function App() {
             <Route path="/score-table" element={<ScoreTable adminData={adminData} sharedLocations={locations} sharedScoringRules={scoringRules} />} />
             {isAdmin && (
               <>
-                <Route path="/admin/simulador" element={<SimuladorConfrontos adminData={adminData} />} />
+                <Route path="/admin/arenabet" element={<SimuladorConfrontos adminData={adminData} />} />
                 <Route path="/admin/banco" element={<MasterBank adminData={adminData} />} />
                 <Route path="/admin" element={<AdminPanel adminData={adminData} />} />
                 <Route path="/admin/score-table" element={<ScoreTable adminData={adminData} sharedLocations={locations} sharedScoringRules={scoringRules} />} />
@@ -564,12 +564,12 @@ export default function App() {
           <Link
             to="/apostas"
             className={`flex flex-col items-center gap-1 flex-1 text-center transition-all ${
-              routerLocation.pathname === '/apostas' || routerLocation.pathname === '/admin/simulador'
+              routerLocation.pathname === '/apostas' || routerLocation.pathname === '/admin/arenabet'
                 ? 'text-primary-blue font-black scale-105'
                 : 'text-gray-400 font-semibold'
             }`}
           >
-            <TrendingUp className={`w-5 h-5 ${routerLocation.pathname === '/apostas' || routerLocation.pathname === '/admin/simulador' ? 'text-primary-blue' : ''}`} />
+            <TrendingUp className={`w-5 h-5 ${routerLocation.pathname === '/apostas' || routerLocation.pathname === '/admin/arenabet' ? 'text-primary-blue' : ''}`} />
             <span className="text-[9px] uppercase tracking-wider font-extrabold">Apostas</span>
           </Link>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Wallet, 
   PlusCircle, 
@@ -68,8 +68,19 @@ const getDynamicPixCode = (amountStr: string) => {
 
 export default function BancoUsuario({ user }: BancoUsuarioProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   
-  const [activeTab, setActiveTab] = useState<'overview' | 'deposit' | 'withdraw' | 'active_bets' | 'finalized_bets'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'deposit' | 'withdraw' | 'active_bets' | 'finalized_bets'>(() => {
+    if (location.state?.activeTab) {
+      return location.state.activeTab;
+    }
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get('tab');
+    if (tabParam === 'active_bets' || tabParam === 'finalized_bets' || tabParam === 'deposit' || tabParam === 'withdraw' || tabParam === 'overview') {
+      return tabParam as any;
+    }
+    return 'overview';
+  });
   const [balance, setBalance] = useState<number>(0);
   const [bets, setBets] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -395,7 +406,7 @@ export default function BancoUsuario({ user }: BancoUsuarioProps) {
             >
               <span className="flex items-center gap-2.5">
                 <History className="w-4 h-4" />
-                Histórico Finalizado
+                Apostas Encerradas
               </span>
               <span className="text-[10px] bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full font-bold">
                 {finalizedBets.length}
@@ -815,7 +826,7 @@ export default function BancoUsuario({ user }: BancoUsuarioProps) {
                 <div>
                   <h2 className="text-xl font-black text-primary-blue uppercase italic tracking-tight flex items-center gap-2">
                     <History className="w-5 h-5 text-gray-400" />
-                    Histórico de Apostas Finalizadas
+                    Apostas Encerradas
                   </h2>
                   <p className="text-xs text-gray-400 font-bold uppercase mt-1">
                     Ganhos e perdas de seus palpites concluídos
@@ -825,7 +836,7 @@ export default function BancoUsuario({ user }: BancoUsuarioProps) {
                 {finalizedBets.length === 0 ? (
                   <div className="py-12 bg-gray-50 rounded-2xl border border-gray-100 text-center space-y-3">
                     <AlertCircle className="w-8 h-8 text-gray-300 mx-auto" />
-                    <p className="text-sm font-bold text-gray-500">Nenhum palpite finalizado até o momento</p>
+                    <p className="text-sm font-bold text-gray-500">Nenhuma aposta encerrada até o momento</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -838,7 +849,7 @@ export default function BancoUsuario({ user }: BancoUsuarioProps) {
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
                                 : 'bg-rose-50 text-rose-700 border-rose-100'
                             }`}>
-                              {bet.status === 'won' ? 'Ganhou' : 'Perdeu'}
+                              {bet.status === 'won' ? 'GANHOU' : 'PERDIDA'}
                             </span>
                             <span className="text-[10px] text-gray-400 font-bold">
                               {new Date(bet.createdAt).toLocaleDateString('pt-BR')}
@@ -850,20 +861,41 @@ export default function BancoUsuario({ user }: BancoUsuarioProps) {
                           </p>
                         </div>
 
-                        <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 sm:border-l border-gray-50 pt-3 sm:pt-0 sm:pl-4 min-w-[120px]">
-                          <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">
-                            Valor Apostado
-                          </div>
-                          <div className="text-base font-black text-gray-800">
-                            R$ {bet.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </div>
+                        <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 sm:border-l border-gray-50 pt-3 sm:pt-0 sm:pl-4 min-w-[140px]">
                           {bet.status === 'won' ? (
-                            <div className="text-xs font-black text-emerald-500 mt-1 flex items-center gap-0.5">
-                              + R$ {(bet.amount * bet.odds).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            <div className="text-right space-y-1 w-full">
+                              <div>
+                                <span className="block text-[10px] font-black uppercase tracking-widest text-emerald-600">
+                                  Valor Apostado
+                                </span>
+                                <span className="text-sm font-black text-emerald-600">
+                                  R$ {bet.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                              <div className="pt-0.5">
+                                <span className="block text-[10px] font-black uppercase tracking-widest text-emerald-600">
+                                  Retorno
+                                </span>
+                                <span className="text-base font-black text-emerald-600">
+                                  R$ {(bet.amount * bet.odds).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
                             </div>
                           ) : (
-                            <div className="text-xs font-black text-rose-500 mt-1">
-                              - R$ {bet.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            <div className="text-right space-y-1 w-full">
+                              <div>
+                                <span className="block text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                  Valor Apostado
+                                </span>
+                                <span className="text-sm font-bold text-gray-700">
+                                  R$ {bet.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                              <div className="pt-1">
+                                <span className="text-xs font-black text-rose-600 uppercase bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-md inline-block">
+                                  PERDIDA
+                                </span>
+                              </div>
                             </div>
                           )}
                         </div>
