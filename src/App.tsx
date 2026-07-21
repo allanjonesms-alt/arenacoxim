@@ -11,7 +11,7 @@ import {
 } from 'firebase/auth';
 import { auth, db } from './firebase';
 import { doc, getDoc, setDoc, getDocFromServer, collection, query, where, getDocs, deleteDoc, updateDoc, onSnapshot } from 'firebase/firestore';
-import { Trophy, Users, Calendar, LayoutDashboard, LogIn, LogOut, Menu, X, ShieldCheck, MapPin, TrendingUp, User as UserIcon, Lock, Key, Eye, EyeOff, Loader2, Home, Star, Award } from 'lucide-react';
+import { Trophy, Users, Calendar, LayoutDashboard, LogIn, LogOut, Menu, X, ShieldCheck, MapPin, TrendingUp, User as UserIcon, Lock, Key, Eye, EyeOff, Loader2, Home, Star, Award, Wallet } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AdminData, Location, Team, ScoringRules, Player } from './types';
 
@@ -37,6 +37,7 @@ import Diagnostic from './pages/Diagnostic';
 import SimuladorConfrontos from './pages/SimuladorConfrontos';
 import PublicMonthlyAwards from './pages/PublicMonthlyAwards';
 import ApostasUsuario from './pages/ApostasUsuario';
+import BancoUsuario from './pages/BancoUsuario';
 
 export enum OperationType {
   CREATE = 'create',
@@ -99,6 +100,7 @@ import AdminBettingSettings from './pages/AdminBettingSettings';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [userBalance, setUserBalance] = useState<number>(0);
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminData, setAdminData] = useState<AdminData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -199,6 +201,24 @@ export default function App() {
   }, [routerLocation.pathname]);
 
   const MASTER_EMAIL = 'allanjonesms@gmail.com';
+
+  useEffect(() => {
+    if (!user) {
+      setUserBalance(0);
+      return;
+    }
+    const userRef = doc(db, 'users', user.uid);
+    const unsubscribe = onSnapshot(userRef, (snap) => {
+      if (snap.exists()) {
+        setUserBalance(snap.data().balance || 0);
+      } else {
+        setUserBalance(0);
+      }
+    }, (err) => {
+      console.error("Error listening to user balance:", err);
+    });
+    return () => unsubscribe();
+  }, [user]);
 
   useEffect(() => {
     // Listen to common data in real-time (centralized to avoid multiple listeners in pages)
@@ -445,6 +465,15 @@ export default function App() {
 
                 {user ? (
                   <div className="flex items-center gap-3">
+                    <Link
+                      to="/banco"
+                      className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-xs uppercase tracking-wider px-3.5 py-2 rounded-xl transition-all shadow-md active:scale-95 border border-emerald-400/20"
+                      title="Ir para o Banco Arena Coxim"
+                    >
+                      <Wallet className="w-4 h-4 text-primary-yellow shrink-0 animate-pulse" />
+                      <span>R$ {userBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </Link>
+
                     <div className="flex items-center gap-2 bg-white/5 py-1 px-3 rounded-full border border-white/10">
                       {user.photoURL ? (
                         <img 
@@ -487,6 +516,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<HomeHub user={user} isAdmin={isAdmin} adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
             <Route path="/apostas" element={<ApostasUsuario user={user} isMaster={isAdmin && adminData?.role === 'master'} />} />
+            <Route path="/banco" element={<BancoUsuario user={user} />} />
             <Route path="/dashboard" element={<PublicDashboard adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
             <Route path="/melhores-do-mes" element={<PublicMonthlyAwards />} />
             <Route path="/players" element={<PlayerManagement adminData={adminData} adminId={user?.uid} sharedLocations={locations} />} />
