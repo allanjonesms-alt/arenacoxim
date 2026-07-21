@@ -241,95 +241,120 @@ function MatchDetailsModal({ match, players, teams, locations, cards, isAdmin, o
         <div className="p-4 md:p-6 overflow-y-auto space-y-6 md:space-y-8">
           {/* Scoreboard */}
           <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between bg-gray-50 p-4 md:p-6 rounded-2xl md:rounded-3xl border border-gray-100 shadow-inner">
-              <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0 cursor-pointer" onClick={() => { setActiveTab('pitch'); setIsEditingLineup(false); }}>
-                <div className="w-8 h-8 md:w-10 md:h-10 flex-shrink-0">
+            <div className="flex items-start justify-between bg-gray-50 p-4 md:p-6 rounded-2xl md:rounded-3xl border border-gray-100 shadow-inner">
+              {/* Team A Info */}
+              <div className="flex items-start gap-2 md:gap-4 flex-1 min-w-0 cursor-pointer" onClick={() => setIsEditingLineup(false)}>
+                <div className="w-8 h-8 md:w-10 md:h-10 flex-shrink-0 mt-0.5">
                   <SoccerJersey color={teamAEntity?.color || '#555'} />
                 </div>
                 <div className="flex flex-col min-w-0">
                   <div className="font-black uppercase tracking-tight text-[10px] md:text-sm truncate w-full" style={{ color: teamAEntity?.color }}>{teamAEntity?.name}</div>
-                  <div className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1 mt-0.5">
+                  <div className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1 mt-0.5 mb-1">
                     POWER <span className="text-[11px] md:text-[13px] font-black italic tracking-tighter text-[#a52a2a] tabular-nums">{avgOverallA}</span>
+                  </div>
+
+                  {/* Team A Goals & Assists lines without padding */}
+                  <div className="flex flex-col py-0 space-y-0 text-[10px] md:text-xs font-bold text-gray-700">
+                    {/* Goals */}
+                    {events.filter(e => 
+                      (e.type === 'goal' && (teamA.includes(e.playerId) || e.playerId === 'unidentified_A')) ||
+                      (e.type === 'own_goal' && (teamB.includes(e.playerId) || e.playerId === 'unidentified_B'))
+                    ).map((e, idx) => {
+                      const p = players.find(x => x.id === e.playerId);
+                      const isOwnGoal = e.type === 'own_goal';
+                      const pName = (p?.nickname || '').toUpperCase() || p?.name || '---';
+                      return (
+                        <div key={`ga-${idx}`} className="py-0 my-0 leading-tight flex items-center gap-1 truncate">
+                          <span className="text-[9px] flex-shrink-0">⚽</span>
+                          <span className="truncate">{pName}</span>
+                          {isOwnGoal && <span className="text-red-500 font-black text-[7px] uppercase flex-shrink-0">(CONTRA)</span>}
+                        </div>
+                      );
+                    })}
+                    {/* Assists */}
+                    {events.filter(e => e.type === 'assist' && (teamA.includes(e.playerId) || e.playerId === 'unidentified_A')).map((e, idx) => {
+                      const p = players.find(x => x.id === e.playerId);
+                      const pName = (p?.nickname || '').toUpperCase() || p?.name || '---';
+                      return (
+                        <div key={`aa-${idx}`} className="py-0 my-0 leading-tight flex items-center gap-1 text-gray-500 truncate">
+                          <span className="text-[9px] flex-shrink-0">👟</span>
+                          <span className="truncate">{pName}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
               
-              <div className="text-2xl md:text-4xl font-black italic text-primary-blue tabular-nums px-2 md:px-4">
+              <div className="text-2xl md:text-4xl font-black italic text-primary-blue tabular-nums px-2 md:px-4 mt-1">
                 {match.scoreA} - {match.scoreB}
               </div>
  
-              <div className="flex items-center justify-end gap-2 md:gap-4 flex-1 min-w-0 cursor-pointer" onClick={() => { setActiveTab('pitch'); setIsEditingLineup(false); }}>
+              {/* Team B Info */}
+              <div className="flex items-start justify-end gap-2 md:gap-4 flex-1 min-w-0 cursor-pointer" onClick={() => setIsEditingLineup(false)}>
                 <div className="flex flex-col min-w-0 items-end">
                   <div className="font-black uppercase tracking-tight text-[10px] md:text-sm truncate w-full text-right" style={{ color: teamBEntity?.color }}>{teamBEntity?.name}</div>
-                  <div className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1 mt-0.5 justify-end">
+                  <div className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1 mt-0.5 mb-1 justify-end">
                     POWER <span className="text-[11px] md:text-[13px] font-black italic tracking-tighter text-[#a52a2a] tabular-nums">{avgOverallB}</span>
                   </div>
+
+                  {/* Team B Goals & Assists lines without padding */}
+                  <div className="flex flex-col items-end py-0 space-y-0 text-[10px] md:text-xs font-bold text-gray-700">
+                    {/* Goals */}
+                    {events.filter(e => 
+                      (e.type === 'goal' && (teamB.includes(e.playerId) || e.playerId === 'unidentified_B')) ||
+                      (e.type === 'own_goal' && (teamA.includes(e.playerId) || e.playerId === 'unidentified_A'))
+                    ).map((e, idx) => {
+                      const p = players.find(x => x.id === e.playerId);
+                      const isOwnGoal = e.type === 'own_goal';
+                      const pName = (p?.nickname || '').toUpperCase() || p?.name || '---';
+                      return (
+                        <div key={`gb-${idx}`} className="py-0 my-0 leading-tight flex items-center gap-1 justify-end truncate">
+                          {isOwnGoal && <span className="text-red-500 font-black text-[7px] uppercase flex-shrink-0">(CONTRA)</span>}
+                          <span className="truncate">{pName}</span>
+                          <span className="text-[9px] flex-shrink-0">⚽</span>
+                        </div>
+                      );
+                    })}
+                    {/* Assists */}
+                    {events.filter(e => e.type === 'assist' && (teamB.includes(e.playerId) || e.playerId === 'unidentified_B')).map((e, idx) => {
+                      const p = players.find(x => x.id === e.playerId);
+                      const pName = (p?.nickname || '').toUpperCase() || p?.name || '---';
+                      return (
+                        <div key={`ab-${idx}`} className="py-0 my-0 leading-tight flex items-center gap-1 justify-end text-gray-500 truncate">
+                          <span className="truncate">{pName}</span>
+                          <span className="text-[9px] flex-shrink-0">👟</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="w-8 h-8 md:w-10 md:h-10 flex-shrink-0">
+                <div className="w-8 h-8 md:w-10 md:h-10 flex-shrink-0 mt-0.5">
                   <SoccerJersey color={teamBEntity?.color || '#555'} />
                 </div>
               </div>
             </div>
-            
-            <div className="grid grid-cols-2 gap-4 text-[10px] md:text-xs font-bold text-gray-500">
-              <div className="flex flex-col gap-1 items-center">
-                  {events.filter(e => 
-                    (e.type === 'goal' && (teamA.includes(e.playerId) || e.playerId === 'unidentified_A')) ||
-                    (e.type === 'own_goal' && (teamB.includes(e.playerId) || e.playerId === 'unidentified_B'))
-                  ).map((e, idx) => {
-                    const p = players.find(x => x.id === e.playerId);
-                    const isOwnGoal = e.type === 'own_goal';
-                    return (
-                      <div key={idx} className="bg-blue-50 text-blue-800 text-[8px] px-2 py-0.5 rounded-full flex items-center gap-1 font-extrabold tracking-tight">
-                        <span>{(p?.nickname || '').toUpperCase() || p?.name || '---'}</span>
-                        {isOwnGoal && <span className="text-red-500 font-black text-[7px] ml-1 uppercase">(CONTRA)</span>}
-                      </div>
-                    );
-                  })}
-              </div>
-              <div className="flex flex-col gap-1 items-center">
-                  {events.filter(e => 
-                    (e.type === 'goal' && (teamB.includes(e.playerId) || e.playerId === 'unidentified_B')) ||
-                    (e.type === 'own_goal' && (teamA.includes(e.playerId) || e.playerId === 'unidentified_A'))
-                  ).map((e, idx) => {
-                    const p = players.find(x => x.id === e.playerId);
-                    const isOwnGoal = e.type === 'own_goal';
-                    return (
-                      <div key={idx} className="bg-blue-50 text-blue-800 text-[8px] px-2 py-0.5 rounded-full flex items-center gap-1 font-extrabold tracking-tight">
-                        <span>{(p?.nickname || '').toUpperCase() || p?.name || '---'}</span>
-                        {isOwnGoal && <span className="text-red-500 font-black text-[7px] ml-1 uppercase">(CONTRA)</span>}
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
           </div>
 
-          {/* Tab Switcher */}
-          <div className="flex p-1 bg-gray-100 rounded-2xl">
-            <button 
-              onClick={() => { setActiveTab('events'); setIsEditingLineup(false); }}
-              className={`flex-1 py-3 text-[10px] md:text-xs font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'events' && !isEditingLineup ? 'bg-white text-primary-blue shadow-sm' : 'text-gray-400'}`}
-            >
-              Eventos
-            </button>
-            <button 
-              onClick={() => { setActiveTab('pitch'); setIsEditingLineup(false); }}
-              className={`flex-1 py-3 text-[10px] md:text-xs font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'pitch' ? 'bg-white text-primary-blue shadow-sm' : 'text-gray-400'}`}
-            >
-              Campo
-            </button>
-            {isAdmin && (
+          {/* Admin Lineup Switcher */}
+          {isAdmin && (
+            <div className="flex p-1 bg-gray-100 rounded-2xl">
+              <button 
+                onClick={() => setIsEditingLineup(false)}
+                className={`flex-1 py-2.5 text-[10px] md:text-xs font-black uppercase tracking-widest rounded-xl transition-all ${!isEditingLineup ? 'bg-white text-primary-blue shadow-sm' : 'text-gray-400'}`}
+              >
+                Campo
+              </button>
               <button 
                 onClick={() => setIsEditingLineup(true)}
-                className={`flex-1 py-3 text-[10px] md:text-xs font-black uppercase tracking-widest rounded-xl transition-all ${isEditingLineup ? 'bg-primary-blue text-white shadow-sm' : 'text-gray-400'}`}
+                className={`flex-1 py-2.5 text-[10px] md:text-xs font-black uppercase tracking-widest rounded-xl transition-all ${isEditingLineup ? 'bg-primary-blue text-white shadow-sm' : 'text-gray-400'}`}
               >
                 Escalação
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* Content Section: Events, Pitch or Editor */}
+          {/* Content Section: Pitch or Lineup Editor */}
           {isEditingLineup ? (
             <div className="space-y-6 text-primary-gray">
               <h4 className="font-black uppercase tracking-widest text-center text-primary-blue">Editar Escalação</h4>
@@ -392,7 +417,7 @@ function MatchDetailsModal({ match, players, teams, locations, cards, isAdmin, o
                 </div>
               </div>
             </div>
-          ) : activeTab === 'pitch' ? (
+          ) : (
             <SoccerPitch 
               teamA={teamA}
               teamB={teamB}
@@ -406,112 +431,6 @@ function MatchDetailsModal({ match, players, teams, locations, cards, isAdmin, o
               teamAName={teamAEntity?.name}
               teamBName={teamBEntity?.name}
             />
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-primary-gray">
-              {/* Team A Events */}
-              <div className="space-y-6">
-                <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
-                  <SoccerJersey color={teamAEntity?.color || '#555'} size={16} />
-                  <h4 className="text-xs font-black uppercase tracking-widest text-primary-gray/60">{teamAEntity?.name}</h4>
-                </div>
-                <div className="space-y-4">
-                  {/* Goals */}
-                  <div className="text-[10px] font-black text-primary-blue uppercase italic">Gols</div>
-                  <div className="space-y-2">
-                    {events.filter(e => 
-                      (e.type === 'goal' && (teamA.includes(e.playerId) || e.playerId === 'unidentified_A')) ||
-                      (e.type === 'own_goal' && (teamB.includes(e.playerId) || e.playerId === 'unidentified_B'))
-                    ).map((e, idx) => {
-                      const p = players.find(x => x.id === e.playerId);
-                      const isOwnGoal = e.type === 'own_goal';
-                      return (
-                        <div key={idx} className={`${isAdmin ? 'flex justify-between' : ''} text-xs p-3 bg-blue-50 rounded-xl border border-blue-100 font-bold group/player`}>
-                          <span 
-                            className={p ? "cursor-pointer hover:text-primary-blue transition-colors" : ""}
-                            onClick={() => p && onPlayerClick?.(p)}
-                          >
-                            {(p?.nickname || '').toUpperCase() || p?.name || '---'}
-                            {isOwnGoal && <span className="text-red-500 font-black text-[9px] uppercase ml-1.5">(GOL CONTRA)</span>}
-                          </span>
-                          {isAdmin && (
-                            <button onClick={() => removeEvent(events.indexOf(e))} className="text-red-500 hover:scale-110 transition-transform"><Trash2 size={14} /></button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {/* Assists */}
-                  <div className="text-[10px] font-black text-primary-yellow uppercase italic mt-4">Assistências</div>
-                  <div className="space-y-2">
-                    {events.filter(e => (teamA.includes(e.playerId) || e.playerId === 'unidentified_A') && e.type === 'assist').map((e, idx) => {
-                      const p = players.find(x => x.id === e.playerId);
-                      return (
-                        <div key={idx} className="text-xs p-3 bg-yellow-50 rounded-xl border border-yellow-100 font-bold group/player">
-                          <span 
-                            className={p ? "cursor-pointer hover:text-primary-blue transition-colors" : ""}
-                            onClick={() => p && onPlayerClick?.(p)}
-                          >
-                            {(p?.nickname || '').toUpperCase() || p?.name || '---'}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-              {/* Team B Events */}
-              <div className="space-y-6">
-                <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
-                  <SoccerJersey color={teamBEntity?.color || '#555'} size={16} />
-                  <h4 className="text-xs font-black uppercase tracking-widest text-primary-gray/60">{teamBEntity?.name}</h4>
-                </div>
-                {/* Events list for Team B */}
-                <div className="space-y-4">
-                  {/* Goals */}
-                  <div className="text-[10px] font-black text-primary-blue uppercase italic">Gols</div>
-                  <div className="space-y-2">
-                    {events.filter(e => 
-                      (e.type === 'goal' && (teamB.includes(e.playerId) || e.playerId === 'unidentified_B')) ||
-                      (e.type === 'own_goal' && (teamA.includes(e.playerId) || e.playerId === 'unidentified_A'))
-                    ).map((e, idx) => {
-                      const p = players.find(x => x.id === e.playerId);
-                      const isOwnGoal = e.type === 'own_goal';
-                      return (
-                        <div key={idx} className={`${isAdmin ? 'flex justify-between' : ''} text-xs p-3 bg-blue-50 rounded-xl border border-blue-100 font-bold group/player`}>
-                          <span 
-                            className={p ? "cursor-pointer hover:text-primary-blue transition-colors" : ""}
-                            onClick={() => p && onPlayerClick?.(p)}
-                          >
-                            {(p?.nickname || '').toUpperCase() || p?.name || '---'}
-                            {isOwnGoal && <span className="text-red-500 font-black text-[9px] uppercase ml-1.5">(GOL CONTRA)</span>}
-                          </span>
-                          {isAdmin && (
-                            <button onClick={() => removeEvent(events.indexOf(e))} className="text-red-500 hover:scale-110 transition-transform"><Trash2 size={14} /></button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {/* Assists */}
-                  <div className="text-[10px] font-black text-primary-yellow uppercase italic mt-4">Assistências</div>
-                  <div className="space-y-2">
-                    {events.filter(e => (teamB.includes(e.playerId) || e.playerId === 'unidentified_B') && e.type === 'assist').map((e, idx) => {
-                      const p = players.find(x => x.id === e.playerId);
-                      return (
-                        <div key={idx} className="text-xs p-3 bg-yellow-50 rounded-xl border border-yellow-100 font-bold group/player">
-                          <span 
-                            className={p ? "cursor-pointer hover:text-primary-blue transition-colors" : ""}
-                            onClick={() => p && onPlayerClick?.(p)}
-                          >
-                            {(p?.nickname || '').toUpperCase() || p?.name || '---'}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-            </div>
-          </div>
           )}
 
           {/* MVP Section */}

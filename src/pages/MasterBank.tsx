@@ -3,7 +3,7 @@ import { db } from '../firebase';
 import { collection, onSnapshot, query, orderBy, doc, updateDoc, getDoc, runTransaction } from 'firebase/firestore';
 import { AdminData } from '../types';
 import { motion } from 'framer-motion';
-import { Wallet, CheckCircle2, XCircle, Clock, Search, ArrowLeft, History, Plus, Minus, UserCheck, X, AlertTriangle, Coins } from 'lucide-react';
+import { Wallet, CheckCircle2, XCircle, Clock, Search, ArrowLeft, History, Plus, Minus, UserCheck, X, AlertTriangle, Coins, Users } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 interface MasterBankProps {
@@ -237,6 +237,16 @@ export default function MasterBank({ adminData }: MasterBankProps) {
             <p className="text-gray-400 font-semibold max-w-xl text-sm">
               Gerencie solicitações de depósitos, saques e realize ajustes manuais de saldo diretamente para qualquer usuário.
             </p>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <Link
+              to="/admin/users"
+              className="bg-primary-blue hover:bg-blue-900 text-white font-black text-xs sm:text-sm uppercase tracking-wider px-5 py-3.5 rounded-2xl flex items-center gap-2.5 shadow-lg border border-blue-400/30 active:scale-95 transition-all cursor-pointer group"
+            >
+              <Users className="w-5 h-5 text-primary-yellow group-hover:scale-110 transition-transform" />
+              <span>Gerenciamento de Usuários</span>
+            </Link>
           </div>
         </div>
       </div>

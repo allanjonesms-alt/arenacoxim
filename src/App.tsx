@@ -38,6 +38,7 @@ import SimuladorConfrontos from './pages/SimuladorConfrontos';
 import PublicMonthlyAwards from './pages/PublicMonthlyAwards';
 import ApostasUsuario from './pages/ApostasUsuario';
 import BancoUsuario from './pages/BancoUsuario';
+import UserManagement from './pages/UserManagement';
 
 export enum OperationType {
   CREATE = 'create',
@@ -274,6 +275,19 @@ export default function App() {
       console.log("Current user:", currentUser?.email, currentUser?.uid);
       if (currentUser) {
         try {
+          // Sync logged-in user profile to 'users' collection
+          try {
+            const userDocRef = doc(db, 'users', currentUser.uid);
+            await setDoc(userDocRef, {
+              displayName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Usuário',
+              email: currentUser.email || '',
+              photoURL: currentUser.photoURL || '',
+              lastLogin: new Date().toISOString()
+            }, { merge: true });
+          } catch (e) {
+            console.warn("Could not sync user profile to 'users' collection:", e);
+          }
+
           const isMaster = currentUser.email?.toLowerCase() === MASTER_EMAIL;
           console.log("Is master:", isMaster);
           
@@ -572,6 +586,7 @@ export default function App() {
                     <Route path="/admin/betting-settings" element={<AdminBettingSettings />} />
                     <Route path="/admin/locations" element={<LocationManagement />} />
                     <Route path="/admin/admins" element={<AdminManagement adminData={adminData} sharedLocations={locations} />} />
+                    <Route path="/admin/users" element={<UserManagement adminData={adminData} />} />
                   </>
                 )}
                 
