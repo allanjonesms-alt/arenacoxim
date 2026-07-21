@@ -359,7 +359,7 @@ export const SoccerPitch: React.FC<SoccerPitchProps> = ({
     <>
       <div 
         ref={pitchRef}
-        className="relative aspect-[16/9] w-full bg-[#2e7d32] rounded-2xl md:rounded-3xl border-4 md:border-8 border-white/30 overflow-hidden shadow-2xl"
+        className="relative aspect-[16/11] w-full bg-[#2e7d32] rounded-2xl md:rounded-3xl border-4 md:border-8 border-white/30 overflow-hidden shadow-2xl"
       >
         {/* Share Button in the Top-Right Corner */}
         <button
