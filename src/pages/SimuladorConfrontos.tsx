@@ -1733,16 +1733,14 @@ export default function SimuladorConfrontos({ adminData }: Props) {
           </div>
 
           {/* SEÇÃO APONTAMENTOS DE LONGO PRAZO */}
-          <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-lg mt-8 relative overflow-hidden">
-            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-blue-500"></div>
-            
+          <div className="bg-slate-900 text-white rounded-[2rem] border border-slate-800 p-6 shadow-xl mt-8 relative overflow-hidden">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
               <div>
-                <h3 className="text-lg font-black uppercase tracking-tight text-gray-900 flex items-center gap-2">
-                  <CalendarDays className="w-5 h-5 text-emerald-500" />
+                <h3 className="text-lg font-black uppercase tracking-tight text-white flex items-center gap-2">
+                  <CalendarDays className="w-5 h-5 text-amber-300" />
                   Apostas de Longo Prazo
                 </h3>
-                <p className="text-xs text-gray-500 font-medium mt-1">
+                <p className="text-xs text-white/80 font-medium mt-1">
                   Odds automáticas para gols, gols sofridos e maior pontuador do mês, baseadas no rendimento histórico e atual.
                 </p>
               </div>
@@ -1750,15 +1748,15 @@ export default function SimuladorConfrontos({ adminData }: Props) {
               <div className="flex flex-wrap gap-2">
                 <button 
                   onClick={handleToggleLongTermMarket}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-wider transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-wider transition-all cursor-pointer ${
                     betSettings.longTermMonthlyGoals?.enabled
-                      ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      ? 'bg-black/30 text-amber-300 border border-white/20'
+                      : 'bg-black/20 text-white/60 border border-white/10'
                   }`}
                   title="Habilita mercado de Gols no Mês (Over/Under) e Gols Sofridos no Mês"
                 >
                   {betSettings.longTermMonthlyGoals?.enabled ? (
-                    <><Zap className="w-3.5 h-3.5" /> Gols Mês: ON</>
+                    <><Zap className="w-3.5 h-3.5 text-amber-300" /> Gols Mês: ON</>
                   ) : (
                     <><Shield className="w-3.5 h-3.5" /> Gols Mês: OFF</>
                   )}
@@ -1766,15 +1764,15 @@ export default function SimuladorConfrontos({ adminData }: Props) {
 
                 <button 
                   onClick={handleToggleScorerMarket}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-wider transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-wider transition-all cursor-pointer ${
                     betSettings.longTermMonthlyScorer?.enabled
-                      ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      ? 'bg-black/30 text-amber-300 border border-white/20'
+                      : 'bg-black/20 text-white/60 border border-white/10'
                   }`}
                   title="Habilita mercado de Maior Pontuador do Mês"
                 >
                   {betSettings.longTermMonthlyScorer?.enabled ? (
-                    <><Trophy className="w-3.5 h-3.5 text-amber-500" /> Pontuador: ON</>
+                    <><Trophy className="w-3.5 h-3.5 text-amber-300" /> Pontuador: ON</>
                   ) : (
                     <><Shield className="w-3.5 h-3.5" /> Pontuador: OFF</>
                   )}
@@ -1789,20 +1787,20 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                 placeholder="Buscar jogador para ver odds de longo prazo..."
                 value={longTermSearch}
                 onChange={e => setLongTermSearch(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-2xl pl-12 pr-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
+                className="w-full bg-black/20 border border-white/20 rounded-2xl pl-12 pr-4 py-3 text-sm text-white placeholder-white/60 focus:bg-black/30 focus:ring-2 focus:ring-amber-300 outline-none transition-all font-medium"
               />
-              <Search className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
+              <Search className="w-5 h-5 text-white/60 absolute left-4 top-1/2 -translate-y-1/2" />
             </div>
 
             {/* Abas para Apostas no Longo Prazo */}
-            <div className="flex border-b border-gray-150 mb-6 gap-2">
+            <div className="flex border-b border-white/20 mb-6 gap-2">
               <button
                 type="button"
                 onClick={() => setActiveBetTab('linha')}
-                className={`pb-3 px-4 text-xs sm:text-sm font-black uppercase tracking-wider border-b-2 transition-all ${
+                className={`pb-3 px-4 text-xs sm:text-sm font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
                   activeBetTab === 'linha'
-                    ? 'border-emerald-500 text-emerald-600'
-                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                    ? 'border-amber-300 text-amber-300'
+                    : 'border-transparent text-white/70 hover:text-white'
                 }`}
               >
                 Gols no Mês (Linha)
@@ -1810,10 +1808,10 @@ export default function SimuladorConfrontos({ adminData }: Props) {
               <button
                 type="button"
                 onClick={() => setActiveBetTab('goleiro')}
-                className={`pb-3 px-4 text-xs sm:text-sm font-black uppercase tracking-wider border-b-2 transition-all ${
+                className={`pb-3 px-4 text-xs sm:text-sm font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
                   activeBetTab === 'goleiro'
-                    ? 'border-indigo-500 text-indigo-600'
-                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                    ? 'border-amber-300 text-amber-300'
+                    : 'border-transparent text-white/70 hover:text-white'
                 }`}
               >
                 Gols Sofridos (Goleiros)

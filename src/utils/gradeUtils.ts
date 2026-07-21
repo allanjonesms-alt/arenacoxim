@@ -28,7 +28,7 @@ export const getGradeColor = (value: number | string) => {
 export const calculateGrade = (stats?: OverallStats, averagePoints: number = 0) => {
   const avg = calculateAverage(stats);
   const safeAvgPoints = isNaN(averagePoints) ? 0 : averagePoints;
-  const performanceBonus = safeAvgPoints * 0.3;
+  const performanceBonus = safeAvgPoints * 0.4;
   const finalScore = Math.min(105, Math.round(avg + performanceBonus));
   
   const grade = isNaN(finalScore) ? '75' : finalScore.toString().padStart(2, '0');

@@ -927,34 +927,34 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
     return (
       <div className="space-y-8 mt-8 animate-in fade-in duration-300">
         {/* Dedicated Match Page Header */}
-        <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+        <div className="bg-slate-900 text-white rounded-[2rem] p-6 sm:p-8 shadow-xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
           <div className="space-y-3">
             <button
               onClick={() => setSelectedMatchId(null)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all font-black text-xs uppercase tracking-wider cursor-pointer active:scale-95 shadow-2xs"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all font-black text-xs uppercase tracking-wider cursor-pointer active:scale-95 shadow-2xs"
             >
-              <ArrowLeft className="w-4 h-4 text-primary-blue" />
+              <ArrowLeft className="w-4 h-4 text-amber-300" />
               <span>Voltar para Próximos Confrontos</span>
             </button>
 
             <div className="flex flex-wrap items-center gap-2.5">
-              <span className="text-xs font-black uppercase tracking-wider text-white bg-primary-blue px-3 py-1 rounded-xl shadow-xs border border-blue-900/10 flex items-center gap-1.5">
-                <Trophy className="w-3.5 h-3.5 text-primary-yellow" />
+              <span className="text-xs font-black uppercase tracking-wider text-white bg-black/40 px-3 py-1 rounded-xl shadow-xs border border-white/10 flex items-center gap-1.5">
+                <Trophy className="w-3.5 h-3.5 text-amber-300" />
                 {gameTitle}
               </span>
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[10px] font-black uppercase tracking-wider text-white bg-white/10 px-2.5 py-1 rounded-md">
                 Disponível para Apostas
               </span>
             </div>
 
-            <h2 className="text-2xl sm:text-3xl font-black text-primary-blue uppercase italic tracking-tight">
+            <h2 className="text-2xl sm:text-3xl font-black text-white uppercase italic tracking-tight drop-shadow-sm">
               Confronto Azul vs Amarelo
             </h2>
 
-            <div className="flex items-center gap-3 text-xs font-bold text-gray-500">
-              <span className="flex items-center gap-1.5 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100">
-                <CalendarDays className="w-4 h-4 text-primary-yellow" />
+            <div className="flex items-center gap-3 text-xs font-bold text-white/90">
+              <span className="flex items-center gap-1.5 bg-black/30 px-3 py-1.5 rounded-xl border border-white/10">
+                <CalendarDays className="w-4 h-4 text-amber-300" />
                 {selectedMatch.date} às {selectedMatch.time}
               </span>
             </div>
@@ -962,20 +962,20 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
 
           <button
             onClick={() => setSelectedMatchId(null)}
-            className="bg-primary-blue hover:bg-blue-900 text-white font-black text-xs uppercase tracking-wider px-6 py-3 rounded-xl transition-all shadow-md active:scale-95 cursor-pointer self-start sm:self-center flex items-center gap-2"
+            className="bg-black/40 hover:bg-black/60 text-white font-black text-xs uppercase tracking-wider px-6 py-3 rounded-xl transition-all shadow-md active:scale-95 cursor-pointer border border-white/10 self-start sm:self-center flex items-center gap-2"
           >
-            <ArrowLeft className="w-4 h-4 text-primary-yellow" />
+            <ArrowLeft className="w-4 h-4 text-amber-300" />
             <span>Voltar</span>
           </button>
         </div>
 
         {/* Dedicated Match Markets Container */}
-        <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-gray-100 space-y-8">
+        <div className="bg-slate-900 text-white rounded-[2rem] p-6 sm:p-8 shadow-xl border border-slate-800 space-y-8">
           {/* 1. Vencedor da Partida (1X2) */}
           {isWinnerEnabled && odds && (
             <div className="space-y-4">
-              <div className="text-xs font-black text-primary-blue uppercase tracking-[0.2em] bg-blue-50/80 border border-blue-100 py-3 px-4 rounded-2xl flex items-center gap-2">
-                <Trophy className="w-4 h-4 text-primary-yellow" /> Vencedor da Partida ({gameTitle})
+              <div className="text-xs font-black text-amber-300 uppercase tracking-[0.2em] bg-black/25 border border-white/20 py-3 px-4 rounded-2xl flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-amber-300" /> Vencedor da Partida ({gameTitle})
               </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -988,10 +988,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                     matchInfo: `${gameTitle} - Azul vs Amarelo`,
                     selectedOutcome: 'Vitória Azul (1)'
                   })}
-                  className="bg-white border-2 border-slate-200 text-slate-800 rounded-2xl p-4 flex flex-col items-center hover:border-primary-blue hover:bg-blue-50/20 transition-all cursor-pointer shadow-sm active:scale-95 group"
+                  className="bg-black/25 border-2 border-white/20 text-white rounded-2xl p-4 flex flex-col items-center hover:border-amber-300 hover:bg-black/40 transition-all cursor-pointer shadow-sm active:scale-95 group"
                 >
-                  <span className="text-xs text-slate-500 uppercase font-black mb-1 group-hover:text-primary-blue">Time Azul</span>
-                  <span className="text-2xl font-black text-emerald-600">@ {odds.oddA}</span>
+                  <span className="text-xs text-white/80 uppercase font-black mb-1 group-hover:text-amber-300">Time Azul</span>
+                  <span className="text-2xl font-black text-amber-300">@ {odds.oddA}</span>
                 </button>
 
                 <button 
@@ -1003,10 +1003,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                     matchInfo: `${gameTitle} - Azul vs Amarelo`,
                     selectedOutcome: 'Empate (X)'
                   })}
-                  className="bg-white border-2 border-slate-200 text-slate-800 rounded-2xl p-4 flex flex-col items-center hover:border-primary-blue hover:bg-blue-50/20 transition-all cursor-pointer shadow-sm active:scale-95 group"
+                  className="bg-black/25 border-2 border-white/20 text-white rounded-2xl p-4 flex flex-col items-center hover:border-amber-300 hover:bg-black/40 transition-all cursor-pointer shadow-sm active:scale-95 group"
                 >
-                  <span className="text-xs text-slate-500 uppercase font-black mb-1 group-hover:text-primary-blue">Empate</span>
-                  <span className="text-2xl font-black text-emerald-600">@ {odds.oddDraw}</span>
+                  <span className="text-xs text-white/80 uppercase font-black mb-1 group-hover:text-amber-300">Empate</span>
+                  <span className="text-2xl font-black text-amber-300">@ {odds.oddDraw}</span>
                 </button>
 
                 <button 
@@ -1018,10 +1018,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                     matchInfo: `${gameTitle} - Azul vs Amarelo`,
                     selectedOutcome: 'Vitória Amarelo (2)'
                   })}
-                  className="bg-white border-2 border-slate-200 text-slate-800 rounded-2xl p-4 flex flex-col items-center hover:border-amber-400 hover:bg-amber-50/20 transition-all cursor-pointer shadow-sm active:scale-95 group"
+                  className="bg-black/25 border-2 border-white/20 text-white rounded-2xl p-4 flex flex-col items-center hover:border-amber-300 hover:bg-black/40 transition-all cursor-pointer shadow-sm active:scale-95 group"
                 >
-                  <span className="text-xs text-slate-500 uppercase font-black mb-1 group-hover:text-amber-600">Time Amarelo</span>
-                  <span className="text-2xl font-black text-emerald-600">@ {odds.oddB}</span>
+                  <span className="text-xs text-white/80 uppercase font-black mb-1 group-hover:text-amber-300">Time Amarelo</span>
+                  <span className="text-2xl font-black text-amber-300">@ {odds.oddB}</span>
                 </button>
               </div>
             </div>
@@ -1029,15 +1029,15 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
 
           {/* 2. Match Goals (Linhas por partida) */}
           {isMatchGoalsEnabled && (
-            <div className="space-y-4 pt-4 border-t border-gray-100">
-              <div className="text-xs font-black text-primary-blue uppercase tracking-[0.2em] bg-emerald-50/80 border border-emerald-100 py-3 px-4 rounded-2xl flex items-center gap-2">
-                <Zap className="w-4 h-4 text-emerald-500" /> Total de Gols Marcados no {gameTitle}
+            <div className="space-y-4 pt-4 border-t border-white/20">
+              <div className="text-xs font-black text-amber-300 uppercase tracking-[0.2em] bg-black/25 border border-white/20 py-3 px-4 rounded-2xl flex items-center gap-2">
+                <Zap className="w-4 h-4 text-emerald-400" /> Total de Gols Marcados no {gameTitle}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {calculatePoissonMatchGoals(selectedMatch).map((opt) => (
-                  <div key={opt.line} className="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-2xl p-3 gap-3">
-                    <span className="text-sm font-black text-slate-800 tracking-wider">Total: {opt.line} Gols</span>
+                  <div key={opt.line} className="flex items-center justify-between bg-black/20 border border-white/20 rounded-2xl p-3 gap-3">
+                    <span className="text-sm font-black text-white tracking-wider">Total: {opt.line} Gols</span>
                     <div className="flex gap-2">
                       <button
                         onClick={() => setSelectedBet({
@@ -1048,10 +1048,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                           matchInfo: `${gameTitle} - Azul vs Amarelo`,
                           selectedOutcome: `Mais de ${opt.line} Gols`
                         })}
-                        className="bg-white hover:bg-emerald-50 text-slate-800 hover:border-emerald-500 border border-slate-200 font-black text-xs px-4 py-2 rounded-xl transition-all flex flex-col items-center min-w-[85px] cursor-pointer shadow-xs active:scale-95"
+                        className="bg-white/10 hover:bg-white/20 text-white hover:border-amber-300 border border-white/20 font-black text-xs px-4 py-2 rounded-xl transition-all flex flex-col items-center min-w-[85px] cursor-pointer shadow-xs active:scale-95"
                       >
-                        <span className="text-[9px] text-slate-500 font-bold uppercase mb-0.5">Mais de</span>
-                        <span className="text-sm font-black text-emerald-600">@ {opt.oddOver}</span>
+                        <span className="text-[9px] text-white/80 font-bold uppercase mb-0.5">Mais de</span>
+                        <span className="text-sm font-black text-amber-300">@ {opt.oddOver}</span>
                       </button>
                       <button
                         onClick={() => setSelectedBet({
@@ -1062,10 +1062,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                           matchInfo: `${gameTitle} - Azul vs Amarelo`,
                           selectedOutcome: `Menos de ${opt.line} Gols`
                         })}
-                        className="bg-white hover:bg-emerald-50 text-slate-800 hover:border-emerald-500 border border-slate-200 font-black text-xs px-4 py-2 rounded-xl transition-all flex flex-col items-center min-w-[85px] cursor-pointer shadow-xs active:scale-95"
+                        className="bg-white/10 hover:bg-white/20 text-white hover:border-amber-300 border border-white/20 font-black text-xs px-4 py-2 rounded-xl transition-all flex flex-col items-center min-w-[85px] cursor-pointer shadow-xs active:scale-95"
                       >
-                        <span className="text-[9px] text-slate-500 font-bold uppercase mb-0.5">Menos de</span>
-                        <span className="text-sm font-black text-emerald-600">@ {opt.oddUnder}</span>
+                        <span className="text-[9px] text-white/80 font-bold uppercase mb-0.5">Menos de</span>
+                        <span className="text-sm font-black text-amber-300">@ {opt.oddUnder}</span>
                       </button>
                     </div>
                   </div>
@@ -1076,16 +1076,16 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
 
           {/* 3. Desempenho Individual de Jogadores */}
           {(isGoalsEnabled || isAssistsEnabled) && (
-            <div className="space-y-4 pt-4 border-t border-gray-100">
-              <div className="text-xs font-black text-primary-blue uppercase tracking-[0.2em] bg-rose-50/80 border border-rose-100 py-3 px-4 rounded-2xl flex items-center gap-2">
-                <Target className="w-4 h-4 text-rose-500" /> Desempenho Individual de Jogadores ({gameTitle})
+            <div className="space-y-4 pt-4 border-t border-white/20">
+              <div className="text-xs font-black text-amber-300 uppercase tracking-[0.2em] bg-black/25 border border-white/20 py-3 px-4 rounded-2xl flex items-center gap-2">
+                <Target className="w-4 h-4 text-rose-400" /> Desempenho Individual de Jogadores ({gameTitle})
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {['teamA', 'teamB'].map(teamKey => {
                   const playerIds = teamKey === 'teamA' ? selectedMatch.teamA : selectedMatch.teamB;
                   const teamName = teamKey === 'teamA' ? 'Azul' : 'Amarelo';
-                  const teamBadgeColor = teamKey === 'teamA' ? 'text-primary-blue bg-blue-50 border-blue-200' : 'text-amber-700 bg-amber-50 border-amber-200';
+                  const teamBadgeColor = teamKey === 'teamA' ? 'text-white bg-blue-600/80 border-blue-400/50' : 'text-white bg-amber-500/80 border-amber-300/50';
 
                   // Opposing team stats
                   const oppIds = teamKey === 'teamA' ? selectedMatch.teamB : selectedMatch.teamA;
@@ -1100,27 +1100,27 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                   if (activePlayers.length === 0) return null;
 
                   return (
-                    <div key={teamKey} className="space-y-3 bg-slate-50/60 p-4 rounded-2xl border border-slate-100">
+                    <div key={teamKey} className="space-y-3 bg-black/20 p-4 rounded-2xl border border-white/20">
                       <div className={`text-xs font-black uppercase tracking-wider px-3 py-1 rounded-xl border inline-block ${teamBadgeColor}`}>
                         Time {teamName}
                       </div>
 
-                      <div className="space-y-2.5">
+                      <div className="space-y-1">
                         {activePlayers.map(player => {
                           const pOdds = calculatePlayerPropOdds(player, oppAvg);
                           return (
-                            <div key={player.id} className="flex flex-col sm:flex-row sm:items-center justify-between border border-gray-200/70 rounded-2xl p-3 bg-white gap-3 shadow-xs">
-                              <div className="flex items-center gap-2.5">
-                                <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[9px] font-black text-white ${getPositionColor(player.position)}`}>
+                            <div key={player.id} className="flex flex-col sm:flex-row sm:items-center justify-between border border-white/10 rounded-xl py-1.5 px-3 bg-black/25 hover:bg-black/40 gap-2 text-white transition-all">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className={`w-5 h-5 rounded flex items-center justify-center text-[8px] font-black text-white shrink-0 ${getPositionColor(player.position)}`}>
                                   {getPositionAbbr(player.position)}
                                 </span>
-                                <span className="text-xs font-black text-gray-800 uppercase">{player.nickname || player.name}</span>
+                                <span className="text-xs font-black text-white uppercase truncate">{player.nickname || player.name}</span>
                               </div>
 
-                              <div className="flex flex-col gap-2">
+                              <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
                                 {isGoalsEnabled && (
-                                  <div className="flex items-center gap-2 justify-between sm:justify-end">
-                                    <span className="text-[9px] font-black text-gray-400 uppercase w-10">Gols</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[9px] font-bold text-white/60 uppercase">Gols:</span>
                                     <button 
                                       onClick={() => setSelectedBet({
                                         match: selectedMatch,
@@ -1130,10 +1130,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                         matchInfo: `${gameTitle} (Time ${teamName}) - ${player.nickname || player.name}`,
                                         selectedOutcome: `Marcar +0.5 Gols`
                                       })}
-                                      className="bg-slate-50 border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-slate-800 rounded-xl px-2.5 py-1 text-center min-w-[55px] transition-all cursor-pointer active:scale-95"
+                                      className="bg-white/10 border border-white/20 hover:border-amber-300 hover:bg-white/20 text-white rounded-lg px-2 py-0.5 text-center transition-all cursor-pointer active:scale-95 flex items-center gap-1"
                                     >
-                                      <div className="text-[8px] text-slate-500 font-bold leading-none mb-0.5">+0.5</div>
-                                      <div className="text-xs font-black leading-none text-emerald-600">@ {pOdds.g1}</div>
+                                      <span className="text-[8px] text-white/70 font-bold">+0.5</span>
+                                      <span className="text-xs font-black text-amber-300">@{pOdds.g1}</span>
                                     </button>
                                     <button 
                                       onClick={() => setSelectedBet({
@@ -1144,17 +1144,17 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                         matchInfo: `${gameTitle} (Time ${teamName}) - ${player.nickname || player.name}`,
                                         selectedOutcome: `Marcar +1.5 Gols`
                                       })}
-                                      className="bg-slate-50 border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-slate-800 rounded-xl px-2.5 py-1 text-center min-w-[55px] transition-all cursor-pointer active:scale-95"
+                                      className="bg-white/10 border border-white/20 hover:border-amber-300 hover:bg-white/20 text-white rounded-lg px-2 py-0.5 text-center transition-all cursor-pointer active:scale-95 flex items-center gap-1"
                                     >
-                                      <div className="text-[8px] text-slate-500 font-bold leading-none mb-0.5">+1.5</div>
-                                      <div className="text-xs font-black leading-none text-emerald-600">@ {pOdds.g2}</div>
+                                      <span className="text-[8px] text-white/70 font-bold">+1.5</span>
+                                      <span className="text-xs font-black text-amber-300">@{pOdds.g2}</span>
                                     </button>
                                   </div>
                                 )}
 
                                 {isAssistsEnabled && (
-                                  <div className="flex items-center gap-2 justify-between sm:justify-end">
-                                    <span className="text-[9px] font-black text-gray-400 uppercase w-10">Assist.</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[9px] font-bold text-white/60 uppercase">Ass:</span>
                                     <button 
                                       onClick={() => setSelectedBet({
                                         match: selectedMatch,
@@ -1164,10 +1164,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                         matchInfo: `${gameTitle} (Time ${teamName}) - ${player.nickname || player.name}`,
                                         selectedOutcome: `Dar +0.5 Assistência`
                                       })}
-                                      className="bg-slate-50 border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-slate-800 rounded-xl px-2.5 py-1 text-center min-w-[55px] transition-all cursor-pointer active:scale-95"
+                                      className="bg-white/10 border border-white/20 hover:border-amber-300 hover:bg-white/20 text-white rounded-lg px-2 py-0.5 text-center transition-all cursor-pointer active:scale-95 flex items-center gap-1"
                                     >
-                                      <div className="text-[8px] text-slate-500 font-bold leading-none mb-0.5">+0.5</div>
-                                      <div className="text-xs font-black leading-none text-emerald-600">@ {pOdds.a1}</div>
+                                      <span className="text-[8px] text-white/70 font-bold">+0.5</span>
+                                      <span className="text-xs font-black text-amber-300">@{pOdds.a1}</span>
                                     </button>
                                     <button 
                                       onClick={() => setSelectedBet({
@@ -1178,10 +1178,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                         matchInfo: `${gameTitle} (Time ${teamName}) - ${player.nickname || player.name}`,
                                         selectedOutcome: `Dar +1.5 Assistência`
                                       })}
-                                      className="bg-slate-50 border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-slate-800 rounded-xl px-2.5 py-1 text-center min-w-[55px] transition-all cursor-pointer active:scale-95"
+                                      className="bg-white/10 border border-white/20 hover:border-amber-300 hover:bg-white/20 text-white rounded-lg px-2 py-0.5 text-center transition-all cursor-pointer active:scale-95 flex items-center gap-1"
                                     >
-                                      <div className="text-[8px] text-slate-500 font-bold leading-none mb-0.5">+1.5</div>
-                                      <div className="text-xs font-black leading-none text-emerald-600">@ {pOdds.a2}</div>
+                                      <span className="text-[8px] text-white/70 font-bold">+1.5</span>
+                                      <span className="text-xs font-black text-amber-300">@{pOdds.a2}</span>
                                     </button>
                                   </div>
                                 )}
@@ -1297,27 +1297,27 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
         </div>
 
         {sortedBettableMatches.length === 0 ? (
-          <div className="bg-gray-50 border border-gray-100 rounded-3xl p-8 text-center flex flex-col items-center justify-center gap-2">
-            <Shield className="w-8 h-8 text-gray-300" />
-            <p className="text-sm font-bold text-gray-600">Nenhum confronto disponível para apostas no momento</p>
+          <div className="bg-slate-900 text-white border border-slate-800 rounded-3xl p-8 text-center flex flex-col items-center justify-center gap-2">
+            <Shield className="w-8 h-8 text-amber-300" />
+            <p className="text-sm font-bold text-white">Nenhum confronto disponível para apostas no momento</p>
           </div>
         ) : (
           <div className="bg-slate-900 text-white rounded-3xl overflow-hidden shadow-xl border border-slate-800">
             {/* Sportsbook Header Bar */}
             <div className="bg-slate-950/80 px-4 py-3 border-b border-slate-800/80 flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-slate-400">
               <div className="flex items-center gap-2">
-                <CalendarDays className="w-4 h-4 text-primary-yellow" />
+                <CalendarDays className="w-4 h-4 text-amber-300" />
                 <span>Partida / Confronto</span>
               </div>
               <div className="flex items-center text-center font-black">
-                <div className="w-20 sm:w-24 text-amber-400">1</div>
-                <div className="w-20 sm:w-24 text-amber-400">X</div>
-                <div className="w-20 sm:w-24 text-amber-400">2</div>
+                <div className="w-20 sm:w-24 text-amber-300">1</div>
+                <div className="w-20 sm:w-24 text-amber-300">X</div>
+                <div className="w-20 sm:w-24 text-amber-300">2</div>
               </div>
             </div>
 
             {/* Match Rows */}
-            <div className="divide-y divide-slate-800/60">
+            <div className="divide-y divide-white/10">
               {sortedBettableMatches.map((match, index) => {
                 const gameNumber = index + 1;
                 const gameTitle = `JOGO ${gameNumber}`;
@@ -1346,28 +1346,28 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                       setSelectedMatchId(match.id);
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
-                    className="p-4 sm:p-5 hover:bg-slate-800/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer group"
+                    className="p-4 sm:p-5 hover:bg-black/20 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer group"
                   >
                     {/* Left: Teams & Match Info */}
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-primary-yellow bg-primary-blue/60 px-2.5 py-0.5 rounded-md border border-blue-500/20">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 bg-black/30 px-2.5 py-0.5 rounded-md border border-white/20">
                           {gameTitle}
                         </span>
-                        <span className="text-[11px] font-bold text-slate-400">
+                        <span className="text-[11px] font-bold text-white/80">
                           {match.date}
                         </span>
                       </div>
 
                       <div className="space-y-1.5 pl-0.5">
                         <div className="flex items-center gap-2.5">
-                          <span className="w-3 h-3 rounded-full bg-blue-500 shrink-0 shadow-xs shadow-blue-500/50" />
+                          <span className="w-3 h-3 rounded-full bg-blue-400 shrink-0 shadow-xs" />
                           <span className="text-sm sm:text-base font-black text-white group-hover:text-amber-300 transition-colors">
                             Time Azul
                           </span>
                         </div>
                         <div className="flex items-center gap-2.5">
-                          <span className="w-3 h-3 rounded-full bg-amber-400 shrink-0 shadow-xs shadow-amber-400/50" />
+                          <span className="w-3 h-3 rounded-full bg-amber-400 shrink-0 shadow-xs" />
                           <span className="text-sm sm:text-base font-black text-white group-hover:text-amber-300 transition-colors">
                             Time Amarelo
                           </span>
@@ -1375,18 +1375,18 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                       </div>
 
                       {/* Time & Markets Badge */}
-                      <div className="flex items-center gap-2 pt-1 text-xs font-bold text-slate-400">
+                      <div className="flex items-center gap-2 pt-1 text-xs font-bold text-white/80">
                         <span className="flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5 text-slate-500" />
+                          <Clock className="w-3.5 h-3.5 text-white/70" />
                           {match.time}
                         </span>
                         {marketCount > 0 && (
                           <span 
-                            className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 text-[10px] font-black px-2 py-0.5 rounded-md border border-emerald-500/30 flex items-center gap-1 transition-all"
+                            className="bg-black/30 hover:bg-black/40 text-amber-300 text-[10px] font-black px-2 py-0.5 rounded-md border border-white/20 flex items-center gap-1 transition-all"
                             title="Ver todos os mercados"
                           >
                             <span>+{marketCount}</span>
-                            <ChevronRight className="w-3 h-3 text-emerald-400" />
+                            <ChevronRight className="w-3 h-3 text-amber-300" />
                           </span>
                         )}
                       </div>
@@ -1412,10 +1412,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                 selectedOutcome: 'Vitória Azul (1)'
                               });
                             }}
-                            className="w-20 sm:w-24 py-2.5 bg-slate-800/90 hover:bg-slate-700 hover:border-amber-400 border border-slate-700/80 rounded-xl text-center transition-all cursor-pointer shadow-xs active:scale-95 group/btn"
+                            className="w-20 sm:w-24 py-2.5 bg-black/25 hover:bg-black/40 hover:border-amber-300 border border-white/20 rounded-xl text-center transition-all cursor-pointer shadow-xs active:scale-95 group/btn text-white"
                           >
-                            <span className="text-[9px] font-black uppercase text-slate-400 block group-hover/btn:text-slate-300">Azul</span>
-                            <span className="text-sm sm:text-base font-black text-amber-400 group-hover/btn:text-amber-300">{odds.oddA}</span>
+                            <span className="text-[9px] font-black uppercase text-white/70 block group-hover/btn:text-white">Azul</span>
+                            <span className="text-sm sm:text-base font-black text-amber-300">{odds.oddA}</span>
                           </button>
 
                           {/* X - Empate */}
@@ -1431,10 +1431,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                 selectedOutcome: 'Empate (X)'
                               });
                             }}
-                            className="w-20 sm:w-24 py-2.5 bg-slate-800/90 hover:bg-slate-700 hover:border-amber-400 border border-slate-700/80 rounded-xl text-center transition-all cursor-pointer shadow-xs active:scale-95 group/btn"
+                            className="w-20 sm:w-24 py-2.5 bg-black/25 hover:bg-black/40 hover:border-amber-300 border border-white/20 rounded-xl text-center transition-all cursor-pointer shadow-xs active:scale-95 group/btn text-white"
                           >
-                            <span className="text-[9px] font-black uppercase text-slate-400 block group-hover/btn:text-slate-300">Empate</span>
-                            <span className="text-sm sm:text-base font-black text-amber-400 group-hover/btn:text-amber-300">{odds.oddDraw}</span>
+                            <span className="text-[9px] font-black uppercase text-white/70 block group-hover/btn:text-white">Empate</span>
+                            <span className="text-sm sm:text-base font-black text-amber-300">{odds.oddDraw}</span>
                           </button>
 
                           {/* 2 - Vitória Amarelo */}
@@ -1450,14 +1450,14 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                 selectedOutcome: 'Vitória Amarelo (2)'
                               });
                             }}
-                            className="w-20 sm:w-24 py-2.5 bg-slate-800/90 hover:bg-slate-700 hover:border-amber-400 border border-slate-700/80 rounded-xl text-center transition-all cursor-pointer shadow-xs active:scale-95 group/btn"
+                            className="w-20 sm:w-24 py-2.5 bg-black/25 hover:bg-black/40 hover:border-amber-300 border border-white/20 rounded-xl text-center transition-all cursor-pointer shadow-xs active:scale-95 group/btn text-white"
                           >
-                            <span className="text-[9px] font-black uppercase text-slate-400 block group-hover/btn:text-slate-300">Amarelo</span>
-                            <span className="text-sm sm:text-base font-black text-amber-400 group-hover/btn:text-amber-300">{odds.oddB}</span>
+                            <span className="text-[9px] font-black uppercase text-white/70 block group-hover/btn:text-white">Amarelo</span>
+                            <span className="text-sm sm:text-base font-black text-amber-300">{odds.oddB}</span>
                           </button>
                         </>
                       ) : (
-                        <div className="text-xs font-bold text-slate-500 py-2">
+                        <div className="text-xs font-bold text-white/60 py-2">
                           Mercado indisponível
                         </div>
                       )}
@@ -1499,20 +1499,20 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* SUBSECTION A: GOLS NO MÊS */}
-            <div className="bg-white border border-gray-100 rounded-[2.5rem] p-6 shadow-sm space-y-6">
-              <div className="border-b border-gray-50 pb-4 flex items-center justify-between">
+            <div className="bg-slate-900 text-white border border-slate-800 rounded-[2.5rem] p-6 shadow-xl space-y-6">
+              <div className="border-b border-white/20 pb-4 flex items-center justify-between">
                 <div>
-                  <h4 className="text-lg font-black uppercase italic text-primary-blue flex items-center gap-2">
-                    <Target className="w-5 h-5 text-rose-500" />
+                  <h4 className="text-lg font-black uppercase italic text-white flex items-center gap-2">
+                    <Target className="w-5 h-5 text-rose-300" />
                     Gols no Mês
                   </h4>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">
+                  <p className="text-[10px] text-white/80 font-bold uppercase mt-1">
                     Atletas de Linha - Ordenado por gols marcados
                   </p>
                 </div>
                 <button
                   onClick={() => setIsGolsNoMesCollapsed(!isGolsNoMesCollapsed)}
-                  className="p-2 hover:bg-slate-100 rounded-xl transition-all text-gray-400 hover:text-gray-700 cursor-pointer"
+                  className="p-2 hover:bg-black/20 rounded-xl transition-all text-white/80 hover:text-white cursor-pointer"
                   title={isGolsNoMesCollapsed ? "Expandir Gols no Mês" : "Recolher Gols no Mês"}
                 >
                   {isGolsNoMesCollapsed ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
@@ -1552,17 +1552,17 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                         <div className="space-y-4">
                           <div className="space-y-1.5">
                             {visiblePlayers.map(({ player, ltOdds }) => (
-                              <div key={player.id} className="flex items-center justify-between border border-gray-50 rounded-xl py-1 px-2 bg-slate-50/50 hover:bg-slate-50 transition-all gap-2">
+                              <div key={player.id} className="flex items-center justify-between border border-white/10 rounded-xl py-1.5 px-3 bg-black/20 hover:bg-black/30 transition-all gap-2">
                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                   <span className={`w-5 h-5 rounded flex items-center justify-center text-[8px] font-black text-white shrink-0 ${getPositionColor(player.position)}`}>
                                     {getPositionAbbr(player.position)}
                                   </span>
                                   <div className="min-w-0">
-                                    <span className="block text-xs font-black text-gray-800 uppercase tracking-tight truncate">
+                                    <span className="block text-xs font-black text-white uppercase tracking-tight truncate">
                                       {player.nickname || player.name}
                                     </span>
-                                    <span className="block text-[9px] text-gray-400 font-bold uppercase">
-                                      Gols marcados: <span className="text-gray-700 font-black">{ltOdds.currentGoals}</span>
+                                    <span className="block text-[9px] text-white/70 font-bold uppercase">
+                                      Gols marcados: <span className="text-amber-300 font-black">{ltOdds.currentGoals}</span>
                                     </span>
                                   </div>
                                 </div>
@@ -1578,10 +1578,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                       matchInfo: `Artilharia Mensal: ${player.nickname || player.name}`,
                                       selectedOutcome: `Mais de ${ltOdds.line} Gols (${currentMonthName})`
                                     })}
-                                    className="bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/80 rounded-xl py-1 px-2 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center"
+                                    className="bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl py-1 px-2 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center"
                                   >
-                                    <span className="text-[9.5px] font-black uppercase text-slate-700 mb-0.5 tracking-wider">+{ltOdds.line}</span>
-                                    <span className="text-xs font-black text-emerald-600">@ {ltOdds.oddOver}</span>
+                                    <span className="text-[9.5px] font-black uppercase text-white/80 mb-0.5 tracking-wider">+{ltOdds.line}</span>
+                                    <span className="text-xs font-black text-amber-300">@ {ltOdds.oddOver}</span>
                                   </button>
                                   <button
                                     onClick={() => setSelectedBet({
@@ -1592,10 +1592,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                       matchInfo: `Artilharia Mensal: ${player.nickname || player.name}`,
                                       selectedOutcome: `Menos de ${ltOdds.line} Gols (${currentMonthName})`
                                     })}
-                                    className="bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/80 rounded-xl py-1 px-2 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center"
+                                    className="bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl py-1 px-2 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center"
                                   >
-                                    <span className="text-[9.5px] font-black uppercase text-slate-700 mb-0.5 tracking-wider">-{ltOdds.line}</span>
-                                    <span className="text-xs font-black text-emerald-600">@ {ltOdds.oddUnder}</span>
+                                    <span className="text-[9.5px] font-black uppercase text-white/80 mb-0.5 tracking-wider">-{ltOdds.line}</span>
+                                    <span className="text-xs font-black text-amber-300">@ {ltOdds.oddUnder}</span>
                                   </button>
                                 </div>
                               </div>
@@ -1603,10 +1603,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                           </div>
 
                           {sortedNonGoalkeepers.length > 5 && (
-                            <div className="pt-2 text-center border-t border-gray-50">
+                            <div className="pt-2 text-center border-t border-white/10">
                               <button
                                 onClick={() => setShowAllGolsNoMes(!showAllGolsNoMes)}
-                                className="text-xs font-black uppercase tracking-wider text-primary-blue hover:text-blue-950 transition-all px-4 py-2 bg-slate-50 hover:bg-slate-100 rounded-2xl border border-slate-100 cursor-pointer"
+                                className="text-xs font-black uppercase tracking-wider text-amber-300 hover:text-amber-200 transition-all px-4 py-2 bg-black/20 hover:bg-black/30 rounded-2xl border border-white/20 cursor-pointer"
                               >
                                 {showAllGolsNoMes ? "Mostrar Menos ▲" : "Mostrar Mais ▼"}
                               </button>
@@ -1621,20 +1621,20 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
             </div>
 
             {/* SUBSECTION B: GOLS SOFRIDOS */}
-            <div className="bg-white border border-gray-100 rounded-[2.5rem] p-6 shadow-sm space-y-6">
-              <div className="border-b border-gray-50 pb-4 flex items-center justify-between">
+            <div className="bg-slate-900 text-white border border-slate-800 rounded-[2.5rem] p-6 shadow-xl space-y-6">
+              <div className="border-b border-white/20 pb-4 flex items-center justify-between">
                 <div>
-                  <h4 className="text-lg font-black uppercase italic text-primary-blue flex items-center gap-2">
-                    <Shield className="w-5 h-5 text-indigo-500" />
+                  <h4 className="text-lg font-black uppercase italic text-white flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-indigo-300" />
                     Gols Sofridos
                   </h4>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">
+                  <p className="text-[10px] text-white/80 font-bold uppercase mt-1">
                     Goleiros - Ordenado por gols sofridos no mês
                   </p>
                 </div>
                 <button
                   onClick={() => setIsGolsSofridosCollapsed(!isGolsSofridosCollapsed)}
-                  className="p-2 hover:bg-slate-100 rounded-xl transition-all text-gray-400 hover:text-gray-700 cursor-pointer"
+                  className="p-2 hover:bg-black/20 rounded-xl transition-all text-white/80 hover:text-white cursor-pointer"
                   title={isGolsSofridosCollapsed ? "Expandir Gols Sofridos" : "Recolher Gols Sofridos"}
                 >
                   {isGolsSofridosCollapsed ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
@@ -1662,7 +1662,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
 
                       if (sortedGoalkeepers.length === 0) {
                         return (
-                          <div className="text-center py-8 text-xs text-gray-400 font-semibold uppercase">
+                          <div className="text-center py-8 text-xs text-white/70 font-semibold uppercase">
                             Nenhum goleiro encontrado
                           </div>
                         );
@@ -1674,17 +1674,17 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                         <div className="space-y-4">
                           <div className="space-y-1.5">
                             {visibleGoalkeepers.map(({ player, ltOdds }) => (
-                              <div key={player.id} className="flex items-center justify-between border border-gray-50 rounded-xl py-1 px-2 bg-slate-50/50 hover:bg-slate-50 transition-all gap-2">
+                              <div key={player.id} className="flex items-center justify-between border border-white/10 rounded-xl py-1.5 px-3 bg-black/20 hover:bg-black/30 transition-all gap-2">
                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                   <span className={`w-5 h-5 rounded flex items-center justify-center text-[8px] font-black text-white shrink-0 bg-blue-600`}>
                                     GK
                                   </span>
                                   <div className="min-w-0">
-                                    <span className="block text-xs font-black text-gray-800 uppercase tracking-tight truncate">
+                                    <span className="block text-xs font-black text-white uppercase tracking-tight truncate">
                                       {player.nickname || player.name}
                                     </span>
-                                    <span className="block text-[9px] text-gray-400 font-bold uppercase">
-                                      Gols sofridos: <span className="text-red-500 font-black">{ltOdds.currentGoals}</span>
+                                    <span className="block text-[9px] text-white/70 font-bold uppercase">
+                                      Gols sofridos: <span className="text-amber-300 font-black">{ltOdds.currentGoals}</span>
                                     </span>
                                   </div>
                                 </div>
@@ -1700,10 +1700,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                       matchInfo: `Gols Sofridos Mensal: ${player.nickname || player.name}`,
                                       selectedOutcome: `Mais de ${ltOdds.line} Gols Sofridos (${currentMonthName})`
                                     })}
-                                    className="bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/80 rounded-xl py-1 px-2 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center"
+                                    className="bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl py-1 px-2 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center"
                                   >
-                                    <span className="text-[9.5px] font-black uppercase text-slate-700 mb-0.5 tracking-wider">+{ltOdds.line}</span>
-                                    <span className="text-xs font-black text-emerald-600">@ {ltOdds.oddOver}</span>
+                                    <span className="text-[9.5px] font-black uppercase text-white/80 mb-0.5 tracking-wider">+{ltOdds.line}</span>
+                                    <span className="text-xs font-black text-amber-300">@ {ltOdds.oddOver}</span>
                                   </button>
                                   <button
                                     onClick={() => setSelectedBet({
@@ -1714,10 +1714,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                       matchInfo: `Gols Sofridos Mensal: ${player.nickname || player.name}`,
                                       selectedOutcome: `Menos de ${ltOdds.line} Gols Sofridos (${currentMonthName})`
                                     })}
-                                    className="bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/80 rounded-xl py-1 px-2 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center"
+                                    className="bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl py-1 px-2 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center"
                                   >
-                                    <span className="text-[9.5px] font-black uppercase text-slate-700 mb-0.5 tracking-wider">-{ltOdds.line}</span>
-                                    <span className="text-xs font-black text-emerald-600">@ {ltOdds.oddUnder}</span>
+                                    <span className="text-[9.5px] font-black uppercase text-white/80 mb-0.5 tracking-wider">-{ltOdds.line}</span>
+                                    <span className="text-xs font-black text-amber-300">@ {ltOdds.oddUnder}</span>
                                   </button>
                                 </div>
                               </div>
@@ -1725,10 +1725,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                           </div>
 
                           {sortedGoalkeepers.length > 5 && (
-                            <div className="pt-2 text-center border-t border-gray-50">
+                            <div className="pt-2 text-center border-t border-white/10">
                               <button
                                 onClick={() => setShowAllGolsSofridos(!showAllGolsSofridos)}
-                                className="text-xs font-black uppercase tracking-wider text-primary-blue hover:text-blue-950 transition-all px-4 py-2 bg-slate-50 hover:bg-slate-100 rounded-2xl border border-slate-100 cursor-pointer"
+                                className="text-xs font-black uppercase tracking-wider text-amber-300 hover:text-amber-200 transition-all px-4 py-2 bg-black/20 hover:bg-black/30 rounded-2xl border border-white/20 cursor-pointer"
                               >
                                 {showAllGolsSofridos ? "Mostrar Menos ▲" : "Mostrar Mais ▼"}
                               </button>
@@ -1745,20 +1745,20 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
 
           {/* SUBSECTION C: MAIOR PONTUADOR DO MÊS */}
           {betSettings.longTermMonthlyScorer?.enabled && (
-            <div className="bg-white border border-gray-100 rounded-[2.5rem] p-6 shadow-sm space-y-6 mt-8">
-              <div className="border-b border-gray-50 pb-4 flex items-center justify-between">
+            <div className="bg-slate-900 text-white border border-slate-800 rounded-[2.5rem] p-6 shadow-xl space-y-6 mt-8">
+              <div className="border-b border-white/20 pb-4 flex items-center justify-between">
                 <div>
-                  <h4 className="text-lg font-black uppercase italic text-primary-blue flex items-center gap-2">
-                    <Trophy className="w-5 h-5 text-amber-500" />
+                  <h4 className="text-lg font-black uppercase italic text-white flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-amber-300" />
                     Maior Pontuador do Mês
                   </h4>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">
+                  <p className="text-[10px] text-white/80 font-bold uppercase mt-1">
                     Atletas Qualificados - Probabilidades automáticas calculadas por IA baseadas em média recente e consistência histórica
                   </p>
                 </div>
                 <button
                   onClick={() => setIsScorerCollapsed(!isScorerCollapsed)}
-                  className="p-2 hover:bg-slate-100 rounded-xl transition-all text-gray-400 hover:text-gray-700 cursor-pointer"
+                  className="p-2 hover:bg-black/20 rounded-xl transition-all text-white/80 hover:text-white cursor-pointer"
                   title={isScorerCollapsed ? "Expandir" : "Recolher"}
                 >
                   {isScorerCollapsed ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
@@ -1767,16 +1767,16 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
 
               {!isScorerCollapsed && (
                 <div className="space-y-4">
-                  <div className="bg-amber-50 border border-amber-100/60 rounded-2xl p-4 text-xs text-amber-800 space-y-1">
-                    <p className="font-bold uppercase tracking-wider flex items-center gap-1.5 text-amber-900">
-                      <TrendingUp className="w-4 h-4 text-amber-500" /> Entenda a Probabilidade:
+                  <div className="bg-black/25 border border-amber-300/30 rounded-2xl p-4 text-xs text-amber-100 space-y-1">
+                    <p className="font-bold uppercase tracking-wider flex items-center gap-1.5 text-amber-300">
+                      <TrendingUp className="w-4 h-4 text-amber-300" /> Entenda a Probabilidade:
                     </p>
-                    <p className="text-amber-700 leading-relaxed font-medium">
+                    <p className="text-amber-100/90 leading-relaxed font-medium">
                       O modelo analisa a pontuação acumulada do mês atual de cada jogador, projeta os jogos restantes com base em suas médias de pontos e calcula a chance de terminar no topo. O cálculo das odds é ajustado em tempo real.
                     </p>
                   </div>
 
-                  <div className="flex flex-col border border-gray-100 rounded-2xl overflow-hidden divide-y divide-gray-100">
+                  <div className="flex flex-col border border-white/20 rounded-2xl overflow-hidden divide-y divide-white/10 bg-black/20">
                     {(() => {
                       const cohort = getScorerCohort()
                         .filter(item => {
@@ -1787,7 +1787,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
 
                       if (cohort.length === 0) {
                         return (
-                          <div className="text-center py-8 text-xs text-gray-400 font-bold uppercase">
+                          <div className="text-center py-8 text-xs text-white/70 font-bold uppercase">
                             Nenhum atleta qualificado encontrado
                           </div>
                         );
@@ -1809,30 +1809,30 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
 
                       return (
                         <div className="space-y-4">
-                          <div className="flex flex-col divide-y divide-gray-100">
+                          <div className="flex flex-col divide-y divide-white/10">
                             {visibleScorers.map(({ player, currentPoints, playedThisMonth, avgPerMatch, expectedTotal, prob, odd }) => (
-                              <div key={player.id} className="flex flex-col md:flex-row md:items-center justify-between py-4 px-4 hover:bg-slate-50 transition-all gap-4">
+                              <div key={player.id} className="flex flex-col md:flex-row md:items-center justify-between py-4 px-4 hover:bg-black/20 transition-all gap-4 text-white">
                                 <div className="flex items-center gap-3 min-w-0 flex-1">
                                   <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-black text-white shrink-0 shadow-sm ${getPositionColor(player.position)}`}>
                                     {getPositionAbbr(player.position)}
                                   </span>
                                   <div className="min-w-0 flex-1">
-                                    <span className="block text-sm font-black text-gray-800 uppercase tracking-tight truncate">
+                                    <span className="block text-sm font-black text-white uppercase tracking-tight truncate">
                                       {player.nickname || player.name}
                                     </span>
                                     
                                     {/* Monthly scores summary */}
                                     <div className="flex flex-wrap gap-2 mt-1.5">
-                                      <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase">
-                                        Mês Atual: <strong className="text-slate-900 font-black">{currentPoints} pts</strong> ({playedThisMonth} j)
+                                      <span className="bg-black/30 text-white px-2 py-0.5 rounded-md text-[10px] font-bold uppercase border border-white/10">
+                                        Mês Atual: <strong className="text-amber-300 font-black">{currentPoints} pts</strong> ({playedThisMonth} j)
                                       </span>
 
                                       {prevMonths.map(m => {
                                         const pts = playerMonthlyPoints[player.id]?.[m] || 0;
                                         const monthLabel = MONTH_NAMES_PT[m.split('-')[1]] || m;
                                         return (
-                                          <span key={m} className="bg-slate-50 text-gray-500 border border-slate-150 px-2 py-0.5 rounded-md text-[10px] font-medium">
-                                            {monthLabel}: <strong className="text-gray-700 font-bold">{pts} pts</strong>
+                                          <span key={m} className="bg-black/20 text-white/80 border border-white/10 px-2 py-0.5 rounded-md text-[10px] font-medium">
+                                            {monthLabel}: <strong className="text-white font-bold">{pts} pts</strong>
                                           </span>
                                         );
                                       })}
@@ -1843,13 +1843,13 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                 {/* Projections, Probability and Bet Button */}
                                 <div className="flex flex-wrap items-center gap-4 shrink-0 justify-between md:justify-end">
                                   <div className="text-left md:text-right">
-                                    <div className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Projeção Final</div>
-                                    <div className="text-xs font-black text-emerald-600">{expectedTotal.toFixed(1)} pts</div>
+                                    <div className="text-[9px] text-white/70 font-bold uppercase tracking-wider">Projeção Final</div>
+                                    <div className="text-xs font-black text-amber-300">{expectedTotal.toFixed(1)} pts</div>
                                   </div>
 
-                                  <div className="bg-slate-150/60 rounded-xl py-1 px-3 text-center min-w-[70px]">
-                                    <span className="block text-[8px] font-bold text-gray-500 tracking-wider">CHANCE</span>
-                                    <span className="text-xs font-black text-slate-800">{prob.toFixed(1)}%</span>
+                                  <div className="bg-black/30 border border-white/10 rounded-xl py-1 px-3 text-center min-w-[70px]">
+                                    <span className="block text-[8px] font-bold text-white/70 tracking-wider">CHANCE</span>
+                                    <span className="text-xs font-black text-white">{prob.toFixed(1)}%</span>
                                   </div>
 
                                   <button
@@ -1861,10 +1861,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                       matchInfo: `Maior Pontuador do Mês (${currentMonthName})`,
                                       selectedOutcome: `${player.nickname || player.name} para ser o Maior Pontuador`
                                     })}
-                                    className="bg-slate-900 hover:bg-slate-850 text-white rounded-xl py-2 px-4 min-w-[100px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center border border-slate-800"
+                                    className="bg-black/40 hover:bg-black/60 text-white rounded-xl py-2 px-4 min-w-[100px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center border border-white/20"
                                   >
-                                    <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">APOSTAR</span>
-                                    <span className="text-xs font-black text-primary-yellow leading-none">@ {odd.toFixed(2)}</span>
+                                    <span className="text-[8px] font-bold text-white/80 uppercase tracking-widest leading-none mb-1">APOSTAR</span>
+                                    <span className="text-xs font-black text-amber-300 leading-none">@ {odd.toFixed(2)}</span>
                                   </button>
                                 </div>
                               </div>
@@ -1872,10 +1872,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                           </div>
 
                           {cohort.length > 5 && (
-                            <div className="pt-2 text-center border-t border-gray-50">
+                            <div className="pt-2 text-center border-t border-white/10">
                               <button
                                 onClick={() => setShowAllScorer(!showAllScorer)}
-                                className="text-xs font-black uppercase tracking-wider text-primary-blue hover:text-blue-950 transition-all px-4 py-2 bg-slate-50 hover:bg-slate-100 rounded-2xl border border-slate-100 cursor-pointer"
+                                className="text-xs font-black uppercase tracking-wider text-amber-300 hover:text-amber-200 transition-all px-4 py-2 bg-black/20 hover:bg-black/30 rounded-2xl border border-white/20 cursor-pointer"
                               >
                                 {showAllScorer ? "Mostrar Menos ▲" : "Mostrar Mais ▼"}
                               </button>

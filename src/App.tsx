@@ -145,31 +145,27 @@ export default function App() {
       return;
     }
 
+    const normalizedEmail = user.email!.toLowerCase().trim();
+    const dismissedKey = `dismissed_onboarding_${normalizedEmail}`;
+    const isDismissed = localStorage.getItem(dismissedKey);
+    if (isDismissed) {
+      setShowOnboarding(false);
+      return;
+    }
+
     const checkPlayerLink = async () => {
       try {
-        const normalizedEmail = user.email!.toLowerCase().trim();
         const playersRef = collection(db, 'players');
         const q = query(playersRef, where('gmail', '==', normalizedEmail));
         const querySnapshot = await getDocs(q);
         
         if (querySnapshot.empty) {
-          const dismissedKey = `dismissed_onboarding_${normalizedEmail}`;
-          const isDismissed = localStorage.getItem(dismissedKey);
-          
-          if (!isDismissed) {
-            const allPlayersSnap = await getDocs(playersRef);
-            const playersWithNoGmail = allPlayersSnap.docs
-              .map(doc => ({ id: doc.id, ...doc.data() } as Player))
-              .filter(p => !p.gmail || p.gmail.trim() === '');
-            
-            setAllPlayersList(playersWithNoGmail);
-            setShowOnboarding(true);
-            setIsOnboardingPlayer(null);
-            setOnboardingSearch('');
-            setSelectedOnboardingPlayer(null);
-            setOnboardingSuccess(false);
-            setOnboardingError(null);
-          }
+          setShowOnboarding(true);
+          setIsOnboardingPlayer(null);
+          setOnboardingSearch('');
+          setSelectedOnboardingPlayer(null);
+          setOnboardingSuccess(false);
+          setOnboardingError(null);
         }
       } catch (err) {
         console.error("Onboarding checking failed:", err);
@@ -178,6 +174,24 @@ export default function App() {
 
     checkPlayerLink();
   }, [user, isAdmin]);
+
+  // Lazy load players list for onboarding when modal is open
+  useEffect(() => {
+    if (!showOnboarding) return;
+    const loadUnlinkedPlayers = async () => {
+      try {
+        const playersRef = collection(db, 'players');
+        const allPlayersSnap = await getDocs(playersRef);
+        const playersWithNoGmail = allPlayersSnap.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as Player))
+          .filter(p => !p.gmail || p.gmail.trim() === '');
+        setAllPlayersList(playersWithNoGmail);
+      } catch (err) {
+        console.error("Failed to load players for onboarding:", err);
+      }
+    };
+    loadUnlinkedPlayers();
+  }, [showOnboarding]);
 
   const handleLinkPlayer = async () => {
     if (!selectedOnboardingPlayer || !user || !user.email) return;

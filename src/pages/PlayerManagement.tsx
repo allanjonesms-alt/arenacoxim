@@ -563,7 +563,7 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
               <div className="bg-gray-50 rounded-[2rem] p-8 border border-gray-100 shadow-inner">
                 <div className="mb-6 text-center">
                   <h4 className="text-[10px] font-black uppercase text-gray-400 tracking-widest italic">Cálculo de Overall</h4>
-                  <p className="text-[9px] text-gray-400 mt-1 font-bold">Média das Notas + (Média Pontos × 0.3) + Bonus Card • Limite: 105</p>
+                  <p className="text-[9px] text-gray-400 mt-1 font-bold">Média das Notas + (Média Pontos × 0.4) + Bonus Card • Limite: 105</p>
                 </div>
                 <div className="grid grid-cols-5 gap-3">
                   {[

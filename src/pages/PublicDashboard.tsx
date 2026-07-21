@@ -548,14 +548,14 @@ export default function PublicDashboard({
   }, [sharedScoringRules]);
 
   useEffect(() => {
-    if (sharedPlayers && sharedPlayers.length > 0) {
+    if (sharedPlayers !== undefined) {
       setPlayers(sharedPlayers);
       setLoading(false);
     }
   }, [sharedPlayers]);
 
   useEffect(() => {
-    if (sharedCards && sharedCards.length > 0) {
+    if (sharedCards !== undefined) {
       setCards(sharedCards);
     }
   }, [sharedCards]);
@@ -606,11 +606,9 @@ export default function PublicDashboard({
     return () => unsubscribeMatches();
   }, [adminData?.locationId, adminData?.role]);
 
-  // 2. Players subscription (only if not shared)
+  // 2. Players subscription (only if not passed via props)
   useEffect(() => {
-    if (sharedPlayers && sharedPlayers.length > 0) {
-      setPlayers(sharedPlayers);
-      setLoading(false);
+    if (sharedPlayers !== undefined) {
       return;
     }
 
@@ -657,10 +655,9 @@ export default function PublicDashboard({
     return () => unsubscribeAwards();
   }, [adminData?.locationId, adminData?.role]);
 
-  // 4. Cards subscription (only if not shared)
+  // 4. Cards subscription (only if not passed via props)
   useEffect(() => {
-    if (sharedCards && sharedCards.length > 0) {
-      setCards(sharedCards);
+    if (sharedCards !== undefined) {
       return;
     }
 
@@ -706,7 +703,23 @@ export default function PublicDashboard({
     return 'Local não definido';
   };
 
-  if (loading) return null;
+  if (loading && matches.length === 0 && players.length === 0) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-pulse p-2">
+        <div className="lg:col-span-8 space-y-4">
+          <div className="h-6 bg-slate-200/70 rounded-xl w-48" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="h-44 bg-slate-200/50 rounded-3xl" />
+            <div className="h-44 bg-slate-200/50 rounded-3xl" />
+          </div>
+        </div>
+        <div className="lg:col-span-4 space-y-4">
+          <div className="h-6 bg-slate-200/70 rounded-xl w-36" />
+          <div className="h-60 bg-slate-200/50 rounded-3xl" />
+        </div>
+      </div>
+    );
+  }
 
   const allPoints = [...players]
     .filter(p => p.stats.matches > 0)
