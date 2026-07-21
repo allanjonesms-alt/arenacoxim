@@ -193,6 +193,11 @@ export default function App() {
   const navigate = useNavigate();
   const routerLocation = useLocation();
 
+  // Scroll to top on every route transition
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [routerLocation.pathname]);
+
   const MASTER_EMAIL = 'allanjonesms@gmail.com';
 
   useEffect(() => {

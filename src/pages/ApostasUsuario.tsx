@@ -31,26 +31,16 @@ export default function ApostasUsuario({ user, isMaster }: ApostasUsuarioProps) 
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12 animate-in fade-in duration-300">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate('/')}
-            className="p-3 hover:bg-gray-100 rounded-2xl transition-all text-gray-500 hover:text-gray-800 border border-gray-100"
-            title="Voltar para a Página Inicial"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-black text-primary-blue uppercase italic tracking-tight flex items-center gap-2">
-              <TrendingUp className="w-6 h-6 text-primary-yellow" />
-              Apostas Esportivas
-            </h1>
-            <p className="text-gray-400 text-xs font-semibold mt-1">
-              Participe dos palpites da Arena Coxim, gerencie seu saldo e acompanhe seu histórico.
-            </p>
-          </div>
-        </div>
+      {/* Back Button Only */}
+      <div className="flex items-center">
+        <button
+          onClick={() => navigate('/')}
+          className="flex items-center gap-2 px-5 py-3 bg-white hover:bg-gray-50 text-gray-600 hover:text-gray-900 rounded-2xl transition-all border border-gray-100 shadow-sm font-black text-xs uppercase tracking-wider cursor-pointer animate-in fade-in slide-in-from-left-4 duration-200"
+          title="Voltar para a Página Inicial"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Voltar</span>
+        </button>
       </div>
 
       {/* Main betting area */}

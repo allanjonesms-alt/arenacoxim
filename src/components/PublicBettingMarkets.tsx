@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, query, where, getDoc, doc, addDoc, runTransaction } from 'firebase/firestore';
 import { Match, OddsEngineConfig, Player, Card } from '../types';
-import { TrendingUp, Shield, Trophy, Target, Zap, CalendarDays, Search } from 'lucide-react';
+import { TrendingUp, Shield, Trophy, Target, Zap, CalendarDays, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { getPositionAbbr, getPositionColor, getPlayerFinalOverall } from '../utils/playerUtils';
 
 const isMatchWithin30MinOrPast = (matchDate: string, matchTime: string) => {
@@ -36,6 +36,10 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
   const [loading, setLoading] = useState(true);
   const [activeMarketTab, setActiveMarketTab] = useState<'matches' | 'longTerm'>('matches');
   const [longTermSearch, setLongTermSearch] = useState('');
+  const [isGolsNoMesCollapsed, setIsGolsNoMesCollapsed] = useState(false);
+  const [showAllGolsNoMes, setShowAllGolsNoMes] = useState(false);
+  const [isGolsSofridosCollapsed, setIsGolsSofridosCollapsed] = useState(false);
+  const [showAllGolsSofridos, setShowAllGolsSofridos] = useState(false);
 
   // For placing a bet
   const [selectedBet, setSelectedBet] = useState<any | null>(null);
@@ -1062,182 +1066,246 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* SUBSECTION A: GOLS NO MÊS */}
             <div className="bg-white border border-gray-100 rounded-[2.5rem] p-6 shadow-sm space-y-6">
-              <div className="border-b border-gray-50 pb-4">
-                <h4 className="text-lg font-black uppercase italic text-primary-blue flex items-center gap-2">
-                  <Target className="w-5 h-5 text-rose-500" />
-                  Gols no Mês
-                </h4>
-                <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">
-                  Atletas de Linha - Ordenado por gols marcados
-                </p>
+              <div className="border-b border-gray-50 pb-4 flex items-center justify-between">
+                <div>
+                  <h4 className="text-lg font-black uppercase italic text-primary-blue flex items-center gap-2">
+                    <Target className="w-5 h-5 text-rose-500" />
+                    Gols no Mês
+                  </h4>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">
+                    Atletas de Linha - Ordenado por gols marcados
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsGolsNoMesCollapsed(!isGolsNoMesCollapsed)}
+                  className="p-2 hover:bg-slate-100 rounded-xl transition-all text-gray-400 hover:text-gray-700 cursor-pointer"
+                  title={isGolsNoMesCollapsed ? "Expandir Gols no Mês" : "Recolher Gols no Mês"}
+                >
+                  {isGolsNoMesCollapsed ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+                </button>
               </div>
 
-              <div className="space-y-1.5 pr-1">
-                {(() => {
-                  const nonGoalkeepers = players.filter(p => p.position !== 'goleiro' && (p.stats?.matches || 0) >= 10 && !p.bettingDisabled);
-                  const currentMonthKey = new Date().toISOString().substring(0, 7);
-                  const currentMonthName = MONTH_NAMES_PT[currentMonthKey.split('-')[1]] || 'Julho';
+              {!isGolsNoMesCollapsed && (
+                <div className="space-y-4">
+                  <div className="space-y-1.5 pr-1">
+                    {(() => {
+                      const nonGoalkeepers = players.filter(p => p.position !== 'goleiro' && (p.stats?.matches || 0) >= 10 && !p.bettingDisabled);
+                      const currentMonthKey = new Date().toISOString().substring(0, 7);
+                      const currentMonthName = MONTH_NAMES_PT[currentMonthKey.split('-')[1]] || 'Julho';
 
-                  const sortedNonGoalkeepers = [...nonGoalkeepers]
-                    .filter(p => {
-                      const term = longTermSearch.toLowerCase();
-                      return p.name.toLowerCase().includes(term) || p.nickname?.toLowerCase().includes(term);
-                    })
-                    .map(p => {
-                      const ltOdds = calculateLongTermOdds(p);
-                      return { player: p, ltOdds };
-                    })
-                    .sort((a, b) => b.ltOdds.currentGoals - a.ltOdds.currentGoals);
+                      const sortedNonGoalkeepers = [...nonGoalkeepers]
+                        .filter(p => {
+                          const term = longTermSearch.toLowerCase();
+                          return p.name.toLowerCase().includes(term) || p.nickname?.toLowerCase().includes(term);
+                        })
+                        .map(p => {
+                          const ltOdds = calculateLongTermOdds(p);
+                          return { player: p, ltOdds };
+                        })
+                        .sort((a, b) => b.ltOdds.currentGoals - a.ltOdds.currentGoals);
 
-                  if (sortedNonGoalkeepers.length === 0) {
-                    return (
-                      <div className="text-center py-8 text-xs text-gray-400 font-semibold uppercase">
-                        Nenhum jogador encontrado
-                      </div>
-                    );
-                  }
+                      if (sortedNonGoalkeepers.length === 0) {
+                        return (
+                          <div className="text-center py-8 text-xs text-gray-400 font-semibold uppercase">
+                            Nenhum jogador encontrado
+                          </div>
+                        );
+                      }
 
-                  return sortedNonGoalkeepers.map(({ player, ltOdds }) => (
-                    <div key={player.id} className="flex items-center justify-between border border-gray-50 rounded-xl p-2 bg-slate-50/50 hover:bg-slate-50 transition-all gap-2">
-                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <span className={`w-5 h-5 rounded flex items-center justify-center text-[8px] font-black text-white shrink-0 ${getPositionColor(player.position)}`}>
-                          {getPositionAbbr(player.position)}
-                        </span>
-                        <div className="min-w-0">
-                          <span className="block text-xs font-black text-gray-800 uppercase tracking-tight truncate">
-                            {player.nickname || player.name}
-                          </span>
-                          <span className="block text-[9px] text-gray-400 font-bold uppercase">
-                            Gols marcados: <span className="text-gray-700 font-black">{ltOdds.currentGoals}</span>
-                          </span>
+                      const visiblePlayers = showAllGolsNoMes ? sortedNonGoalkeepers : sortedNonGoalkeepers.slice(0, 5);
+
+                      return (
+                        <div className="space-y-4">
+                          <div className="space-y-1.5">
+                            {visiblePlayers.map(({ player, ltOdds }) => (
+                              <div key={player.id} className="flex items-center justify-between border border-gray-50 rounded-xl p-2 bg-slate-50/50 hover:bg-slate-50 transition-all gap-2">
+                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                  <span className={`w-5 h-5 rounded flex items-center justify-center text-[8px] font-black text-white shrink-0 ${getPositionColor(player.position)}`}>
+                                    {getPositionAbbr(player.position)}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <span className="block text-xs font-black text-gray-800 uppercase tracking-tight truncate">
+                                      {player.nickname || player.name}
+                                    </span>
+                                    <span className="block text-[9px] text-gray-400 font-bold uppercase">
+                                      Gols marcados: <span className="text-gray-700 font-black">{ltOdds.currentGoals}</span>
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Odds buttons */}
+                                <div className="flex gap-2 shrink-0">
+                                  <button
+                                    onClick={() => setSelectedBet({
+                                      matchId: `longterm_${player.id}_${currentMonthKey}`,
+                                      market: 'longTermMonthlyGoals',
+                                      selection: 'over',
+                                      odd: ltOdds.oddOver,
+                                      matchInfo: `Artilharia Mensal: ${player.nickname || player.name}`,
+                                      selectedOutcome: `Mais de ${ltOdds.line} Gols (${currentMonthName})`
+                                    })}
+                                    className="bg-slate-900 text-white hover:bg-slate-850 rounded-xl p-2.5 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center border border-white/5"
+                                  >
+                                    <span className="text-[9.5px] font-black uppercase text-white mb-0.5 tracking-wider">+{ltOdds.line}</span>
+                                    <span className="text-xs font-black text-primary-yellow">@ {ltOdds.oddOver}</span>
+                                  </button>
+                                  <button
+                                    onClick={() => setSelectedBet({
+                                      matchId: `longterm_${player.id}_${currentMonthKey}`,
+                                      market: 'longTermMonthlyGoals',
+                                      selection: 'under',
+                                      odd: ltOdds.oddUnder,
+                                      matchInfo: `Artilharia Mensal: ${player.nickname || player.name}`,
+                                      selectedOutcome: `Menos de ${ltOdds.line} Gols (${currentMonthName})`
+                                    })}
+                                    className="bg-slate-900 text-white hover:bg-slate-855 rounded-xl p-2.5 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center border border-white/5"
+                                  >
+                                    <span className="text-[9.5px] font-black uppercase text-white mb-0.5 tracking-wider">-{ltOdds.line}</span>
+                                    <span className="text-xs font-black text-primary-yellow">@ {ltOdds.oddUnder}</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {sortedNonGoalkeepers.length > 5 && (
+                            <div className="pt-2 text-center border-t border-gray-50">
+                              <button
+                                onClick={() => setShowAllGolsNoMes(!showAllGolsNoMes)}
+                                className="text-xs font-black uppercase tracking-wider text-primary-blue hover:text-blue-950 transition-all px-4 py-2 bg-slate-50 hover:bg-slate-100 rounded-2xl border border-slate-100 cursor-pointer"
+                              >
+                                {showAllGolsNoMes ? "Mostrar Menos ▲" : "Mostrar Mais ▼"}
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      </div>
-
-                      {/* Odds buttons */}
-                      <div className="flex gap-2 shrink-0">
-                        <button
-                          onClick={() => setSelectedBet({
-                            matchId: `longterm_${player.id}_${currentMonthKey}`,
-                            market: 'longTermMonthlyGoals',
-                            selection: 'over',
-                            odd: ltOdds.oddOver,
-                            matchInfo: `Artilharia Mensal: ${player.nickname || player.name}`,
-                            selectedOutcome: `Mais de ${ltOdds.line} Gols (${currentMonthName})`
-                          })}
-                          className="bg-slate-900 text-white hover:bg-slate-850 rounded-xl p-2.5 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center border border-white/5"
-                        >
-                          <span className="text-[9.5px] font-black uppercase text-white mb-0.5 tracking-wider">+{ltOdds.line}</span>
-                          <span className="text-xs font-black text-primary-yellow">@ {ltOdds.oddOver}</span>
-                        </button>
-                        <button
-                          onClick={() => setSelectedBet({
-                            matchId: `longterm_${player.id}_${currentMonthKey}`,
-                            market: 'longTermMonthlyGoals',
-                            selection: 'under',
-                            odd: ltOdds.oddUnder,
-                            matchInfo: `Artilharia Mensal: ${player.nickname || player.name}`,
-                            selectedOutcome: `Menos de ${ltOdds.line} Gols (${currentMonthName})`
-                          })}
-                          className="bg-slate-900 text-white hover:bg-slate-855 rounded-xl p-2.5 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center border border-white/5"
-                        >
-                          <span className="text-[9.5px] font-black uppercase text-white mb-0.5 tracking-wider">-{ltOdds.line}</span>
-                          <span className="text-xs font-black text-primary-yellow">@ {ltOdds.oddUnder}</span>
-                        </button>
-                      </div>
-                    </div>
-                  ));
-                })()}
-              </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* SUBSECTION B: GOLS SOFRIDOS */}
             <div className="bg-white border border-gray-100 rounded-[2.5rem] p-6 shadow-sm space-y-6">
-              <div className="border-b border-gray-50 pb-4">
-                <h4 className="text-lg font-black uppercase italic text-primary-blue flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-indigo-500" />
-                  Gols Sofridos
-                </h4>
-                <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">
-                  Goleiros - Ordenado por gols sofridos no mês
-                </p>
+              <div className="border-b border-gray-50 pb-4 flex items-center justify-between">
+                <div>
+                  <h4 className="text-lg font-black uppercase italic text-primary-blue flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-indigo-500" />
+                    Gols Sofridos
+                  </h4>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">
+                    Goleiros - Ordenado por gols sofridos no mês
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsGolsSofridosCollapsed(!isGolsSofridosCollapsed)}
+                  className="p-2 hover:bg-slate-100 rounded-xl transition-all text-gray-400 hover:text-gray-700 cursor-pointer"
+                  title={isGolsSofridosCollapsed ? "Expandir Gols Sofridos" : "Recolher Gols Sofridos"}
+                >
+                  {isGolsSofridosCollapsed ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+                </button>
               </div>
 
-              <div className="space-y-1.5 pr-1">
-                {(() => {
-                  const goalkeepers = players.filter(p => p.position === 'goleiro' && (p.stats?.matches || 0) >= 15 && !p.bettingDisabled);
-                  const currentMonthKey = new Date().toISOString().substring(0, 7);
-                  const currentMonthName = MONTH_NAMES_PT[currentMonthKey.split('-')[1]] || 'Julho';
+              {!isGolsSofridosCollapsed && (
+                <div className="space-y-4">
+                  <div className="space-y-1.5 pr-1">
+                    {(() => {
+                      const goalkeepers = players.filter(p => p.position === 'goleiro' && (p.stats?.matches || 0) >= 15 && !p.bettingDisabled);
+                      const currentMonthKey = new Date().toISOString().substring(0, 7);
+                      const currentMonthName = MONTH_NAMES_PT[currentMonthKey.split('-')[1]] || 'Julho';
 
-                  const sortedGoalkeepers = [...goalkeepers]
-                    .filter(p => {
-                      const term = longTermSearch.toLowerCase();
-                      return p.name.toLowerCase().includes(term) || p.nickname?.toLowerCase().includes(term);
-                    })
-                    .map(p => {
-                      const ltOdds = calculateLongTermConcededOdds(p);
-                      return { player: p, ltOdds };
-                    })
-                    .sort((a, b) => b.ltOdds.currentGoals - a.ltOdds.currentGoals);
+                      const sortedGoalkeepers = [...goalkeepers]
+                        .filter(p => {
+                          const term = longTermSearch.toLowerCase();
+                          return p.name.toLowerCase().includes(term) || p.nickname?.toLowerCase().includes(term);
+                        })
+                        .map(p => {
+                          const ltOdds = calculateLongTermConcededOdds(p);
+                          return { player: p, ltOdds };
+                        })
+                        .sort((a, b) => b.ltOdds.currentGoals - a.ltOdds.currentGoals);
 
-                  if (sortedGoalkeepers.length === 0) {
-                    return (
-                      <div className="text-center py-8 text-xs text-gray-400 font-semibold uppercase">
-                        Nenhum goleiro encontrado
-                      </div>
-                    );
-                  }
+                      if (sortedGoalkeepers.length === 0) {
+                        return (
+                          <div className="text-center py-8 text-xs text-gray-400 font-semibold uppercase">
+                            Nenhum goleiro encontrado
+                          </div>
+                        );
+                      }
 
-                  return sortedGoalkeepers.map(({ player, ltOdds }) => (
-                    <div key={player.id} className="flex items-center justify-between border border-gray-50 rounded-xl p-2 bg-slate-50/50 hover:bg-slate-50 transition-all gap-2">
-                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <span className={`w-5 h-5 rounded flex items-center justify-center text-[8px] font-black text-white shrink-0 bg-blue-600`}>
-                          GK
-                        </span>
-                        <div className="min-w-0">
-                          <span className="block text-xs font-black text-gray-800 uppercase tracking-tight truncate">
-                            {player.nickname || player.name}
-                          </span>
-                          <span className="block text-[9px] text-gray-400 font-bold uppercase">
-                            Gols sofridos: <span className="text-red-500 font-black">{ltOdds.currentGoals}</span>
-                          </span>
+                      const visibleGoalkeepers = showAllGolsSofridos ? sortedGoalkeepers : sortedGoalkeepers.slice(0, 5);
+
+                      return (
+                        <div className="space-y-4">
+                          <div className="space-y-1.5">
+                            {visibleGoalkeepers.map(({ player, ltOdds }) => (
+                              <div key={player.id} className="flex items-center justify-between border border-gray-50 rounded-xl p-2 bg-slate-50/50 hover:bg-slate-50 transition-all gap-2">
+                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                  <span className={`w-5 h-5 rounded flex items-center justify-center text-[8px] font-black text-white shrink-0 bg-blue-600`}>
+                                    GK
+                                  </span>
+                                  <div className="min-w-0">
+                                    <span className="block text-xs font-black text-gray-800 uppercase tracking-tight truncate">
+                                      {player.nickname || player.name}
+                                    </span>
+                                    <span className="block text-[9px] text-gray-400 font-bold uppercase">
+                                      Gols sofridos: <span className="text-red-500 font-black">{ltOdds.currentGoals}</span>
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Odds buttons */}
+                                <div className="flex gap-2 shrink-0">
+                                  <button
+                                    onClick={() => setSelectedBet({
+                                      matchId: `longterm_conceded_${player.id}_${currentMonthKey}`,
+                                      market: 'longTermConcededGoals',
+                                      selection: 'over',
+                                      odd: ltOdds.oddOver,
+                                      matchInfo: `Gols Sofridos Mensal: ${player.nickname || player.name}`,
+                                      selectedOutcome: `Mais de ${ltOdds.line} Gols Sofridos (${currentMonthName})`
+                                    })}
+                                    className="bg-slate-900 text-white hover:bg-slate-850 rounded-xl p-2.5 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center border border-white/5"
+                                  >
+                                    <span className="text-[9.5px] font-black uppercase text-white mb-0.5 tracking-wider">+{ltOdds.line}</span>
+                                    <span className="text-xs font-black text-primary-yellow">@ {ltOdds.oddOver}</span>
+                                  </button>
+                                  <button
+                                    onClick={() => setSelectedBet({
+                                      matchId: `longterm_conceded_${player.id}_${currentMonthKey}`,
+                                      market: 'longTermConcededGoals',
+                                      selection: 'under',
+                                      odd: ltOdds.oddUnder,
+                                      matchInfo: `Gols Sofridos Mensal: ${player.nickname || player.name}`,
+                                      selectedOutcome: `Menos de ${ltOdds.line} Gols Sofridos (${currentMonthName})`
+                                    })}
+                                    className="bg-slate-900 text-white hover:bg-slate-855 rounded-xl p-2.5 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center border border-white/5"
+                                  >
+                                    <span className="text-[9.5px] font-black uppercase text-white mb-0.5 tracking-wider">-{ltOdds.line}</span>
+                                    <span className="text-xs font-black text-primary-yellow">@ {ltOdds.oddUnder}</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {sortedGoalkeepers.length > 5 && (
+                            <div className="pt-2 text-center border-t border-gray-50">
+                              <button
+                                onClick={() => setShowAllGolsSofridos(!showAllGolsSofridos)}
+                                className="text-xs font-black uppercase tracking-wider text-primary-blue hover:text-blue-950 transition-all px-4 py-2 bg-slate-50 hover:bg-slate-100 rounded-2xl border border-slate-100 cursor-pointer"
+                              >
+                                {showAllGolsSofridos ? "Mostrar Menos ▲" : "Mostrar Mais ▼"}
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      </div>
-
-                      {/* Odds buttons */}
-                      <div className="flex gap-2 shrink-0">
-                        <button
-                          onClick={() => setSelectedBet({
-                            matchId: `longterm_conceded_${player.id}_${currentMonthKey}`,
-                            market: 'longTermConcededGoals',
-                            selection: 'over',
-                            odd: ltOdds.oddOver,
-                            matchInfo: `Gols Sofridos Mensal: ${player.nickname || player.name}`,
-                            selectedOutcome: `Mais de ${ltOdds.line} Gols Sofridos (${currentMonthName})`
-                          })}
-                          className="bg-slate-900 text-white hover:bg-slate-850 rounded-xl p-2.5 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center border border-white/5"
-                        >
-                          <span className="text-[9.5px] font-black uppercase text-white mb-0.5 tracking-wider">+{ltOdds.line}</span>
-                          <span className="text-xs font-black text-primary-yellow">@ {ltOdds.oddOver}</span>
-                        </button>
-                        <button
-                          onClick={() => setSelectedBet({
-                            matchId: `longterm_conceded_${player.id}_${currentMonthKey}`,
-                            market: 'longTermConcededGoals',
-                            selection: 'under',
-                            odd: ltOdds.oddUnder,
-                            matchInfo: `Gols Sofridos Mensal: ${player.nickname || player.name}`,
-                            selectedOutcome: `Menos de ${ltOdds.line} Gols Sofridos (${currentMonthName})`
-                          })}
-                          className="bg-slate-900 text-white hover:bg-slate-855 rounded-xl p-2.5 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center border border-white/5"
-                        >
-                          <span className="text-[9.5px] font-black uppercase text-white mb-0.5 tracking-wider">-{ltOdds.line}</span>
-                          <span className="text-xs font-black text-primary-yellow">@ {ltOdds.oddUnder}</span>
-                        </button>
-                      </div>
-                    </div>
-                  ));
-                })()}
-              </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
