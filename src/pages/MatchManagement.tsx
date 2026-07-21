@@ -1208,7 +1208,7 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
                 className={`${
                   match.status === 'finished' ? 'bg-white border-gray-100 grayscale-[0.3]' : 
                   match.status === 'live' ? 'bg-white border-green-200' : 
-                  'bg-white border-primary-blue/5'
+                  'bg-green-600/70 border-green-600/50 text-white'
                 } rounded-3xl border-2 p-6 md:p-8 flex flex-col gap-6 transition-all hover:shadow-xl shadow-sm relative overflow-hidden`}
               >
                 {match.status === 'live' && (

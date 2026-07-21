@@ -184,12 +184,12 @@ export function ScheduledMatchesOdds({ teams, players: playersProp, cards: cards
           const dateStr = dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
 
           return (
-            <div key={match.id} className="bg-slate-50 rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col gap-3">
+            <div key={match.id} className="bg-green-600/70 text-white rounded-2xl p-4 border border-green-600/50 shadow-sm flex flex-col gap-3">
               <div className="flex items-center justify-between">
-                 <span className="text-xs font-black uppercase text-gray-400 bg-gray-200 px-2 py-0.5 rounded-md">
+                 <span className="text-xs font-black uppercase text-white bg-black/20 px-2 py-0.5 rounded-md">
                    {dateStr}
                  </span>
-                 <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-100 text-amber-700">
+                 <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-white/20 text-white">
                    Agendado
                  </span>
               </div>
@@ -197,16 +197,16 @@ export function ScheduledMatchesOdds({ teams, players: playersProp, cards: cards
               <div className="flex items-center justify-between mt-2">
                  <div className="flex flex-col items-center gap-1 w-1/3">
                    <div className="w-6 h-6">
-                     {teamA ? <SoccerJersey color={teamA.color} /> : <Shield className="w-6 h-6 text-gray-400" />}
+                     {teamA ? <SoccerJersey color={teamA.color} /> : <Shield className="w-6 h-6 text-white/80" />}
                    </div>
-                   <span className="text-[10px] font-bold text-gray-600 uppercase text-center line-clamp-1 w-full">{teamA?.name || 'Azul'}</span>
+                   <span className="text-[10px] font-bold text-white uppercase text-center line-clamp-1 w-full drop-shadow-sm">{teamA?.name || 'Azul'}</span>
                  </div>
-                 <div className="text-[10px] font-black text-gray-300 italic">X</div>
+                 <div className="text-[10px] font-black text-white/60 italic">X</div>
                  <div className="flex flex-col items-center gap-1 w-1/3">
                    <div className="w-6 h-6">
-                     {teamB ? <SoccerJersey color={teamB.color} /> : <Shield className="w-6 h-6 text-gray-400" />}
+                     {teamB ? <SoccerJersey color={teamB.color} /> : <Shield className="w-6 h-6 text-white/80" />}
                    </div>
-                   <span className="text-[10px] font-bold text-gray-600 uppercase text-center line-clamp-1 w-full">{teamB?.name || 'Amarelo'}</span>
+                   <span className="text-[10px] font-bold text-white uppercase text-center line-clamp-1 w-full drop-shadow-sm">{teamB?.name || 'Amarelo'}</span>
                  </div>
               </div>
 

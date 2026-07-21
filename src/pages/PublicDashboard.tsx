@@ -760,9 +760,9 @@ export default function PublicDashboard({
                   onClick={() => setSelectedMatch(match)}
                   className={`${
                     match.status === 'finished' ? 'bg-app-card' : 
-                    match.status === 'scheduled' ? 'bg-blue-50' :
+                    match.status === 'scheduled' ? 'bg-green-600/70 border-green-600/50 text-white' :
                     'bg-app-card'
-                  } ${isCompact ? 'rounded-2xl' : 'rounded-3xl'} border ${match.status === 'scheduled' ? 'border-blue-100' : 'border-gray-100'} overflow-hidden hover:border-primary-blue/30 hover:shadow-md transition-all group shadow-sm cursor-pointer hover:scale-[1.01] active:scale-[0.99]`}
+                  } ${isCompact ? 'rounded-2xl' : 'rounded-3xl'} border ${match.status === 'scheduled' ? 'border-green-600/50' : 'border-gray-100'} overflow-hidden hover:border-green-500 hover:shadow-md transition-all group shadow-sm cursor-pointer hover:scale-[1.01] active:scale-[0.99]`}
                 >
                   <div className="flex flex-row h-full">
                     {/* Location Logo - Left Side */}
@@ -779,21 +779,23 @@ export default function PublicDashboard({
                       <div>
                         {/* Match Header */}
                         <div className={`${
-                          match.status === 'finished' ? 'bg-gray-50' : 
-                          match.status === 'scheduled' ? 'bg-blue-100/50' :
-                          'bg-gray-50'
-                        } ${isCompact ? 'px-3 py-1.5 text-[8px] md:text-[9px]' : 'px-4 md:px-5 py-2 md:py-2.5 text-[9px] md:text-[10px]'} uppercase tracking-widest font-black text-gray-400 border-b border-gray-100 flex items-center justify-between`}>
+                          match.status === 'finished' ? 'bg-gray-50 text-gray-400 border-gray-100' : 
+                          match.status === 'scheduled' ? 'bg-black/20 text-white/90 border-white/10' :
+                          'bg-gray-50 text-gray-400 border-gray-100'
+                        } ${isCompact ? 'px-3 py-1.5 text-[8px] md:text-[9px]' : 'px-4 md:px-5 py-2 md:py-2.5 text-[9px] md:text-[10px]'} uppercase tracking-widest font-black border-b flex items-center justify-between`}>
                           <div className="flex items-center gap-1.5 md:gap-3 overflow-hidden font-bold">
                             <span className="flex items-center gap-1 truncate">
-                              <MapPin className={isCompact ? "w-2 h-2 text-primary-blue flex-shrink-0" : "w-2.5 h-2.5 md:w-3 md:h-3 text-primary-blue flex-shrink-0"} /> 
+                              <MapPin className={isCompact ? `w-2 h-2 flex-shrink-0 ${match.status === 'scheduled' ? 'text-white' : 'text-primary-blue'}` : `w-2.5 h-2.5 md:w-3 md:h-3 flex-shrink-0 ${match.status === 'scheduled' ? 'text-white' : 'text-primary-blue'}`} /> 
                               <span className="truncate">{getLocationName(match.locationId)}</span>
                             </span>
-                            <span className="flex items-center gap-1 flex-shrink-0"><CalendarIcon className={isCompact ? "w-2 h-2 text-primary-blue" : "w-2.5 h-2.5 md:w-3 md:h-3 text-primary-blue"} /> {format(new Date(match.date + 'T00:00:00'), 'dd MMM yyyy', { locale: ptBR })}</span>
+                            <span className="flex items-center gap-1 flex-shrink-0">
+                              <CalendarIcon className={isCompact ? `w-2 h-2 ${match.status === 'scheduled' ? 'text-white' : 'text-primary-blue'}` : `w-2.5 h-2.5 md:w-3 md:h-3 ${match.status === 'scheduled' ? 'text-white' : 'text-primary-blue'}`} /> {format(new Date(match.date + 'T00:00:00'), 'dd MMM yyyy', { locale: ptBR })}
+                            </span>
                           </div>
                           <span className={`px-1.5 py-0.5 rounded text-[8px] flex-shrink-0 ${
                             match.status === 'finished' ? 'bg-gray-200 text-gray-600' : 
                             match.status === 'live' ? 'bg-red-500 text-white animate-pulse font-black' : 
-                            'bg-primary-blue/10 text-primary-blue'
+                            'bg-white/20 text-white font-bold'
                           }`}>
                             {match.status === 'finished' ? 'Fim' : match.status === 'live' ? 'VIVO' : 'Agend'}
                           </span>
@@ -806,16 +808,16 @@ export default function PublicDashboard({
                               <div className={isCompact ? "w-6 h-6 md:w-7 md:h-7" : "w-8 h-8 md:w-10 md:h-10"}>
                                 <SoccerJersey color={teams.find(t => t.id === match.teamAId)?.color || '#555'} />
                               </div>
-                              <div className={`${isCompact ? 'text-[10px] md:text-xs' : 'text-xs md:text-lg'} font-black uppercase tracking-tight text-primary-blue truncate w-full px-1`}>
+                              <div className={`${isCompact ? 'text-[10px] md:text-xs' : 'text-xs md:text-lg'} font-black uppercase tracking-tight ${match.status === 'scheduled' ? 'text-white drop-shadow-sm' : 'text-primary-blue'} truncate w-full px-1`}>
                                 {teams.find(t => t.id === match.teamAId)?.name || 'Time A'}
                               </div>
                             </div>
                           </div>
 
                           <div className={isCompact ? "flex items-center gap-1 px-1" : "flex items-center gap-3 md:gap-10 px-2 md:px-8"}>
-                            <div className={isCompact ? "text-xl md:text-3xl font-black italic text-primary-blue tabular-nums drop-shadow-sm" : "text-3xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm"}>{match.scoreA}</div>
-                            <div className={isCompact ? "text-[8px] font-black text-primary-yellow opacity-30 italic" : "text-[10px] md:text-sm font-black text-primary-yellow opacity-30 italic"}>X</div>
-                            <div className={isCompact ? "text-xl md:text-3xl font-black italic text-primary-blue tabular-nums drop-shadow-sm" : "text-3xl md:text-6xl font-black italic text-primary-blue tabular-nums drop-shadow-sm"}>{match.scoreB}</div>
+                            <div className={isCompact ? `text-xl md:text-3xl font-black italic ${match.status === 'scheduled' ? 'text-white' : 'text-primary-blue'} tabular-nums drop-shadow-sm` : `text-3xl md:text-6xl font-black italic ${match.status === 'scheduled' ? 'text-white' : 'text-primary-blue'} tabular-nums drop-shadow-sm`}>{match.scoreA}</div>
+                            <div className={isCompact ? `text-[8px] font-black ${match.status === 'scheduled' ? 'text-white/60' : 'text-primary-yellow opacity-30'} italic` : `text-[10px] md:text-sm font-black ${match.status === 'scheduled' ? 'text-white/60' : 'text-primary-yellow opacity-30'} italic`}>X</div>
+                            <div className={isCompact ? `text-xl md:text-3xl font-black italic ${match.status === 'scheduled' ? 'text-white' : 'text-primary-blue'} tabular-nums drop-shadow-sm` : `text-3xl md:text-6xl font-black italic ${match.status === 'scheduled' ? 'text-white' : 'text-primary-blue'} tabular-nums drop-shadow-sm`}>{match.scoreB}</div>
                           </div>
 
                           <div className="flex-1 text-center min-w-0">
@@ -823,7 +825,7 @@ export default function PublicDashboard({
                               <div className={isCompact ? "w-6 h-6 md:w-7 md:h-7" : "w-8 h-8 md:w-10 md:h-10"}>
                                 <SoccerJersey color={teams.find(t => t.id === match.teamBId)?.color || '#555'} />
                               </div>
-                              <div className={`${isCompact ? 'text-[10px] md:text-xs' : 'text-xs md:text-lg'} font-black uppercase tracking-tight text-primary-blue truncate w-full px-1`}>
+                              <div className={`${isCompact ? 'text-[10px] md:text-xs' : 'text-xs md:text-lg'} font-black uppercase tracking-tight ${match.status === 'scheduled' ? 'text-white drop-shadow-sm' : 'text-primary-blue'} truncate w-full px-1`}>
                                 {teams.find(t => t.id === match.teamBId)?.name || 'Time B'}
                               </div>
                             </div>

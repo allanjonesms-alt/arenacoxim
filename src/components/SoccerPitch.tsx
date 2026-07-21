@@ -148,63 +148,65 @@ export const SoccerPitch: React.FC<SoccerPitchProps> = ({
     const glowColor = isTeamB ? 'rgba(37, 99, 235, 0.85)' : 'rgba(234, 179, 8, 0.9)';
     const shadowFilter = `drop-shadow(0 2px 3px rgba(0,0,0,0.45)) drop-shadow(0 0 5px ${glowColor})`;
 
+    const playerName = (player.nickname || player.name.split(' ')[0]).toUpperCase();
+
     return (
-      <div 
-        className="w-8 sm:w-10 md:w-12 aspect-[3/4] relative select-none pointer-events-none rounded-none overflow-hidden bg-transparent"
-        style={{ filter: shadowFilter }}
-      >
-        {/* Card Background image using inline <img> to ensure crossOrigin and correct rendering in html2canvas */}
-        {proxiedCardBg ? (
-          <img 
-            src={proxiedCardBg} 
-            alt="" 
-            crossOrigin="anonymous" 
-            referrerPolicy="no-referrer" 
-            className="absolute inset-0 w-full h-full object-fill z-0 pointer-events-none bg-transparent" 
-          />
-        ) : (
-          <div className="absolute inset-0 w-full h-full bg-slate-900/40 backdrop-blur-[1px] border border-white/10 rounded-lg z-0" />
-        )}
-
-        {/* Rating and Position on the left (FUT layout) */}
+      <div className="flex flex-col items-center select-none pointer-events-none">
+        {/* FUT Card Figure */}
         <div 
-          className="absolute left-[7%] top-[18%] flex flex-col items-center select-none z-10" 
-          style={{ color: fontColor }}
+          className="w-8 sm:w-10 md:w-12 aspect-[3/4] relative select-none pointer-events-none rounded-none overflow-hidden bg-transparent"
+          style={{ filter: shadowFilter }}
         >
-          <span className="text-[11px] sm:text-[14px] md:text-[17px] font-black italic leading-none tracking-tighter">
-            {overall.toString().padStart(2, '0')}
-          </span>
-          <span className="text-[3.5px] sm:text-[4.5px] md:text-[5.5px] font-black uppercase mt-0 sm:mt-0.5 tracking-wider opacity-95">
-            {(player.position || '').slice(0, 3).toUpperCase()}
-          </span>
-        </div>
-
-        {/* Player Photo */}
-        <div className="absolute right-[5%] top-[14%] w-[71.5%] aspect-square pointer-events-none z-20 overflow-hidden bg-transparent">
-          {proxiedPhotoUrl ? (
+          {/* Card Background image using inline <img> to ensure crossOrigin and correct rendering in html2canvas */}
+          {proxiedCardBg ? (
             <img 
-              src={proxiedPhotoUrl} 
+              src={proxiedCardBg} 
               alt="" 
-              referrerPolicy="no-referrer"
-              crossOrigin="anonymous"
-              className="w-full h-full object-cover rounded-none bg-transparent" 
+              crossOrigin="anonymous" 
+              referrerPolicy="no-referrer" 
+              className="absolute inset-0 w-full h-full object-fill z-0 pointer-events-none bg-transparent" 
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-transparent">
-              <div className="scale-[0.5] md:scale-[0.7] opacity-85">
-                <SoccerJersey color={isGoalkeeper ? "#111" : teamColor} size={20} />
-              </div>
-            </div>
+            <div className="absolute inset-0 w-full h-full bg-slate-900/40 backdrop-blur-[1px] border border-white/10 rounded-lg z-0" />
           )}
+
+          {/* Rating and Position on the left (FUT layout) */}
+          <div 
+            className="absolute left-[7%] top-[18%] flex flex-col items-center select-none z-10" 
+            style={{ color: fontColor }}
+          >
+            <span className="text-[11px] sm:text-[14px] md:text-[17px] font-black italic leading-none tracking-tighter">
+              {overall.toString().padStart(2, '0')}
+            </span>
+            <span className="text-[3.5px] sm:text-[4.5px] md:text-[5.5px] font-black uppercase mt-0 sm:mt-0.5 tracking-wider opacity-95">
+              {(player.position || '').slice(0, 3).toUpperCase()}
+            </span>
+          </div>
+
+          {/* Player Photo */}
+          <div className="absolute right-[5%] top-[14%] w-[71.5%] aspect-square pointer-events-none z-20 overflow-hidden bg-transparent">
+            {proxiedPhotoUrl ? (
+              <img 
+                src={proxiedPhotoUrl} 
+                alt="" 
+                referrerPolicy="no-referrer"
+                crossOrigin="anonymous"
+                className="w-full h-full object-cover rounded-none bg-transparent" 
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-transparent">
+                <div className="scale-[0.5] md:scale-[0.7] opacity-85">
+                  <SoccerJersey color={isGoalkeeper ? "#111" : teamColor} size={20} />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Player Name below candidate photo inside the FUT card */}
-        <div 
-          className="absolute bottom-[8%] left-0 right-0 text-center select-none z-30 px-0.5 pointer-events-none"
-          style={{ color: fontColor }}
-        >
-          <span className="block text-[6px] sm:text-[7.5px] md:text-[9px] font-black uppercase tracking-tighter leading-none truncate whitespace-nowrap px-0.5">
-            {(player.nickname || player.name.split(' ')[0]).toUpperCase()}
+        {/* Player Name outside card figure */}
+        <div className="mt-0.5 bg-black/75 backdrop-blur-md px-1 sm:px-1.5 py-0.5 rounded border border-white/20 shadow-md text-center max-w-[64px] sm:max-w-[80px] md:max-w-[96px]">
+          <span className="block text-[6.5px] sm:text-[8px] md:text-[10px] font-black uppercase tracking-tighter text-white leading-none truncate whitespace-nowrap">
+            {playerName}
           </span>
         </div>
       </div>
