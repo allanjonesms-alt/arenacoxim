@@ -495,7 +495,7 @@ export default function BancoUsuario({ user }: BancoUsuarioProps) {
                             </div>
                             <div>
                               <span className="block text-xs font-black text-gray-800 uppercase tracking-tight">
-                                {tx.type === 'deposit' ? 'Depósito PIX' : 'Saque Bancário'}
+                                {tx.note ? tx.note : (tx.type === 'deposit' ? 'Depósito PIX' : 'Saque Bancário')}
                               </span>
                               <span className="block text-[10px] text-gray-400 font-bold">
                                 {new Date(tx.createdAt).toLocaleString('pt-BR')}

@@ -7,6 +7,7 @@ import { motion } from 'motion/react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getPositionAbbr, getPositionColor, getPlayerFinalOverall } from '../utils/playerUtils';
 import { handleFirestoreError, OperationType } from '../App';
+import { calculateMatchPoints } from '../utils/scoringEngine';
 
 interface Props {
   adminData?: AdminData | null;
@@ -38,7 +39,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
   const [simulationHistory, setSimulationHistory] = useState<OddsSimulationHistory[]>([]);
   const [isSavingHistory, setIsSavingHistory] = useState(false);
   const [longTermSearch, setLongTermSearch] = useState('');
-  const [activeBetTab, setActiveBetTab] = useState<'linha' | 'goleiro'>('linha');
+  const [activeBetTab, setActiveBetTab] = useState<'linha' | 'goleiro' | 'pontuador'>('linha');
 
   const [showBetsReport, setShowBetsReport] = useState(false);
   const [activeBets, setActiveBets] = useState<any[]>([]);
@@ -857,6 +858,148 @@ export default function SimuladorConfrontos({ adminData }: Props) {
 
   const playerMonthlyGoals = getMonthlyGoalsData();
   const playerMonthlyConceded = getMonthlyConcededData();
+  const getMonthlyPointsData = () => {
+    const data: { [playerId: string]: { [monthKey: string]: number } } = {};
+    const finishedMatches = matches.filter(m => m.status === 'finished');
+    const activeRules = {
+      win: 3,
+      draw: 1,
+      goal: 5,
+      assist: 3,
+      cleanSheet: 5,
+      mvp: 10,
+      penaltySave: 5,
+      penaltyMiss: 5
+    };
+
+    players.forEach(p => {
+      data[p.id] = {};
+    });
+
+    finishedMatches.forEach(match => {
+      if (!match.date) return;
+      const monthKey = match.date.substring(0, 7);
+
+      const scoreA = match.scoreA ?? 0;
+      const scoreB = match.scoreB ?? 0;
+      const events = match.events || [];
+      const mvpId = match.mvpId || null;
+
+      try {
+        const results = calculateMatchPoints(
+          match,
+          scoreA,
+          scoreB,
+          events,
+          mvpId,
+          players,
+          activeRules as any
+        );
+
+        results.forEach(res => {
+          if (res.playerId.startsWith('unidentified_')) return;
+          if (!data[res.playerId]) {
+            data[res.playerId] = {};
+          }
+          data[res.playerId][monthKey] = (data[res.playerId][monthKey] || 0) + res.points;
+        });
+      } catch (err) {
+        console.error("Erro ao calcular pontos para longo prazo:", err);
+      }
+    });
+
+    return data;
+  };
+
+  const playerMonthlyPoints = getMonthlyPointsData();
+
+  const getScorerCohort = () => {
+    const currentDateObj = new Date();
+    const currentMonthKey = currentDateObj.toISOString().substring(0, 7);
+    const finishedMatchesThisMonth = matches.filter(m => m.status === 'finished' && m.date?.substring(0, 7) === currentMonthKey);
+    const remainingMatches = getRemainingMatchesInMonth(false);
+
+    const cohort = players.map(p => {
+      const careerMatches = p.stats?.matches || 0;
+      const careerPoints = p.stats?.points || 0;
+      
+      let positionDefault = 4.0;
+      if (p.position === 'centroavante') positionDefault = 6.0;
+      else if (p.position === 'meio-campo') positionDefault = 5.0;
+      else if (p.position === 'lateral') positionDefault = 4.5;
+      else if (p.position === 'zagueiro') positionDefault = 3.5;
+      else if (p.position === 'goleiro') positionDefault = 4.0;
+
+      const careerAvg = careerMatches > 0 ? (careerPoints / careerMatches) : positionDefault;
+      const weight = Math.min(1.0, careerMatches / 15);
+      const blendedCareerAvg = (careerAvg * weight) + (positionDefault * (1 - weight));
+
+      const C = playerMonthlyPoints[p.id]?.[currentMonthKey] || 0;
+      const playedThisMonth = finishedMatchesThisMonth.filter(m => m.teamA.includes(p.id) || m.teamB.includes(p.id)).length;
+
+      let projectedPointsPerMatch = blendedCareerAvg;
+      if (playedThisMonth > 0) {
+        const currentMonthAvg = C / playedThisMonth;
+        const formWeight = Math.min(0.40, playedThisMonth / 8);
+        projectedPointsPerMatch = (currentMonthAvg * formWeight) + (blendedCareerAvg * (1 - formWeight));
+      }
+
+      const expectedRemaining = projectedPointsPerMatch * remainingMatches;
+      const expectedTotal = C + expectedRemaining;
+
+      return {
+        id: p.id,
+        player: p,
+        currentPoints: C,
+        playedThisMonth,
+        avgPerMatch: playedThisMonth > 0 ? (C / playedThisMonth) : blendedCareerAvg,
+        expectedTotal,
+        bettingDisabled: p.bettingDisabled || false
+      };
+    });
+
+    const activeCohort = cohort.filter(item => !item.bettingDisabled && (item.player.stats?.matches || 0) >= 1);
+
+    const T = 12.0;
+    let sumExp = 0;
+    
+    activeCohort.forEach(item => {
+      const val = Math.max(1.0, item.expectedTotal);
+      sumExp += Math.exp(val / T);
+    });
+
+    const finalCohort = cohort.map(item => {
+      const val = Math.max(1.0, item.expectedTotal);
+      const prob = !item.bettingDisabled && sumExp > 0 ? (Math.exp(val / T) / sumExp) : 0;
+      const rawOdd = prob > 0 ? (1.20 / prob) : 99.00;
+      const odd = Math.max(1.15, Math.min(99.00, Number(rawOdd.toFixed(2))));
+
+      return {
+        ...item,
+        prob: prob * 100,
+        odd
+      };
+    });
+
+    return finalCohort;
+  };
+
+  const handleToggleScorerMarket = async () => {
+    try {
+      const current = betSettings.longTermMonthlyScorer?.enabled || false;
+      const ref = doc(db, 'settings', 'bets');
+      await setDoc(ref, { 
+        longTermMonthlyScorer: { 
+          enabled: !current 
+        } 
+      }, { merge: true });
+      alert(!current ? 'Mercado de Maior Pontuador do Mês habilitado!' : 'Mercado de Maior Pontuador do Mês desabilitado.');
+    } catch (error: any) {
+      console.error(error);
+      alert("Erro ao atualizar o mercado de pontuadores: " + error.message);
+    }
+  };
+
   const activeMonths = getActiveMonths();
 
   const calculateLongTermOdds = (player: Player) => {
@@ -1593,31 +1736,50 @@ export default function SimuladorConfrontos({ adminData }: Props) {
           <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-lg mt-8 relative overflow-hidden">
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-blue-500"></div>
             
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
               <div>
                 <h3 className="text-lg font-black uppercase tracking-tight text-gray-900 flex items-center gap-2">
                   <CalendarDays className="w-5 h-5 text-emerald-500" />
-                  Apostas de Longo Prazo - Gols do Mês
+                  Apostas de Longo Prazo
                 </h3>
                 <p className="text-xs text-gray-500 font-medium mt-1">
-                  Odds de Over/Under para gols de cada atleta no mês atual, atualizadas automaticamente a cada partida.
+                  Odds automáticas para gols, gols sofridos e maior pontuador do mês, baseadas no rendimento histórico e atual.
                 </p>
               </div>
               
-              <button 
-                onClick={handleToggleLongTermMarket}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all ${
-                  betSettings.longTermMonthlyGoals?.enabled
-                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                }`}
-              >
-                {betSettings.longTermMonthlyGoals?.enabled ? (
-                  <><Zap className="w-4 h-4" /> Público: Ativo (ON)</>
-                ) : (
-                  <><Shield className="w-4 h-4" /> Público: Inativo (OFF)</>
-                )}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button 
+                  onClick={handleToggleLongTermMarket}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-wider transition-all ${
+                    betSettings.longTermMonthlyGoals?.enabled
+                      ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                  title="Habilita mercado de Gols no Mês (Over/Under) e Gols Sofridos no Mês"
+                >
+                  {betSettings.longTermMonthlyGoals?.enabled ? (
+                    <><Zap className="w-3.5 h-3.5" /> Gols Mês: ON</>
+                  ) : (
+                    <><Shield className="w-3.5 h-3.5" /> Gols Mês: OFF</>
+                  )}
+                </button>
+
+                <button 
+                  onClick={handleToggleScorerMarket}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-wider transition-all ${
+                    betSettings.longTermMonthlyScorer?.enabled
+                      ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                  title="Habilita mercado de Maior Pontuador do Mês"
+                >
+                  {betSettings.longTermMonthlyScorer?.enabled ? (
+                    <><Trophy className="w-3.5 h-3.5 text-amber-500" /> Pontuador: ON</>
+                  ) : (
+                    <><Shield className="w-3.5 h-3.5" /> Pontuador: OFF</>
+                  )}
+                </button>
+              </div>
             </div>
 
             {/* Filtro de Busca */}
@@ -1655,6 +1817,17 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                 }`}
               >
                 Gols Sofridos (Goleiros)
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveBetTab('pontuador')}
+                className={`pb-3 px-4 text-xs sm:text-sm font-black uppercase tracking-wider border-b-2 transition-all ${
+                  activeBetTab === 'pontuador'
+                    ? 'border-amber-500 text-amber-600'
+                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                Maior Pontuador
               </button>
             </div>
 
@@ -1831,6 +2004,142 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                   </div>
                 </div>
               )}
+
+              {activeBetTab === 'pontuador' && (
+                <div className="space-y-4">
+                  <h4 className="text-sm font-black uppercase tracking-wider text-amber-600 border-b border-gray-150 pb-2 flex items-center justify-between">
+                    <span>Maior Pontuador do Mês</span>
+                    <span className="text-[10px] text-gray-400 font-bold lowercase">atleta de linha e goleiro - ordenado por projeção de pontos</span>
+                  </h4>
+                  
+                  {/* Explanatory banner */}
+                  <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 text-xs text-amber-800 space-y-1">
+                    <p className="font-bold flex items-center gap-1.5 uppercase tracking-wide">
+                      <TrendingUp className="w-4 h-4 text-amber-500" /> Como funciona o cálculo de probabilidades:
+                    </p>
+                    <p className="text-amber-700 font-medium">
+                      As probabilidades são calculadas projetando a pontuação acumulada até o fim do mês, combinando a média de pontos por jogo do mês atual com a média da carreira. Os meses anteriores dão a consistência histórica do atleta.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col bg-white border border-gray-100 rounded-2xl overflow-hidden divide-y divide-gray-100 shadow-sm">
+                    {(() => {
+                      const cohort = getScorerCohort()
+                        .filter(item => {
+                          const term = longTermSearch.toLowerCase();
+                          return item.player.name.toLowerCase().includes(term) || item.player.nickname?.toLowerCase().includes(term);
+                        })
+                        .sort((a, b) => b.expectedTotal - a.expectedTotal);
+
+                      if (cohort.length === 0) {
+                        return <p className="text-xs text-gray-400 italic text-center py-6">Nenhum jogador qualificado encontrado.</p>;
+                      }
+
+                      const currentDateObj = new Date();
+                      const currentMonthKey = currentDateObj.toISOString().substring(0, 7);
+                      const prevMonths = activeMonths.filter(m => m !== currentMonthKey).slice(-2).reverse();
+
+                      const MONTH_NAMES_PT: { [key: string]: string } = {
+                        '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março', '04': 'Abril',
+                        '05': 'Maio', '06': 'Junho', '07': 'Julho', '08': 'Agosto',
+                        '09': 'Setembro', '10': 'Outubro', '11': 'Novembro', '12': 'Dezembro'
+                      };
+
+                      return cohort.map(({ player, currentPoints, playedThisMonth, avgPerMatch, expectedTotal, prob, odd, bettingDisabled }) => {
+                        return (
+                          <div key={player.id} className={`flex flex-col xl:flex-row xl:items-center justify-between py-4 px-4 hover:bg-slate-50 transition-all gap-4 ${bettingDisabled ? 'opacity-65 grayscale-[30%]' : ''}`}>
+                            <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                              <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-black text-white shrink-0 shadow-sm ${getPositionColor(player.position)}`}>
+                                {getPositionAbbr(player.position)}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-black text-gray-800 uppercase tracking-tight truncate">
+                                    {player.nickname || player.name}
+                                  </span>
+                                  {bettingDisabled && (
+                                    <span className="text-[8px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md font-black uppercase shrink-0">Desativado</span>
+                                  )}
+                                </div>
+                                
+                                {/* Historical points & Current Month details */}
+                                <div className="flex flex-wrap gap-2 mt-1.5">
+                                  {/* Current Month */}
+                                  <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase">
+                                    Mês Atual: <strong className="text-slate-900 font-black">{currentPoints} pts</strong> ({playedThisMonth} j)
+                                  </span>
+
+                                  {/* Previous Months */}
+                                  {prevMonths.map(m => {
+                                    const pts = playerMonthlyPoints[player.id]?.[m] || 0;
+                                    const monthLabel = MONTH_NAMES_PT[m.split('-')[1]] || m;
+                                    return (
+                                      <span key={m} className="bg-slate-50 text-gray-500 border border-slate-150 px-2 py-0.5 rounded-md text-[10px] font-medium">
+                                        {monthLabel}: <strong className="text-gray-700 font-bold">{pts} pts</strong>
+                                      </span>
+                                    );
+                                  })}
+
+                                  {/* Career Avg */}
+                                  <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[10px] font-medium">
+                                    Carreira/Jogo: <strong className="text-blue-800 font-bold">{((player.stats?.points || 0) / (player.stats?.matches || 1)).toFixed(1)}</strong>
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Projections & Odds */}
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 shrink-0 justify-between xl:justify-end">
+                              <div className="text-left sm:text-right">
+                                <div className="text-[10px] text-gray-400 font-bold uppercase">Média Proj. / Projeção Final</div>
+                                <div className="text-xs font-bold text-gray-700">
+                                  {avgPerMatch.toFixed(1)} pts/jogo → <span className="text-emerald-600 font-black text-sm">{expectedTotal.toFixed(1)} pts</span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                {adminData && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      try {
+                                        await updateDoc(doc(db, 'players', player.id), {
+                                          bettingDisabled: !player.bettingDisabled
+                                        });
+                                      } catch (err) {
+                                        console.error(err);
+                                      }
+                                    }}
+                                    className={`px-2.5 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all shadow-sm ${
+                                      !player.bettingDisabled
+                                        ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                    }`}
+                                  >
+                                    {!player.bettingDisabled ? '🟢 Ativo' : '🔴 Inativo'}
+                                  </button>
+                                )}
+
+                                {/* Probability & Odd badge */}
+                                <div className="flex gap-2">
+                                  <div className="bg-slate-100 border border-slate-200 rounded-xl py-1 px-3 text-center min-w-[70px]">
+                                    <span className="block text-[9px] font-bold text-gray-500 tracking-wider">CHANCE</span>
+                                    <span className="text-xs font-black text-slate-800">{prob.toFixed(1)}%</span>
+                                  </div>
+                                  <div className="bg-slate-900 border border-slate-800 rounded-xl py-1 px-3 text-center min-w-[80px]">
+                                    <span className="block text-[9px] font-bold text-gray-400 tracking-wider">ODD</span>
+                                    <span className="text-xs font-black text-primary-yellow">@ {odd.toFixed(2)}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+              )}
           </div>
         </div>
       </div>
@@ -1924,7 +2233,9 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                   if (m === 'matchGoals') return 'Gols do Confronto';
                   if (m === 'playerGoals') return 'Gols de Goleadores (Linha)';
                   if (m === 'playerAssists') return 'Assistências (Linha)';
-                  if (m === 'long_term') return 'Gols/Goleiro no Mês';
+                  if (m === 'long_term' || m === 'longTermMonthlyGoals') return 'Gols no Mês (Linha)';
+                  if (m === 'longTermConcededGoals') return 'Gols Sofridos (Goleiros)';
+                  if (m === 'longTermMonthlyScorer') return 'Maior Pontuador do Mês';
                   return m || 'Personalizado';
                 };
 

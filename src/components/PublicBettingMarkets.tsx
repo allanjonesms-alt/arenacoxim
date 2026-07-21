@@ -4,6 +4,7 @@ import { collection, onSnapshot, query, where, getDoc, doc, addDoc, runTransacti
 import { Match, OddsEngineConfig, Player, Card } from '../types';
 import { TrendingUp, Shield, Trophy, Target, Zap, CalendarDays, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { getPositionAbbr, getPositionColor, getPlayerFinalOverall } from '../utils/playerUtils';
+import { calculateMatchPoints } from '../utils/scoringEngine';
 
 const isMatchWithin30MinOrPast = (matchDate: string, matchTime: string) => {
   if (!matchDate || !matchTime) return false;
@@ -40,6 +41,8 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
   const [showAllGolsNoMes, setShowAllGolsNoMes] = useState(false);
   const [isGolsSofridosCollapsed, setIsGolsSofridosCollapsed] = useState(false);
   const [showAllGolsSofridos, setShowAllGolsSofridos] = useState(false);
+  const [isScorerCollapsed, setIsScorerCollapsed] = useState(false);
+  const [showAllScorer, setShowAllScorer] = useState(false);
 
   // For placing a bet
   const [selectedBet, setSelectedBet] = useState<any | null>(null);
@@ -490,6 +493,132 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
 
   const playerMonthlyGoals = getMonthlyGoalsData();
   const playerMonthlyConceded = getMonthlyConcededData();
+  const getMonthlyPointsData = () => {
+    const data: { [playerId: string]: { [monthKey: string]: number } } = {};
+    const finishedMatches = matches.filter(m => m.status === 'finished');
+    const activeRules = {
+      win: 3,
+      draw: 1,
+      goal: 5,
+      assist: 3,
+      cleanSheet: 5,
+      mvp: 10,
+      penaltySave: 5,
+      penaltyMiss: 5
+    };
+
+    players.forEach(p => {
+      data[p.id] = {};
+    });
+
+    finishedMatches.forEach(match => {
+      if (!match.date) return;
+      const monthKey = match.date.substring(0, 7);
+
+      const scoreA = match.scoreA ?? 0;
+      const scoreB = match.scoreB ?? 0;
+      const events = match.events || [];
+      const mvpId = match.mvpId || null;
+
+      try {
+        const results = calculateMatchPoints(
+          match,
+          scoreA,
+          scoreB,
+          events,
+          mvpId,
+          players,
+          activeRules as any
+        );
+
+        results.forEach(res => {
+          if (res.playerId.startsWith('unidentified_')) return;
+          if (!data[res.playerId]) {
+            data[res.playerId] = {};
+          }
+          data[res.playerId][monthKey] = (data[res.playerId][monthKey] || 0) + res.points;
+        });
+      } catch (err) {
+        console.error("Erro ao calcular pontos para longo prazo:", err);
+      }
+    });
+
+    return data;
+  };
+
+  const playerMonthlyPoints = getMonthlyPointsData();
+
+  const getScorerCohort = () => {
+    const currentDateObj = new Date();
+    const currentMonthKey = currentDateObj.toISOString().substring(0, 7);
+    const finishedMatchesThisMonth = matches.filter(m => m.status === 'finished' && m.date?.substring(0, 7) === currentMonthKey);
+    const remainingMatches = getRemainingMatchesInMonth(false);
+
+    const cohort = players.map(p => {
+      const careerMatches = p.stats?.matches || 0;
+      const careerPoints = p.stats?.points || 0;
+      
+      let positionDefault = 4.0;
+      if (p.position === 'centroavante') positionDefault = 6.0;
+      else if (p.position === 'meio-campo') positionDefault = 5.0;
+      else if (p.position === 'lateral') positionDefault = 4.5;
+      else if (p.position === 'zagueiro') positionDefault = 3.5;
+      else if (p.position === 'goleiro') positionDefault = 4.0;
+
+      const careerAvg = careerMatches > 0 ? (careerPoints / careerMatches) : positionDefault;
+      const weight = Math.min(1.0, careerMatches / 15);
+      const blendedCareerAvg = (careerAvg * weight) + (positionDefault * (1 - weight));
+
+      const C = playerMonthlyPoints[p.id]?.[currentMonthKey] || 0;
+      const playedThisMonth = finishedMatchesThisMonth.filter(m => m.teamA.includes(p.id) || m.teamB.includes(p.id)).length;
+
+      let projectedPointsPerMatch = blendedCareerAvg;
+      if (playedThisMonth > 0) {
+        const currentMonthAvg = C / playedThisMonth;
+        const formWeight = Math.min(0.40, playedThisMonth / 8);
+        projectedPointsPerMatch = (currentMonthAvg * formWeight) + (blendedCareerAvg * (1 - formWeight));
+      }
+
+      const expectedRemaining = projectedPointsPerMatch * remainingMatches;
+      const expectedTotal = C + expectedRemaining;
+
+      return {
+        id: p.id,
+        player: p,
+        currentPoints: C,
+        playedThisMonth,
+        avgPerMatch: playedThisMonth > 0 ? (C / playedThisMonth) : blendedCareerAvg,
+        expectedTotal,
+        bettingDisabled: p.bettingDisabled || false
+      };
+    });
+
+    const activeCohort = cohort.filter(item => !item.bettingDisabled && (item.player.stats?.matches || 0) >= 1);
+
+    const T = 12.0;
+    let sumExp = 0;
+    
+    activeCohort.forEach(item => {
+      const val = Math.max(1.0, item.expectedTotal);
+      sumExp += Math.exp(val / T);
+    });
+
+    const finalCohort = cohort.map(item => {
+      const val = Math.max(1.0, item.expectedTotal);
+      const prob = !item.bettingDisabled && sumExp > 0 ? (Math.exp(val / T) / sumExp) : 0;
+      const rawOdd = prob > 0 ? (1.20 / prob) : 99.00;
+      const odd = Math.max(1.15, Math.min(99.00, Number(rawOdd.toFixed(2))));
+
+      return {
+        ...item,
+        prob: prob * 100,
+        odd
+      };
+    });
+
+    return finalCohort;
+  };
+
   const activeMonths = getActiveMonths();
 
   const calculateLongTermOdds = (player: Player) => {
@@ -1036,8 +1165,8 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
         )}
       </div>
 
-      {/* SECTION 2: GOLS NO MÊS & GOLS SOFRIDOS */}
-      {betSettings.longTermMonthlyGoals?.enabled && (
+      {/* SECTION 2: GOLS NO MÊS & GOLS SOFRIDOS & MAIOR PONTUADOR */}
+      {(betSettings.longTermMonthlyGoals?.enabled || betSettings.longTermMonthlyScorer?.enabled) && (
         <div className="space-y-8 pt-8 border-t border-gray-100">
           
           {/* Shared search filter */}
@@ -1308,6 +1437,153 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
               )}
             </div>
           </div>
+
+          {/* SUBSECTION C: MAIOR PONTUADOR DO MÊS */}
+          {betSettings.longTermMonthlyScorer?.enabled && (
+            <div className="bg-white border border-gray-100 rounded-[2.5rem] p-6 shadow-sm space-y-6 mt-8">
+              <div className="border-b border-gray-50 pb-4 flex items-center justify-between">
+                <div>
+                  <h4 className="text-lg font-black uppercase italic text-primary-blue flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-amber-500" />
+                    Maior Pontuador do Mês
+                  </h4>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">
+                    Atletas Qualificados - Probabilidades automáticas calculadas por IA baseadas em média recente e consistência histórica
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsScorerCollapsed(!isScorerCollapsed)}
+                  className="p-2 hover:bg-slate-100 rounded-xl transition-all text-gray-400 hover:text-gray-700 cursor-pointer"
+                  title={isScorerCollapsed ? "Expandir" : "Recolher"}
+                >
+                  {isScorerCollapsed ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+                </button>
+              </div>
+
+              {!isScorerCollapsed && (
+                <div className="space-y-4">
+                  <div className="bg-amber-50 border border-amber-100/60 rounded-2xl p-4 text-xs text-amber-800 space-y-1">
+                    <p className="font-bold uppercase tracking-wider flex items-center gap-1.5 text-amber-900">
+                      <TrendingUp className="w-4 h-4 text-amber-500" /> Entenda a Probabilidade:
+                    </p>
+                    <p className="text-amber-700 leading-relaxed font-medium">
+                      O modelo analisa a pontuação acumulada do mês atual de cada jogador, projeta os jogos restantes com base em suas médias de pontos e calcula a chance de terminar no topo. O cálculo das odds é ajustado em tempo real.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col border border-gray-100 rounded-2xl overflow-hidden divide-y divide-gray-100">
+                    {(() => {
+                      const cohort = getScorerCohort()
+                        .filter(item => {
+                          const term = longTermSearch.toLowerCase();
+                          return item.player.name.toLowerCase().includes(term) || item.player.nickname?.toLowerCase().includes(term);
+                        })
+                        .sort((a, b) => b.expectedTotal - a.expectedTotal);
+
+                      if (cohort.length === 0) {
+                        return (
+                          <div className="text-center py-8 text-xs text-gray-400 font-bold uppercase">
+                            Nenhum atleta qualificado encontrado
+                          </div>
+                        );
+                      }
+
+                      const currentDateObj = new Date();
+                      const currentMonthKey = currentDateObj.toISOString().substring(0, 7);
+                      
+                      const MONTH_NAMES_PT: { [key: string]: string } = {
+                        '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março', '04': 'Abril',
+                        '05': 'Maio', '06': 'Junho', '07': 'Julho', '08': 'Agosto',
+                        '09': 'Setembro', '10': 'Outubro', '11': 'Novembro', '12': 'Dezembro'
+                      };
+
+                      const currentMonthName = MONTH_NAMES_PT[currentMonthKey.split('-')[1]] || 'Julho';
+                      const prevMonths = activeMonths.filter(m => m !== currentMonthKey).slice(-2).reverse();
+
+                      const visibleScorers = showAllScorer ? cohort : cohort.slice(0, 5);
+
+                      return (
+                        <div className="space-y-4">
+                          <div className="flex flex-col divide-y divide-gray-100">
+                            {visibleScorers.map(({ player, currentPoints, playedThisMonth, avgPerMatch, expectedTotal, prob, odd }) => (
+                              <div key={player.id} className="flex flex-col md:flex-row md:items-center justify-between py-4 px-4 hover:bg-slate-50 transition-all gap-4">
+                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-black text-white shrink-0 shadow-sm ${getPositionColor(player.position)}`}>
+                                    {getPositionAbbr(player.position)}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <span className="block text-sm font-black text-gray-800 uppercase tracking-tight truncate">
+                                      {player.nickname || player.name}
+                                    </span>
+                                    
+                                    {/* Monthly scores summary */}
+                                    <div className="flex flex-wrap gap-2 mt-1.5">
+                                      <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase">
+                                        Mês Atual: <strong className="text-slate-900 font-black">{currentPoints} pts</strong> ({playedThisMonth} j)
+                                      </span>
+
+                                      {prevMonths.map(m => {
+                                        const pts = playerMonthlyPoints[player.id]?.[m] || 0;
+                                        const monthLabel = MONTH_NAMES_PT[m.split('-')[1]] || m;
+                                        return (
+                                          <span key={m} className="bg-slate-50 text-gray-500 border border-slate-150 px-2 py-0.5 rounded-md text-[10px] font-medium">
+                                            {monthLabel}: <strong className="text-gray-700 font-bold">{pts} pts</strong>
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Projections, Probability and Bet Button */}
+                                <div className="flex flex-wrap items-center gap-4 shrink-0 justify-between md:justify-end">
+                                  <div className="text-left md:text-right">
+                                    <div className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Projeção Final</div>
+                                    <div className="text-xs font-black text-emerald-600">{expectedTotal.toFixed(1)} pts</div>
+                                  </div>
+
+                                  <div className="bg-slate-150/60 rounded-xl py-1 px-3 text-center min-w-[70px]">
+                                    <span className="block text-[8px] font-bold text-gray-500 tracking-wider">CHANCE</span>
+                                    <span className="text-xs font-black text-slate-800">{prob.toFixed(1)}%</span>
+                                  </div>
+
+                                  <button
+                                    onClick={() => setSelectedBet({
+                                      matchId: `longterm_scorer_${player.id}_${currentMonthKey}`,
+                                      market: 'longTermMonthlyScorer',
+                                      selection: player.id,
+                                      odd: odd,
+                                      matchInfo: `Maior Pontuador do Mês (${currentMonthName})`,
+                                      selectedOutcome: `${player.nickname || player.name} para ser o Maior Pontuador`
+                                    })}
+                                    className="bg-slate-900 hover:bg-slate-850 text-white rounded-xl py-2 px-4 min-w-[100px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center border border-slate-800"
+                                  >
+                                    <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">APOSTAR</span>
+                                    <span className="text-xs font-black text-primary-yellow leading-none">@ {odd.toFixed(2)}</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {cohort.length > 5 && (
+                            <div className="pt-2 text-center border-t border-gray-50">
+                              <button
+                                onClick={() => setShowAllScorer(!showAllScorer)}
+                                className="text-xs font-black uppercase tracking-wider text-primary-blue hover:text-blue-950 transition-all px-4 py-2 bg-slate-50 hover:bg-slate-100 rounded-2xl border border-slate-100 cursor-pointer"
+                              >
+                                {showAllScorer ? "Mostrar Menos ▲" : "Mostrar Mais ▼"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
       )}
