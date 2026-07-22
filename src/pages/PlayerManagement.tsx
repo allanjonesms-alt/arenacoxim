@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
 import { collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
-import { Player, Position, Location, OverallStats, AdminData, Match, ScoringRules, Card } from '../types';
+import { Player, Position, Location, OverallStats, AdminData, Match, ScoringRules, Card, MonthlyAward } from '../types';
 import { getPositionAbbr, getPositionColor } from '../utils/playerUtils';
 import { Users, UserPlus, Trash2, Edit2, Shield, Sword, ShieldAlert, Search, X, MapPin, Zap, Heart, Dumbbell, Target, Move, Share2, BarChart3, User, Star, ShieldCheck, CheckCircle2, Coins } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -98,9 +98,11 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
   const [phone, setPhone] = useState('');
   const [bettingDisabled, setBettingDisabled] = useState(false);
   const [availableCards, setAvailableCards] = useState<Card[]>([]);
+  const [monthlyAwards, setMonthlyAwards] = useState<MonthlyAward[]>([]);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const [rawImageSrc, setRawImageSrc] = useState('');
   const [isOverallModalOpen, setIsOverallModalOpen] = useState(false);
+  const [isSavingRating, setIsSavingRating] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState(false);
   const [playerToDeleteId, setPlayerToDeleteId] = useState<string | null>(null);
   const [overallStats, setOverallStats] = useState<OverallStats>({
@@ -209,10 +211,17 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
       setLoadingCards(false);
     });
 
+    // Listen to monthly awards
+    const unsubscribeAwards = onSnapshot(collection(db, 'monthlyAwards'), (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MonthlyAward));
+      setMonthlyAwards(list);
+    });
+
     return () => {
       unsubscribeScoring();
       unsubscribeMatches();
       unsubscribeCards();
+      unsubscribeAwards();
     };
   }, []);
 
@@ -269,9 +278,10 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
     }
     const isArtilheiro = cardUsed?.name?.toUpperCase()?.includes('ARTILHEIRO');
     const bonus = isArtilheiro ? 5 : (cardUsed?.increaseOverall || 0);
-    overallValue = Math.min(105, overallValue + bonus);
+    const awardsBonus = editingPlayer ? monthlyAwards.filter(a => a.playerId === editingPlayer.id).length : 0;
+    overallValue = Math.min(105, overallValue + bonus + awardsBonus);
     
-    console.log("Overall value calculated (including card bonus):", overallValue);
+    console.log("Overall value calculated (including card & awards bonus):", overallValue);
 
     try {
       if (editingPlayer) {
@@ -498,6 +508,45 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
     
     const adminCount = Object.keys(overallStats.ratings || {}).length;
 
+    const handleConfirmNota = async () => {
+      if (editingPlayer) {
+        try {
+          setIsSavingRating(true);
+          const tempRatings = currentRating !== undefined 
+            ? { ...(overallStats.ratings || {}), [currentAdminId]: currentRating }
+            : (overallStats.ratings || {});
+          const currentAvgPts = (editingPlayer.stats?.points || 0) / (editingPlayer.stats?.matches || 1);
+          const { grade: newGrade } = calculateGrade({ ratings: tempRatings }, currentAvgPts);
+          let newOverallValue = parseInt(newGrade) || 75;
+
+          const playerAwardsBonus = monthlyAwards.filter(a => a.playerId === editingPlayer.id).length;
+          newOverallValue = Math.min(105, newOverallValue + bonus + playerAwardsBonus);
+
+          const updatedOverallStats = {
+            ...(editingPlayer.overallStats || {}),
+            ratings: tempRatings
+          };
+
+          await updateDoc(doc(db, 'players', editingPlayer.id), {
+            overallValue: newOverallValue,
+            overallStats: updatedOverallStats
+          });
+
+          setEditingPlayer(prev => prev ? {
+            ...prev,
+            overallValue: newOverallValue,
+            overallStats: updatedOverallStats
+          } : null);
+        } catch (err) {
+          console.error("Erro ao salvar nota do atleta:", err);
+          alert("Erro ao salvar a nota do atleta.");
+        } finally {
+          setIsSavingRating(false);
+        }
+      }
+      setIsOverallModalOpen(false);
+    };
+
     return (
       <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
         <motion.div 
@@ -586,11 +635,12 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
             </div>
 
             <button 
-              onClick={() => setIsOverallModalOpen(false)}
-              className="w-full bg-primary-blue text-white py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all mt-10 shadow-xl shadow-blue-100 active:scale-95 flex items-center justify-center gap-3"
+              onClick={handleConfirmNota}
+              disabled={isSavingRating}
+              className="w-full bg-primary-blue text-white py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all mt-10 shadow-xl shadow-blue-100 active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50"
             >
               <ShieldCheck className="w-5 h-5 text-primary-yellow" />
-              <span>Confirmar Nota</span>
+              <span>{isSavingRating ? 'Salvando...' : 'Confirmar Nota'}</span>
             </button>
           </div>
         </motion.div>

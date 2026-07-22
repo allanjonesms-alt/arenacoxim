@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, query, onSnapshot, doc, setDoc, deleteDoc, where, orderBy, getDocs } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, setDoc, deleteDoc, updateDoc, increment, where, orderBy, getDocs } from 'firebase/firestore';
 import { MonthlyAward, AwardCategory, Player, Card, Location, AdminData } from '../types';
 import { Trophy, Trash2, Plus, Calendar, Search, MapPin, User, Shield } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -77,6 +77,8 @@ export default function MonthlyAwardsManagement({ adminData, locations }: Monthl
     // Generate unique ID based on month, location and category
     const id = `${selectedMonth}_${selectedLocationId}_${selectedCategory.replace(/\s+/g, '')}`;
 
+    const existingAward = awards.find(a => a.id === id);
+
     const newAward: MonthlyAward = {
       id,
       month: selectedMonth,
@@ -89,9 +91,24 @@ export default function MonthlyAwardsManagement({ adminData, locations }: Monthl
 
     try {
       await setDoc(doc(db, 'monthlyAwards', id), newAward);
+
+      // If award existed before for a different player, decrement old player
+      if (existingAward && existingAward.playerId !== selectedPlayerId) {
+        await updateDoc(doc(db, 'players', existingAward.playerId), {
+          overallValue: increment(-1)
+        });
+      }
+
+      // If new award or assigned to different player, increment new player
+      if (!existingAward || existingAward.playerId !== selectedPlayerId) {
+        await updateDoc(doc(db, 'players', selectedPlayerId), {
+          overallValue: increment(1)
+        });
+      }
+
       setSearchPlayerQuery('');
       setSelectedPlayerId('');
-      alert("Prêmio salvo com sucesso!");
+      alert("Prêmio salvo com sucesso! (+1 no Overall do atleta)");
     } catch (err) {
       console.error(err);
       alert("Erro ao salvar o prêmio.");
@@ -101,7 +118,14 @@ export default function MonthlyAwardsManagement({ adminData, locations }: Monthl
   const handleDeleteAward = async (id: string) => {
     if (window.confirm("Deseja remover este prêmio?")) {
       try {
+        const awardToDelete = awards.find(a => a.id === id);
         await deleteDoc(doc(db, 'monthlyAwards', id));
+
+        if (awardToDelete && awardToDelete.playerId) {
+          await updateDoc(doc(db, 'players', awardToDelete.playerId), {
+            overallValue: increment(-1)
+          });
+        }
       } catch (err) {
         console.error(err);
         alert("Erro ao remover o prêmio.");

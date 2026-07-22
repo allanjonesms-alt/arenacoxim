@@ -1063,7 +1063,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
               className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all font-black text-xs uppercase tracking-wider cursor-pointer active:scale-95 shadow-2xs"
             >
               <ArrowLeft className="w-4 h-4 text-amber-300" />
-              <span>Voltar para Próximos Confrontos</span>
+              <span>Voltar para Próximos Jogos</span>
             </button>
 
             <div className="flex flex-wrap items-center gap-2.5">
@@ -1240,9 +1240,6 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                           return (
                             <div key={player.id} className="flex flex-col sm:flex-row sm:items-center justify-between border border-white/10 rounded-xl py-1.5 px-3 bg-black/25 hover:bg-black/40 gap-2 text-white transition-all">
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className={`w-5 h-5 rounded flex items-center justify-center text-[8px] font-black text-white shrink-0 ${getPositionColor(player.position)}`}>
-                                  {getPositionAbbr(player.position)}
-                                </span>
                                 <span className="text-xs font-black text-white uppercase truncate">{player.nickname || player.name}</span>
                               </div>
 
@@ -1410,24 +1407,16 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
   // ALL MATCHES CARDS LIST VIEW
   return (
     <div className="space-y-8 mt-8">
-      {/* SECTION 1: PROXIMOS CONFRONTOS */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-          <h3 className="text-xl font-black uppercase italic tracking-tight text-primary-blue flex items-center gap-2">
-            <TrendingUp className="w-6 h-6 text-primary-yellow" />
-            Próximos Confrontos
-          </h3>
-          <span className="text-xs font-bold text-gray-400 uppercase">
-            Clique na partida para ver todos os mercados
-          </span>
-        </div>
-
-        {sortedBettableMatches.length === 0 ? (
-          <div className="bg-slate-900 text-white border border-slate-800 rounded-3xl p-8 text-center flex flex-col items-center justify-center gap-2">
-            <Shield className="w-8 h-8 text-amber-300" />
-            <p className="text-sm font-bold text-white">Nenhum confronto disponível para apostas no momento</p>
+      {/* SECTION 1: PROXIMOS JOGOS */}
+      {sortedBettableMatches.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <h3 className="text-xl font-black uppercase italic tracking-tight text-primary-blue flex items-center gap-2">
+              <TrendingUp className="w-6 h-6 text-primary-yellow" />
+              Próximos Jogos
+            </h3>
           </div>
-        ) : (
+
           <div className="bg-slate-900 text-white rounded-3xl overflow-hidden shadow-xl border border-slate-800">
             {/* Sportsbook Header Bar */}
             <div className="bg-slate-950/80 px-4 py-3 border-b border-slate-800/80 flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-slate-400">
@@ -1593,33 +1582,20 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
               })}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* SECTION 2: GOLS NO MÊS & GOLS SOFRIDOS & MAIOR PONTUADOR */}
       {(betSettings.longTermMonthlyGoals?.enabled || betSettings.longTermMonthlyScorer?.enabled) && (
         <div className="space-y-8 pt-8 border-t border-gray-100">
           
-          {/* Shared search filter */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Section header */}
+          <div className="flex items-center justify-between gap-4">
             <div>
               <h3 className="text-xl font-black uppercase italic tracking-tight text-primary-blue flex items-center gap-2">
                 <CalendarDays className="w-6 h-6 text-emerald-500" />
                 Mercados Mensais de Longo Prazo
               </h3>
-              <p className="text-xs text-gray-400 font-semibold mt-1">
-                Acompanhe o desempenho do mês e aposte no acumulado de gols e gols sofridos.
-              </p>
-            </div>
-            <div className="relative w-full sm:max-w-xs">
-              <input
-                type="text"
-                placeholder="Buscar jogador..."
-                value={longTermSearch}
-                onChange={e => setLongTermSearch(e.target.value)}
-                className="w-full bg-white border border-gray-200 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-primary-blue outline-none transition-all font-semibold shadow-sm"
-              />
-              <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             </div>
           </div>
 
@@ -1632,9 +1608,6 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                     <Target className="w-5 h-5 text-rose-300" />
                     Gols no Mês
                   </h4>
-                  <p className="text-[10px] text-white/80 font-bold uppercase mt-1">
-                    Atletas de Linha - Ordenado por gols marcados
-                  </p>
                 </div>
                 <button
                   onClick={() => setIsGolsNoMesCollapsed(!isGolsNoMesCollapsed)}
@@ -1680,15 +1653,12 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                             {visiblePlayers.map(({ player, ltOdds }) => (
                               <div key={player.id} className="flex items-center justify-between border border-white/10 rounded-xl py-1.5 px-3 bg-black/20 hover:bg-black/30 transition-all gap-2">
                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                  <span className={`w-5 h-5 rounded flex items-center justify-center text-[8px] font-black text-white shrink-0 ${getPositionColor(player.position)}`}>
-                                    {getPositionAbbr(player.position)}
-                                  </span>
                                   <div className="min-w-0">
                                     <span className="block text-xs font-black text-white uppercase tracking-tight truncate">
                                       {player.nickname || player.name}
                                     </span>
-                                    <span className="block text-[9px] text-white/70 font-bold uppercase">
-                                      Gols marcados: <span className="text-amber-300 font-black">{ltOdds.currentGoals}</span>
+                                    <span className="block text-xs font-black text-amber-300">
+                                      {ltOdds.currentGoals}
                                     </span>
                                   </div>
                                 </div>
@@ -1754,9 +1724,6 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                     <Shield className="w-5 h-5 text-indigo-300" />
                     Gols Sofridos
                   </h4>
-                  <p className="text-[10px] text-white/80 font-bold uppercase mt-1">
-                    Goleiros - Ordenado por gols sofridos no mês
-                  </p>
                 </div>
                 <button
                   onClick={() => setIsGolsSofridosCollapsed(!isGolsSofridosCollapsed)}
@@ -1802,15 +1769,12 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                             {visibleGoalkeepers.map(({ player, ltOdds }) => (
                               <div key={player.id} className="flex items-center justify-between border border-white/10 rounded-xl py-1.5 px-3 bg-black/20 hover:bg-black/30 transition-all gap-2">
                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                  <span className={`w-5 h-5 rounded flex items-center justify-center text-[8px] font-black text-white shrink-0 bg-blue-600`}>
-                                    GK
-                                  </span>
                                   <div className="min-w-0">
                                     <span className="block text-xs font-black text-white uppercase tracking-tight truncate">
                                       {player.nickname || player.name}
                                     </span>
-                                    <span className="block text-[9px] text-white/70 font-bold uppercase">
-                                      Gols sofridos: <span className="text-amber-300 font-black">{ltOdds.currentGoals}</span>
+                                    <span className="block text-xs font-black text-amber-300">
+                                      {ltOdds.currentGoals}
                                     </span>
                                   </div>
                                 </div>
@@ -1878,9 +1842,6 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                     <Trophy className="w-5 h-5 text-amber-300" />
                     Maior Pontuador do Mês
                   </h4>
-                  <p className="text-[10px] text-white/80 font-bold uppercase mt-1">
-                    Atletas Qualificados - Probabilidades automáticas calculadas por IA baseadas em média recente e consistência histórica
-                  </p>
                 </div>
                 <button
                   onClick={() => setIsScorerCollapsed(!isScorerCollapsed)}
@@ -1893,15 +1854,6 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
 
               {!isScorerCollapsed && (
                 <div className="space-y-4">
-                  <div className="bg-black/25 border border-amber-300/30 rounded-2xl p-4 text-xs text-amber-100 space-y-1">
-                    <p className="font-bold uppercase tracking-wider flex items-center gap-1.5 text-amber-300">
-                      <TrendingUp className="w-4 h-4 text-amber-300" /> Entenda a Probabilidade:
-                    </p>
-                    <p className="text-amber-100/90 leading-relaxed font-medium">
-                      O modelo analisa a pontuação acumulada do mês atual de cada jogador, projeta os jogos restantes com base em suas médias de pontos e calcula a chance de terminar no topo. O cálculo das odds é ajustado em tempo real.
-                    </p>
-                  </div>
-
                   <div className="flex flex-col border border-white/20 rounded-2xl overflow-hidden divide-y divide-white/10 bg-black/20">
                     {(() => {
                       const cohort = getScorerCohort()
@@ -1929,70 +1881,38 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                       };
 
                       const currentMonthName = MONTH_NAMES_PT[currentMonthKey.split('-')[1]] || 'Julho';
-                      const prevMonths = activeMonths.filter(m => m !== currentMonthKey).slice(-2).reverse();
 
                       const visibleScorers = showAllScorer ? cohort : cohort.slice(0, 5);
 
                       return (
                         <div className="space-y-4">
-                          <div className="flex flex-col divide-y divide-white/10">
-                            {visibleScorers.map(({ player, currentPoints, playedThisMonth, avgPerMatch, expectedTotal, prob, odd }) => (
-                              <div key={player.id} className="flex flex-col md:flex-row md:items-center justify-between py-4 px-4 hover:bg-black/20 transition-all gap-4 text-white">
-                                <div className="flex items-center gap-3 min-w-0 flex-1">
-                                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-black text-white shrink-0 shadow-sm ${getPositionColor(player.position)}`}>
-                                    {getPositionAbbr(player.position)}
+                          <div className="flex flex-col border border-white/20 rounded-2xl overflow-hidden divide-y divide-white/10 bg-black/20">
+                            {visibleScorers.map(({ player, currentPoints, odd }) => (
+                              <div key={player.id} className="flex items-center justify-between py-2.5 px-3 hover:bg-black/30 transition-all gap-3 text-white">
+                                <div className="min-w-0 flex-1">
+                                  <span className="block text-xs font-black text-white uppercase tracking-tight truncate">
+                                    {player.nickname || player.name}
                                   </span>
-                                  <div className="min-w-0 flex-1">
-                                    <span className="block text-sm font-black text-white uppercase tracking-tight truncate">
-                                      {player.nickname || player.name}
-                                    </span>
-                                    
-                                    {/* Monthly scores summary */}
-                                    <div className="flex flex-wrap gap-2 mt-1.5">
-                                      <span className="bg-black/30 text-white px-2 py-0.5 rounded-md text-[10px] font-bold uppercase border border-white/10">
-                                        Mês Atual: <strong className="text-amber-300 font-black">{currentPoints} pts</strong> ({playedThisMonth} j)
-                                      </span>
-
-                                      {prevMonths.map(m => {
-                                        const pts = playerMonthlyPoints[player.id]?.[m] || 0;
-                                        const monthLabel = MONTH_NAMES_PT[m.split('-')[1]] || m;
-                                        return (
-                                          <span key={m} className="bg-black/20 text-white/80 border border-white/10 px-2 py-0.5 rounded-md text-[10px] font-medium">
-                                            {monthLabel}: <strong className="text-white font-bold">{pts} pts</strong>
-                                          </span>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
+                                  <span className="block text-[9px] font-bold text-amber-300 mt-0.5">
+                                    {currentPoints} pts
+                                  </span>
                                 </div>
 
-                                {/* Projections, Probability and Bet Button */}
-                                <div className="flex flex-wrap items-center gap-4 shrink-0 justify-between md:justify-end">
-                                  <div className="text-left md:text-right">
-                                    <div className="text-[9px] text-white/70 font-bold uppercase tracking-wider">Projeção Final</div>
-                                    <div className="text-xs font-black text-amber-300">{expectedTotal.toFixed(1)} pts</div>
-                                  </div>
-
-                                  <div className="bg-black/30 border border-white/10 rounded-xl py-1 px-3 text-center min-w-[70px]">
-                                    <span className="block text-[8px] font-bold text-white/70 tracking-wider">CHANCE</span>
-                                    <span className="text-xs font-black text-white">{prob.toFixed(1)}%</span>
-                                  </div>
-
-                                  <button
-                                    onClick={() => setSelectedBet({
-                                      matchId: `longterm_scorer_${player.id}_${currentMonthKey}`,
-                                      market: 'longTermMonthlyScorer',
-                                      selection: player.id,
-                                      odd: odd,
-                                      matchInfo: `Maior Pontuador do Mês (${currentMonthName})`,
-                                      selectedOutcome: `${player.nickname || player.name} para ser o Maior Pontuador`
-                                    })}
-                                    className="bg-black/40 hover:bg-black/60 text-white rounded-xl py-2 px-4 min-w-[100px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center border border-white/20"
-                                  >
-                                    <span className="text-[8px] font-bold text-white/80 uppercase tracking-widest leading-none mb-1">APOSTAR</span>
-                                    <span className="text-xs font-black text-amber-300 leading-none">@ {odd.toFixed(2)}</span>
-                                  </button>
-                                </div>
+                                {/* Bet Button */}
+                                <button
+                                  onClick={() => setSelectedBet({
+                                    matchId: `longterm_scorer_${player.id}_${currentMonthKey}`,
+                                    market: 'longTermMonthlyScorer',
+                                    selection: player.id,
+                                    odd: odd,
+                                    matchInfo: `Maior Pontuador do Mês (${currentMonthName})`,
+                                    selectedOutcome: `${player.nickname || player.name} para ser o Maior Pontuador`
+                                  })}
+                                  className="bg-black/40 hover:bg-black/60 text-white rounded-xl py-1 px-3 transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5 border border-white/20 shrink-0"
+                                >
+                                  <span className="text-[9px] font-bold text-white/80 uppercase tracking-wider">APOSTAR</span>
+                                  <span className="text-xs font-black text-amber-300">@ {odd.toFixed(2)}</span>
+                                </button>
                               </div>
                             ))}
                           </div>
