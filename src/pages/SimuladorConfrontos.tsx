@@ -826,17 +826,22 @@ export default function SimuladorConfrontos({ adminData }: Props) {
     const currentDay = today.getDate();
     const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
-    let matchesLeft = 0;
-    // Loop from today to the last day of the month
-    for (let d = currentDay; d <= lastDayOfMonth; d++) {
+    const todayStr = today.toISOString().substring(0, 10);
+    const playedToday = matches.some(m => m.status === 'finished' && m.date === todayStr);
+
+    const startDay = playedToday ? currentDay + 1 : currentDay;
+
+    let gameDaysLeft = 0;
+    // Loop from startDay to the last day of the month for Tuesday (2) and Thursday (4)
+    for (let d = startDay; d <= lastDayOfMonth; d++) {
       const tempDate = new Date(currentYear, currentMonth, d);
       const dayOfWeek = tempDate.getDay();
-      if (dayOfWeek === 2 || dayOfWeek === 4) { // Tuesday (2) or Thursday (4)
-        matchesLeft++;
+      if (dayOfWeek === 2 || dayOfWeek === 4) { // Tuesday or Thursday
+        gameDaysLeft++;
       }
     }
 
-    return isGoalkeeper ? matchesLeft * 2 : matchesLeft;
+    return isGoalkeeper ? gameDaysLeft * 2 : gameDaysLeft;
   };
 
   const getActiveMonths = () => {
@@ -944,7 +949,9 @@ export default function SimuladorConfrontos({ adminData }: Props) {
         projectedPointsPerMatch = (currentMonthAvg * formWeight) + (blendedCareerAvg * (1 - formWeight));
       }
 
-      const expectedRemaining = projectedPointsPerMatch * remainingMatches;
+      // Outfield players play 1 match per game day (Tuesday/Thursday); Goalkeepers play 2 matches per day
+      const playerRemainingMatches = getRemainingMatchesInMonth(p.position === 'goleiro');
+      const expectedRemaining = projectedPointsPerMatch * playerRemainingMatches;
       const expectedTotal = C + expectedRemaining;
 
       return {
@@ -953,27 +960,70 @@ export default function SimuladorConfrontos({ adminData }: Props) {
         currentPoints: C,
         playedThisMonth,
         avgPerMatch: playedThisMonth > 0 ? (C / playedThisMonth) : blendedCareerAvg,
+        expectedRemaining,
         expectedTotal,
         bettingDisabled: p.bettingDisabled || false
       };
     });
 
     const activeCohort = cohort.filter(item => !item.bettingDisabled && (item.player.stats?.matches || 0) >= 1);
+    const N_active = activeCohort.length;
 
-    const T = 3.5;
-    const maxExpTotal = activeCohort.reduce((max, item) => Math.max(max, item.expectedTotal), 0);
+    if (N_active === 0) {
+      return cohort.map(item => ({ ...item, prob: 0, odd: 99.00 }));
+    }
 
-    let sumExp = 0;
-    activeCohort.forEach(item => {
-      const diff = (item.expectedTotal - maxExpTotal) / T;
-      sumExp += Math.exp(diff);
-    });
+    // Box-Muller normal distribution random generator
+    const randomNormal = (mean: number, stdDev: number) => {
+      let u = 0, v = 0;
+      while (u === 0) u = Math.random();
+      while (v === 0) v = Math.random();
+      const num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+      return Math.max(0, mean + num * stdDev);
+    };
 
-    const houseMargin = 1.25; // 25% sportsbook margin (overround 125%)
+    // Run Monte Carlo simulations of the remaining matches in the month
+    const SIMULATIONS = 3000;
+    const winCounts: { [id: string]: number } = {};
+    activeCohort.forEach(item => { winCounts[item.id] = 0; });
+
+    // Standard deviation per match for points: ~4.0 points per match
+    const stdDevPerMatch = 4.0;
+
+    for (let s = 0; s < SIMULATIONS; s++) {
+      let maxScore = -1;
+      let winners: string[] = [];
+
+      for (const item of activeCohort) {
+        const pRemMatches = getRemainingMatchesInMonth(item.player.position === 'goleiro');
+        const pStdDev = Math.max(2.0, Math.sqrt(pRemMatches) * stdDevPerMatch);
+        const simRemPoints = pRemMatches > 0
+          ? randomNormal(item.expectedRemaining, pStdDev)
+          : 0;
+        const simTotal = item.currentPoints + simRemPoints;
+
+        if (simTotal > maxScore + 0.001) {
+          maxScore = simTotal;
+          winners = [item.id];
+        } else if (Math.abs(simTotal - maxScore) <= 0.001) {
+          winners.push(item.id);
+        }
+      }
+
+      if (winners.length > 0) {
+        const share = 1 / winners.length;
+        for (const wId of winners) {
+          winCounts[wId] += share;
+        }
+      }
+    }
+
+    const houseMargin = 1.40; // 40% sportsbook overround
+    const maxOddConfig = betSettings?.maxOdd || 35.00;
 
     const finalCohort = cohort.map(item => {
       const hasMatches = (item.player.stats?.matches || 0) >= 1;
-      if (item.bettingDisabled || !hasMatches || sumExp === 0) {
+      if (item.bettingDisabled || !hasMatches) {
         return {
           ...item,
           prob: 0,
@@ -981,17 +1031,20 @@ export default function SimuladorConfrontos({ adminData }: Props) {
         };
       }
 
-      const diff = (item.expectedTotal - maxExpTotal) / T;
-      const prob = Math.exp(diff) / sumExp;
+      const rawProb = (winCounts[item.id] || 0) / SIMULATIONS;
       
-      // Correct sports betting odds formula with house margin: odd = 1 / (prob * houseMargin)
-      const rawOdd = prob > 0 ? (1 / (prob * houseMargin)) : 99.00;
-      const maxOddConfig = betSettings?.maxOdd || 50.00;
-      const odd = Math.max(1.05, Math.min(maxOddConfig, Number(rawOdd.toFixed(2))));
+      // Blend with uniform distribution (75% sim, 25% uniform across active cohort) for sportsbook smoothing & favorite-longshot bias
+      const blendedProb = (rawProb * 0.75) + (0.25 / N_active);
+      
+      // Apply sportsbook house margin
+      const marketProb = blendedProb * houseMargin;
+      
+      const rawOdd = marketProb > 0 ? (1 / marketProb) : maxOddConfig;
+      const odd = Math.max(1.15, Math.min(maxOddConfig, Number(rawOdd.toFixed(2))));
 
       return {
         ...item,
-        prob: prob * 100,
+        prob: rawProb * 100,
         odd
       };
     });
