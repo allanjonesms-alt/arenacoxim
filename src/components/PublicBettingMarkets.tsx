@@ -5,16 +5,30 @@ import { Match, OddsEngineConfig, Player, Card } from '../types';
 import { TrendingUp, Shield, Trophy, Target, Zap, CalendarDays, Search, ChevronDown, ChevronUp, ArrowLeft, ChevronRight, Clock, Users } from 'lucide-react';
 import { getPositionAbbr, getPositionColor, getPlayerFinalOverall } from '../utils/playerUtils';
 import { calculateMatchPoints } from '../utils/scoringEngine';
+import { processPendingPaymentBets } from '../utils/bettingUtils';
 
 const isMatchWithin30MinOrPast = (matchDate: string, matchTime: string) => {
-  if (!matchDate || !matchTime) return false;
+  if (!matchDate) return false;
   try {
     const [year, month, day] = matchDate.split('-').map(Number);
-    const [hours, minutes] = matchTime.split(':').map(Number);
-    const matchDateTime = new Date(year, month - 1, day, hours, minutes, 0);
     const now = new Date();
-    const diffInMinutes = (matchDateTime.getTime() - now.getTime()) / (1000 * 60);
-    return diffInMinutes <= 30;
+
+    // Encerra apostas às 18:00 (-4:00 UTC) do dia agendado para a partida
+    const cutoff18h = new Date(year, month - 1, day, 18, 0, 0, 0);
+    if (now.getTime() >= cutoff18h.getTime()) {
+      return true;
+    }
+
+    if (matchTime) {
+      const [hours, minutes] = matchTime.split(':').map(Number);
+      const matchDateTime = new Date(year, month - 1, day, hours, minutes, 0);
+      const diffInMinutes = (matchDateTime.getTime() - now.getTime()) / (1000 * 60);
+      if (diffInMinutes <= 30) {
+        return true;
+      }
+    }
+
+    return false;
   } catch (e) {
     return false;
   }
@@ -598,19 +612,34 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
 
     const activeCohort = cohort.filter(item => !item.bettingDisabled && (item.player.stats?.matches || 0) >= 1);
 
-    const T = 12.0;
+    const T = 3.5;
+    const maxExpTotal = activeCohort.reduce((max, item) => Math.max(max, item.expectedTotal), 0);
+
     let sumExp = 0;
-    
     activeCohort.forEach(item => {
-      const val = Math.max(1.0, item.expectedTotal);
-      sumExp += Math.exp(val / T);
+      const diff = (item.expectedTotal - maxExpTotal) / T;
+      sumExp += Math.exp(diff);
     });
 
+    const houseMargin = 1.25; // 25% sportsbook margin (overround 125%)
+
     const finalCohort = cohort.map(item => {
-      const val = Math.max(1.0, item.expectedTotal);
-      const prob = !item.bettingDisabled && sumExp > 0 ? (Math.exp(val / T) / sumExp) : 0;
-      const rawOdd = prob > 0 ? (1.20 / prob) : 99.00;
-      const odd = Math.max(1.15, Math.min(99.00, Number(rawOdd.toFixed(2))));
+      const hasMatches = (item.player.stats?.matches || 0) >= 1;
+      if (item.bettingDisabled || !hasMatches || sumExp === 0) {
+        return {
+          ...item,
+          prob: 0,
+          odd: 99.00
+        };
+      }
+
+      const diff = (item.expectedTotal - maxExpTotal) / T;
+      const prob = Math.exp(diff) / sumExp;
+      
+      // Correct sports betting odds formula with house margin: odd = 1 / (prob * houseMargin)
+      const rawOdd = prob > 0 ? (1 / (prob * houseMargin)) : 99.00;
+      const maxOddConfig = oddsConfig?.maxOdd || 50.00;
+      const odd = Math.max(1.05, Math.min(maxOddConfig, Number(rawOdd.toFixed(2))));
 
       return {
         ...item,
@@ -822,26 +851,41 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
     };
   };
 
+  useEffect(() => {
+    if (user?.uid) {
+      processPendingPaymentBets(db, user.uid);
+    }
+  }, [user?.uid, balance]);
+
   const handlePlaceBet = async () => {
     const finalBetAmt = Math.min(1.00, bettingParams?.maxBetAmount || 1.00);
     if (!selectedBet || finalBetAmt <= 0) return;
-    if (finalBetAmt > balance) {
-      alert("Saldo insuficiente!");
+
+    if (selectedBet.match && isMatchWithin30MinOrPast(selectedBet.match.date, selectedBet.match.time)) {
+      alert("As apostas nesta partida foram encerradas (encerradas às 18:00 do dia do jogo).");
       return;
     }
 
     try {
+      let isUnpaidPending = false;
+
       await runTransaction(db, async (t) => {
         const userRef = doc(db, 'users', user.uid);
         const userSnap = await t.get(userRef);
         if (!userSnap.exists()) throw new Error("Usuário não encontrado");
         
-        const currentBalance = userSnap.data().balance || 0;
+        const currentBalance = Number(userSnap.data().balance) || 0;
         const betAmt = finalBetAmt;
         
-        if (currentBalance < betAmt) throw new Error("Saldo insuficiente!");
-        
-        t.update(userRef, { balance: currentBalance - betAmt });
+        if (currentBalance >= betAmt) {
+          t.update(userRef, { balance: currentBalance - betAmt });
+          isUnpaidPending = false;
+        } else {
+          if (betAmt > 5.00) {
+            throw new Error("Apostas sem saldo só são aceitas até o valor de R$ 5,00.");
+          }
+          isUnpaidPending = true;
+        }
         
         const newBetRef = doc(collection(db, 'bets'));
         t.set(newBetRef, {
@@ -854,7 +898,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
           odd: Number(selectedBet.odd),
           odds: Number(selectedBet.odd),
           amount: betAmt,
-          status: 'pending',
+          status: isUnpaidPending ? 'pending_payment' : 'pending',
           createdAt: new Date().toISOString(),
           matchInfo: selectedBet.matchInfo || 'Azul vs Amarelo',
           selectedOutcome: selectedBet.selectedOutcome || selectedBet.selection
@@ -863,7 +907,11 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
       
       setSelectedBet(null);
       setBetAmount('');
-      alert("Aposta realizada com sucesso!");
+      if (isUnpaidPending) {
+        alert("Aposta registrada como pendente! Ela só será aprovada e ativada após a inclusão de saldo na sua conta.");
+      } else {
+        alert("Aposta realizada com sucesso!");
+      }
     } catch (error: any) {
       console.error(error);
       alert(error.message || "Erro ao realizar aposta.");
@@ -877,7 +925,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
     const timeLocked = isMatchWithin30MinOrPast(match.date, match.time);
     const isGoalsEnabled = match.bettingMarkets?.playerGoals?.enabled && !timeLocked;
     const isAssistsEnabled = match.bettingMarkets?.playerAssists?.enabled && !timeLocked;
-    const isWinnerEnabled = match.bettingMarkets?.matchWinner?.enabled;
+    const isWinnerEnabled = match.bettingMarkets?.matchWinner?.enabled && !timeLocked;
     const isMatchGoalsEnabled = match.bettingMarkets?.matchGoals?.enabled && !timeLocked;
     return (match.status === 'scheduled' || match.status === 'live') && (
            isWinnerEnabled || 
@@ -918,7 +966,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
     const gameNumber = selectedMatchIndex + 1;
     const gameTitle = `JOGO ${gameNumber}`;
     const timeLocked = isMatchWithin30MinOrPast(selectedMatch.date, selectedMatch.time);
-    const isWinnerEnabled = selectedMatch.bettingMarkets?.matchWinner?.enabled;
+    const isWinnerEnabled = selectedMatch.bettingMarkets?.matchWinner?.enabled && !timeLocked;
     const isGoalsEnabled = selectedMatch.bettingMarkets?.playerGoals?.enabled && !timeLocked;
     const isAssistsEnabled = selectedMatch.bettingMarkets?.playerAssists?.enabled && !timeLocked;
     const isMatchGoalsEnabled = selectedMatch.bettingMarkets?.matchGoals?.enabled && !timeLocked;
@@ -942,9 +990,9 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                 <Trophy className="w-3.5 h-3.5 text-amber-300" />
                 {gameTitle}
               </span>
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className={`w-2.5 h-2.5 rounded-full ${timeLocked ? 'bg-red-500' : 'bg-emerald-400 animate-pulse'}`} />
               <span className="text-[10px] font-black uppercase tracking-wider text-white bg-white/10 px-2.5 py-1 rounded-md">
-                Disponível para Apostas
+                {timeLocked ? 'Apostas Encerradas (às 18:00)' : 'Disponível para Apostas'}
               </span>
             </div>
 
@@ -1250,29 +1298,26 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                 <div className="flex gap-3 pt-4">
                   <button 
                     onClick={() => setSelectedBet(null)}
-                    className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors cursor-pointer"
+                    className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors cursor-pointer text-xs uppercase"
                   >
                     Cancelar
                   </button>
-                  {balance >= Math.min(1.00, bettingParams?.maxBetAmount || 1.00) ? (
-                    <button 
-                      onClick={handlePlaceBet}
-                      className="flex-1 bg-emerald-500 text-white font-black py-3 rounded-xl hover:bg-emerald-600 transition-colors cursor-pointer"
-                    >
-                      Confirmar Aposta
-                    </button>
-                  ) : (
-                    <button 
-                      onClick={() => {
-                        setSelectedBet(null);
-                        if(onRequestDeposit) onRequestDeposit();
-                      }}
-                      className="flex-1 bg-amber-500 text-white font-black py-3 rounded-xl hover:bg-amber-600 transition-colors cursor-pointer"
-                    >
-                      Depositar Saldo
-                    </button>
-                  )}
+                  <button 
+                    onClick={handlePlaceBet}
+                    className={`flex-1 font-black py-3 rounded-xl transition-colors cursor-pointer text-xs uppercase tracking-wider text-white ${
+                      balance >= Math.min(1.00, bettingParams?.maxBetAmount || 1.00)
+                        ? 'bg-emerald-600 hover:bg-emerald-700 shadow-md'
+                        : 'bg-amber-600 hover:bg-amber-700 shadow-md'
+                    }`}
+                  >
+                    {balance >= Math.min(1.00, bettingParams?.maxBetAmount || 1.00) ? 'Confirmar Aposta' : 'Apostar (Pendente de Saldo)'}
+                  </button>
                 </div>
+                {balance < Math.min(1.00, bettingParams?.maxBetAmount || 1.00) && (
+                  <p className="text-[10px] text-amber-800 font-bold text-center mt-2 bg-amber-50 p-2.5 rounded-xl border border-amber-200 leading-tight">
+                    Você não possui saldo no momento. A aposta de R$ {(Math.min(1.00, bettingParams?.maxBetAmount || 1.00)).toFixed(2)} será gravada como pendente e aprovada após a inclusão de saldo.
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -1322,7 +1367,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                 const gameNumber = index + 1;
                 const gameTitle = `JOGO ${gameNumber}`;
                 const timeLocked = isMatchWithin30MinOrPast(match.date, match.time);
-                const isWinnerEnabled = match.bettingMarkets?.matchWinner?.enabled;
+                const isWinnerEnabled = match.bettingMarkets?.matchWinner?.enabled && !timeLocked;
                 const isGoalsEnabled = match.bettingMarkets?.playerGoals?.enabled && !timeLocked;
                 const isAssistsEnabled = match.bettingMarkets?.playerAssists?.enabled && !timeLocked;
                 const isMatchGoalsEnabled = match.bettingMarkets?.matchGoals?.enabled && !timeLocked;
@@ -1933,29 +1978,26 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
               <div className="flex gap-3 pt-4">
                 <button 
                   onClick={() => setSelectedBet(null)}
-                  className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors cursor-pointer"
+                  className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors cursor-pointer text-xs uppercase"
                 >
                   Cancelar
                 </button>
-                {balance >= Math.min(1.00, bettingParams?.maxBetAmount || 1.00) ? (
-                  <button 
-                    onClick={handlePlaceBet}
-                    className="flex-1 bg-emerald-500 text-white font-black py-3 rounded-xl hover:bg-emerald-600 transition-colors cursor-pointer"
-                  >
-                    Confirmar Aposta
-                  </button>
-                ) : (
-                  <button 
-                    onClick={() => {
-                      setSelectedBet(null);
-                      if(onRequestDeposit) onRequestDeposit();
-                    }}
-                    className="flex-1 bg-amber-500 text-white font-black py-3 rounded-xl hover:bg-amber-600 transition-colors cursor-pointer"
-                  >
-                    Depositar Saldo
-                  </button>
-                )}
+                <button 
+                  onClick={handlePlaceBet}
+                  className={`flex-1 font-black py-3 rounded-xl transition-colors cursor-pointer text-xs uppercase tracking-wider text-white ${
+                    balance >= Math.min(1.00, bettingParams?.maxBetAmount || 1.00)
+                      ? 'bg-emerald-600 hover:bg-emerald-700 shadow-md'
+                      : 'bg-amber-600 hover:bg-amber-700 shadow-md'
+                  }`}
+                >
+                  {balance >= Math.min(1.00, bettingParams?.maxBetAmount || 1.00) ? 'Confirmar Aposta' : 'Apostar (Pendente de Saldo)'}
+                </button>
               </div>
+              {balance < Math.min(1.00, bettingParams?.maxBetAmount || 1.00) && (
+                <p className="text-[10px] text-amber-800 font-bold text-center mt-2 bg-amber-50 p-2.5 rounded-xl border border-amber-200 leading-tight">
+                  Você não possui saldo no momento. A aposta de R$ {(Math.min(1.00, bettingParams?.maxBetAmount || 1.00)).toFixed(2)} será gravada como pendente e aprovada após a inclusão de saldo.
+                </p>
+              )}
             </div>
           </div>
         </div>

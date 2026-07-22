@@ -5,6 +5,7 @@ import { AdminData } from '../types';
 import { motion } from 'framer-motion';
 import { Wallet, CheckCircle2, XCircle, Clock, Search, ArrowLeft, History, Plus, Minus, UserCheck, X, AlertTriangle, Coins, Users } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { processPendingPaymentBets } from '../utils/bettingUtils';
 
 interface MasterBankProps {
   adminData?: AdminData | null;
@@ -97,6 +98,11 @@ export default function MasterBank({ adminData }: MasterBankProps) {
             approvedBy: adminData?.email
           });
         });
+
+        if (isDeposit) {
+          await processPendingPaymentBets(db, transaction.userId);
+        }
+
         alert(`${isDeposit ? 'Depósito' : 'Saque'} aprovado e saldo atualizado!`);
       } catch (error: any) {
         console.error("Erro ao aprovar:", error);
@@ -194,6 +200,10 @@ export default function MasterBank({ adminData }: MasterBankProps) {
           approvedBy: adminData?.email || 'Admin Master'
         });
       });
+
+      if (adjustType === 'add') {
+        await processPendingPaymentBets(db, selectedUserId);
+      }
 
       alert(`Saldo ajustado com sucesso!`);
       setAdjustAmount('');

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { doc, getDoc, setDoc, collection, query, where, onSnapshot, addDoc } from 'firebase/firestore';
+import { processPendingPaymentBets } from '../utils/bettingUtils';
 import { db } from '../firebase';
 import { PublicBettingMarkets } from '../components/PublicBettingMarkets';
 
@@ -171,6 +172,13 @@ export default function BancoUsuario({ user }: BancoUsuarioProps) {
     };
   }, [user, navigate]);
 
+  useEffect(() => {
+    if (user?.uid) {
+      processPendingPaymentBets(db, user.uid);
+    }
+  }, [user, balance]);
+
+  const pendingPaymentBets = bets.filter(b => b.status === 'pending_payment');
   const activeBets = bets.filter(b => b.status === 'pending');
   const finalizedBets = bets.filter(b => b.status === 'won' || b.status === 'lost');
   
@@ -759,12 +767,56 @@ export default function BancoUsuario({ user }: BancoUsuarioProps) {
                 <div>
                   <h2 className="text-xl font-black text-primary-blue uppercase italic tracking-tight flex items-center gap-2">
                     <Clock className="w-5 h-5 text-orange-500 animate-pulse" />
-                    Apostas Ativas (Em Andamento)
+                    Apostas Ativas & Pendentes
                   </h2>
                   <p className="text-xs text-gray-400 font-bold uppercase mt-1">
-                    Seus palpites atualmente pendentes de resultado
+                    Seus palpites atualmente em andamento ou aguardando saldo
                   </p>
                 </div>
+
+                {/* Unpaid / Pending Payment Bets Section */}
+                {pendingPaymentBets.length > 0 && (
+                  <div className="space-y-3 p-4 bg-amber-50/80 rounded-2xl border border-amber-200">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
+                      <h3 className="text-xs font-black text-amber-900 uppercase">
+                        Apostas Pendentes de Saldo ({pendingPaymentBets.length})
+                      </h3>
+                    </div>
+                    <p className="text-[11px] text-amber-800 font-medium leading-snug">
+                      Apostas registradas sem saldo. Elas serão aprovadas e ativadas automaticamente assim que for incluído saldo na sua conta.
+                    </p>
+                    <div className="space-y-2 pt-1">
+                      {pendingPaymentBets.map((bet) => (
+                        <div key={bet.id} className="bg-white p-3 rounded-xl border border-amber-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                Aguardando Saldo
+                              </span>
+                              <span className="text-[10px] text-gray-400 font-bold">
+                                {new Date(bet.createdAt).toLocaleDateString('pt-BR')}
+                              </span>
+                            </div>
+                            <h4 className="text-xs font-black text-gray-800">{bet.matchInfo || 'Partida'}</h4>
+                            <p className="text-xs text-gray-600 font-semibold">
+                              Palpite: <span className="text-primary-blue font-black">{bet.selectedOutcome || bet.selection}</span> @ {bet.odds || bet.odd}
+                            </p>
+                          </div>
+                          <div className="text-right sm:text-right w-full sm:w-auto flex sm:flex-col justify-between sm:justify-center items-center sm:items-end">
+                            <span className="text-xs font-black text-amber-800">R$ {(Number(bet.amount) || 0).toFixed(2)}</span>
+                            <button
+                              onClick={() => setActiveTab('deposit')}
+                              className="text-[10px] font-bold text-amber-700 underline hover:text-amber-900 cursor-pointer uppercase"
+                            >
+                              Depositar Saldo
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {activeBets.length === 0 ? (
                   <div className="py-12 bg-gray-50 rounded-2xl border border-gray-100 text-center space-y-3">

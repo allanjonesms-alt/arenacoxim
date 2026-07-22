@@ -791,9 +791,9 @@ export default function UserManagement({ adminData }: UserManagementProps) {
                                   R$ {(Number(bet.amount) || 0).toFixed(2)}
                                 </span>
                                 <span className={`text-[9px] font-black uppercase ${
-                                  bet.status === 'won' ? 'text-emerald-600' : bet.status === 'lost' ? 'text-rose-500' : 'text-amber-500'
+                                  bet.status === 'won' ? 'text-emerald-600' : bet.status === 'lost' ? 'text-rose-500' : bet.status === 'pending_payment' ? 'text-amber-600' : 'text-blue-600'
                                 }`}>
-                                  {bet.status === 'won' ? 'Ganha' : bet.status === 'lost' ? 'Perdida' : 'Pendente'}
+                                  {bet.status === 'won' ? 'Ganha' : bet.status === 'lost' ? 'Perdida' : bet.status === 'pending_payment' ? 'Pendente de Saldo' : 'Ativa'}
                                 </span>
                               </div>
                             </div>

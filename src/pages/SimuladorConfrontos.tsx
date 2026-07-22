@@ -960,19 +960,34 @@ export default function SimuladorConfrontos({ adminData }: Props) {
 
     const activeCohort = cohort.filter(item => !item.bettingDisabled && (item.player.stats?.matches || 0) >= 1);
 
-    const T = 12.0;
+    const T = 3.5;
+    const maxExpTotal = activeCohort.reduce((max, item) => Math.max(max, item.expectedTotal), 0);
+
     let sumExp = 0;
-    
     activeCohort.forEach(item => {
-      const val = Math.max(1.0, item.expectedTotal);
-      sumExp += Math.exp(val / T);
+      const diff = (item.expectedTotal - maxExpTotal) / T;
+      sumExp += Math.exp(diff);
     });
 
+    const houseMargin = 1.25; // 25% sportsbook margin (overround 125%)
+
     const finalCohort = cohort.map(item => {
-      const val = Math.max(1.0, item.expectedTotal);
-      const prob = !item.bettingDisabled && sumExp > 0 ? (Math.exp(val / T) / sumExp) : 0;
-      const rawOdd = prob > 0 ? (1.20 / prob) : 99.00;
-      const odd = Math.max(1.15, Math.min(99.00, Number(rawOdd.toFixed(2))));
+      const hasMatches = (item.player.stats?.matches || 0) >= 1;
+      if (item.bettingDisabled || !hasMatches || sumExp === 0) {
+        return {
+          ...item,
+          prob: 0,
+          odd: 99.00
+        };
+      }
+
+      const diff = (item.expectedTotal - maxExpTotal) / T;
+      const prob = Math.exp(diff) / sumExp;
+      
+      // Correct sports betting odds formula with house margin: odd = 1 / (prob * houseMargin)
+      const rawOdd = prob > 0 ? (1 / (prob * houseMargin)) : 99.00;
+      const maxOddConfig = betSettings?.maxOdd || 50.00;
+      const odd = Math.max(1.05, Math.min(maxOddConfig, Number(rawOdd.toFixed(2))));
 
       return {
         ...item,
