@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, getDocs, doc, getDoc, addDoc, updateDoc, setDoc, serverTimestamp, query, orderBy, limit, where, runTransaction } from 'firebase/firestore';
-import { Player, Location, Match, Card, OddsEngineConfig, AdminData, OddsSimulationHistory } from '../types';
+import { Player, Location, Match, Card, OddsEngineConfig, AdminData, OddsSimulationHistory, ScoringRules } from '../types';
 import { MapPin, Swords, ArrowRightLeft, Target, Trophy, Percent, Shield, Zap, CalendarDays, Settings2, Activity, ArrowUp, ArrowDown, Save, History, Wallet, ArrowUpRight, Search, TrendingUp, Trash2, CheckCircle2, XCircle, FileText, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -20,6 +20,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
+  const [scoringRules, setScoringRules] = useState<ScoringRules | null>(null);
   
   const [selectedLocationId, setSelectedLocationId] = useState<string>('all');
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
@@ -171,6 +172,10 @@ export default function SimuladorConfrontos({ adminData }: Props) {
       setMatches(snap.docs.map(d => ({ id: d.id, ...d.data() } as Match)));
     }, err => handleFirestoreError(err, OperationType.LIST, 'matches'));
 
+    const unsubScoring = onSnapshot(doc(db, 'settings', 'scoring'), (snap) => {
+      if (snap.exists()) setScoringRules(snap.data() as any);
+    });
+
     return () => {
       unsubLocs();
       unsubPlayers();
@@ -178,6 +183,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
       unsubCards();
       unsubBetsSettings();
       unsubOdds();
+      unsubScoring();
     };
   }, []);
 
@@ -866,7 +872,8 @@ export default function SimuladorConfrontos({ adminData }: Props) {
   const getMonthlyPointsData = () => {
     const data: { [playerId: string]: { [monthKey: string]: number } } = {};
     const finishedMatches = matches.filter(m => m.status === 'finished');
-    const activeRules = {
+    const activeRules = scoringRules || {
+      id: 'scoring',
       win: 3,
       draw: 1,
       goal: 5,
@@ -920,7 +927,9 @@ export default function SimuladorConfrontos({ adminData }: Props) {
 
   const getScorerCohort = () => {
     const currentDateObj = new Date();
-    const currentMonthKey = currentDateObj.toISOString().substring(0, 7);
+    const cYear = currentDateObj.getFullYear();
+    const cMonth = String(currentDateObj.getMonth() + 1).padStart(2, '0');
+    const currentMonthKey = `${cYear}-${cMonth}`;
     const finishedMatchesThisMonth = matches.filter(m => m.status === 'finished' && m.date?.substring(0, 7) === currentMonthKey);
     const remainingMatches = getRemainingMatchesInMonth(false);
 
@@ -973,22 +982,30 @@ export default function SimuladorConfrontos({ adminData }: Props) {
       return cohort.map(item => ({ ...item, prob: 0, odd: 99.00 }));
     }
 
-    // Box-Muller normal distribution random generator
-    const randomNormal = (mean: number, stdDev: number) => {
-      let u = 0, v = 0;
-      while (u === 0) u = Math.random();
-      while (v === 0) v = Math.random();
-      const num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
-      return Math.max(0, mean + num * stdDev);
+    // Logistic noise generator (heavy-tailed) for sports scoring variance
+    const randomLogistic = (mean: number, scale: number) => {
+      let u = Math.random();
+      while (u === 0 || u === 1) u = Math.random();
+      const noise = scale * Math.log(u / (1 - u));
+      return Math.max(0, mean + noise);
     };
 
-    // Run Monte Carlo simulations of the remaining matches in the month
+    // Dynamic temperature T based on remaining game days R
+    const T = Math.max(3.5, 4.0 + remainingMatches * 2.5);
+    const maxExpTotal = Math.max(...activeCohort.map(item => item.expectedTotal));
+    
+    let sumExp = 0;
+    const softmaxMap: { [id: string]: number } = {};
+    activeCohort.forEach(item => {
+      const val = Math.exp((item.expectedTotal - maxExpTotal) / T);
+      softmaxMap[item.id] = val;
+      sumExp += val;
+    });
+
+    // Run Monte Carlo simulations of remaining matches with attendance risk (85%) & Logistic noise
     const SIMULATIONS = 3000;
     const winCounts: { [id: string]: number } = {};
     activeCohort.forEach(item => { winCounts[item.id] = 0; });
-
-    // Standard deviation per match for points: ~4.0 points per match
-    const stdDevPerMatch = 4.0;
 
     for (let s = 0; s < SIMULATIONS; s++) {
       let maxScore = -1;
@@ -996,10 +1013,18 @@ export default function SimuladorConfrontos({ adminData }: Props) {
 
       for (const item of activeCohort) {
         const pRemMatches = getRemainingMatchesInMonth(item.player.position === 'goleiro');
-        const pStdDev = Math.max(2.0, Math.sqrt(pRemMatches) * stdDevPerMatch);
-        const simRemPoints = pRemMatches > 0
-          ? randomNormal(item.expectedRemaining, pStdDev)
-          : 0;
+        let simRemPoints = 0;
+
+        if (pRemMatches > 0) {
+          const avgPerDay = item.expectedRemaining / pRemMatches;
+          for (let m = 0; m < pRemMatches; m++) {
+            // 85% attendance probability per game day
+            if (Math.random() < 0.85) {
+              simRemPoints += randomLogistic(avgPerDay, 4.5);
+            }
+          }
+        }
+
         const simTotal = item.currentPoints + simRemPoints;
 
         if (simTotal > maxScore + 0.001) {
@@ -1031,10 +1056,11 @@ export default function SimuladorConfrontos({ adminData }: Props) {
         };
       }
 
-      const rawProb = (winCounts[item.id] || 0) / SIMULATIONS;
+      const rawSimProb = (winCounts[item.id] || 0) / SIMULATIONS;
+      const softmaxProb = sumExp > 0 ? (softmaxMap[item.id] / sumExp) : (1 / N_active);
       
-      // Blend with uniform distribution (75% sim, 25% uniform across active cohort) for sportsbook smoothing & favorite-longshot bias
-      const blendedProb = (rawProb * 0.75) + (0.25 / N_active);
+      // Blend Monte Carlo simulation (40%), Softmax model (50%), and Uniform base (10%) for realistic market odds
+      const blendedProb = (rawSimProb * 0.40) + (softmaxProb * 0.50) + (0.10 / N_active);
       
       // Apply sportsbook house margin
       const marketProb = blendedProb * houseMargin;
@@ -1044,7 +1070,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
 
       return {
         ...item,
-        prob: rawProb * 100,
+        prob: blendedProb * 100,
         odd
       };
     });
