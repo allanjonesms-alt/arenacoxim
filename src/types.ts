@@ -241,3 +241,58 @@ export interface BoostedBet {
   active: boolean;
   createdAt?: number;
 }
+
+export interface TournamentTeam {
+  id: string;
+  name: string;
+  groupId?: string; // e.g., "A", "B"
+  playerIds: string[]; // List of player IDs registered at this location
+}
+
+export interface TournamentMatchEvent {
+  playerId: string;
+  teamId?: string;
+  type: 'goal' | 'assist' | 'own_goal' | 'penalty_save' | 'penalty_miss';
+}
+
+export interface TournamentMatch {
+  id: string;
+  stage: 'group' | 'playoff';
+  groupId?: string;
+  groupName?: string; // e.g., "Grupo A"
+  roundName?: string; // e.g., "Quartas de Final", "Semifinal", "Final"
+  roundIndex?: number;
+  teamAId: string;
+  teamBId: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:mm
+  scoreA?: number;
+  scoreB?: number;
+  penaltiesA?: number;
+  penaltiesB?: number;
+  status: 'scheduled' | 'live' | 'finished';
+  mvpId?: string;
+  events?: TournamentMatchEvent[];
+  winnerTeamId?: string;
+}
+
+export interface TournamentGroup {
+  id: string; // "A", "B", "C"
+  name: string; // "Grupo A", "Grupo B"
+}
+
+export interface Tournament {
+  id: string;
+  name: string;
+  locationId: string; // Associated Location ID
+  status: 'planejamento' | 'em_andamento' | 'finalizado';
+  format: 'GRUPOS' | 'PLAYOFFS' | 'GRUPOS_E_PLAYOFFS';
+  groupsCount: number; // e.g. 1, 2, 4
+  qualifiersPerGroup: number; // e.g. 2 teams qualify from each group
+  teams: TournamentTeam[];
+  groups: TournamentGroup[];
+  matches: TournamentMatch[];
+  createdAt: number;
+  updatedAt?: number;
+}
+

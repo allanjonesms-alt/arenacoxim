@@ -227,5 +227,9 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+    match /tournaments/{tournamentId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
   }
 }

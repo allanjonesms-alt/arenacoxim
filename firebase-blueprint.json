@@ -190,6 +190,24 @@
         "createdAt": { "type": "integer" }
       },
       "required": ["betType", "targetName", "requiredValue", "odd", "displayText", "active"]
+    },
+    "Tournament": {
+      "title": "Tournament",
+      "description": "A championship or tournament created for a specific location",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "locationId": { "type": "string" },
+        "status": { "type": "string", "enum": ["planejamento", "em_andamento", "finalizado"] },
+        "format": { "type": "string", "enum": ["GRUPOS", "PLAYOFFS", "GRUPOS_E_PLAYOFFS"] },
+        "groupsCount": { "type": "integer" },
+        "qualifiersPerGroup": { "type": "integer" },
+        "teams": { "type": "array" },
+        "groups": { "type": "array" },
+        "matches": { "type": "array" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["name", "locationId", "status", "format"]
     }
   },
   "firestore": {
@@ -232,6 +250,10 @@
     "/boostedBets/{boostedId}": {
       "schema": "BoostedBet",
       "description": "Collection of boosted bets created by admin"
+    },
+    "/tournaments/{tournamentId}": {
+      "schema": "Tournament",
+      "description": "Collection of tournaments"
     }
   }
 }

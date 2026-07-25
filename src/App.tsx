@@ -594,11 +594,11 @@ export default function App() {
                 <Route path="/admin/players" element={<PlayerManagement adminData={adminData} adminId={user?.uid} sharedLocations={locations} />} />
                 <Route path="/admin/teams" element={<TeamManagement adminData={adminData} sharedLocations={locations} />} />
                 
+                <Route path="/admin/locations" element={<LocationManagement adminData={adminData} />} />
                 {adminData?.role === 'master' && (
                   <>
                     <Route path="/admin/odds-engine" element={<AdminOddsEngine />} />
                     <Route path="/admin/betting-settings" element={<AdminBettingSettings />} />
-                    <Route path="/admin/locations" element={<LocationManagement />} />
                     <Route path="/admin/admins" element={<AdminManagement adminData={adminData} sharedLocations={locations} />} />
                     <Route path="/admin/users" element={<UserManagement adminData={adminData} />} />
                   </>

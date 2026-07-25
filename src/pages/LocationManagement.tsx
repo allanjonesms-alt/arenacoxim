@@ -1,30 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
-import { Location } from '../types';
-import { MapPin, Plus, Trash2, Edit2, Search, X, Map, Users, Clock, CheckCircle2, Shield } from 'lucide-react';
+import { Location, AdminData } from '../types';
+import { MapPin, Plus, Trash2, Edit2, Search, X, Map, Users, Clock, CheckCircle2, Shield, Trophy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../App';
+import TournamentManagement from './TournamentManagement';
 
-export default function LocationManagement() {
+interface LocationManagementProps {
+  adminData?: AdminData | null;
+}
+
+export default function LocationManagement({ adminData }: LocationManagementProps) {
   const [locations, setLocations] = useState<Location[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [editingLocation, setEditingLocation] = useState<Location | null>(null);
-
-  // Form State
-  const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
-  const [logoUrl, setLogoUrl] = useState('');
-  const [playerCount, setPlayerCount] = useState<number>(5);
-  const [gameDuration, setGameDuration] = useState<number>(60);
+  const [activeTab, setActiveTab] = useState<'locations' | 'tournaments'>('locations');
+  const [selectedLocationForTournament, setSelectedLocationForTournament] = useState<string>('');
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'locations'), (snapshot) => {
-      setLocations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location)));
+      let locList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location));
+      if (adminData && adminData.role !== 'master' && adminData.locationId) {
+        locList = locList.filter(l => l.id === adminData.locationId);
+      }
+      setLocations(locList);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'locations'));
     return () => unsubscribe();
-  }, []);
+  }, [adminData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +82,18 @@ export default function LocationManagement() {
     }
   };
 
+  const handleOpenLocationTournaments = (locationId: string) => {
+    setSelectedLocationForTournament(locationId);
+    setActiveTab('tournaments');
+  };
+
+  // Form state
+  const [name, setName] = useState('');
+  const [address, setAddress] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [playerCount, setPlayerCount] = useState<number>(5);
+  const [gameDuration, setGameDuration] = useState<number>(60);
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -93,7 +109,6 @@ export default function LocationManagement() {
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
-          // Max width/height to limit base64 size
           const MAX_SIZE = 400;
           if (width > height && width > MAX_SIZE) {
             height *= MAX_SIZE / width;
@@ -124,105 +139,149 @@ export default function LocationManagement() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-4xl font-black uppercase italic tracking-tighter text-primary-blue">Arenas</h2>
-          <p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1 shadow-sm px-2 bg-gray-50 rounded-full inline-block">Gestão de Campos e Sedes</p>
-        </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="bg-primary-blue text-white px-10 py-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 active:scale-95 group"
+      {/* Tab Header Selector */}
+      <div className="flex border-b border-gray-200 gap-4">
+        <button
+          onClick={() => setActiveTab('locations')}
+          className={`pb-4 px-2 font-black text-sm uppercase tracking-wider transition-all flex items-center gap-2 ${
+            activeTab === 'locations'
+              ? 'border-b-4 border-primary-blue text-primary-blue'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
         >
-          <Plus className="w-5 h-5 text-primary-yellow transition-transform group-hover:rotate-12" /> Novo Local
+          <MapPin className="w-4 h-4" /> Gestão de Arenas
+        </button>
+
+        <button
+          onClick={() => setActiveTab('tournaments')}
+          className={`pb-4 px-2 font-black text-sm uppercase tracking-wider transition-all flex items-center gap-2 ${
+            activeTab === 'tournaments'
+              ? 'border-b-4 border-amber-400 text-amber-600'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          <Trophy className="w-4 h-4 text-amber-500" /> Campeonatos
         </button>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative group">
-        <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-blue transition-colors w-6 h-6" />
-        <input 
-          type="text" 
-          placeholder="Pesquisar arena pelo nome ou endereço..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-white border-2 border-gray-100 rounded-3xl py-6 pl-16 pr-8 focus:outline-none focus:border-primary-blue transition-all text-primary-blue font-bold placeholder:text-gray-300 shadow-sm"
+      {activeTab === 'tournaments' ? (
+        <TournamentManagement 
+          adminData={adminData} 
+          initialLocationId={selectedLocationForTournament || (locations[0]?.id || '')} 
         />
-      </div>
-
-      {/* Locations Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-        {filteredLocations.length === 0 ? (
-          <div className="col-span-full py-32 bg-white rounded-[3rem] border-2 border-dashed border-gray-100 text-center flex flex-col items-center opacity-30">
-            <MapPin className="w-20 h-20 text-gray-400 mb-6" />
-            <p className="text-gray-500 font-black uppercase tracking-[0.3em] italic">Nenhum local encontrado</p>
-          </div>
-        ) : (
-          filteredLocations.map((location) => (
-            <motion.div 
-              layout
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              key={location.id} 
-              className="bg-white rounded-[2.5rem] border-2 border-gray-100 overflow-hidden group hover:border-primary-blue/30 hover:shadow-2xl transition-all shadow-sm relative"
+      ) : (
+        <>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+              <h2 className="text-4xl font-black uppercase italic tracking-tighter text-primary-blue">Arenas</h2>
+              <p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1 shadow-sm px-2 bg-gray-50 rounded-full inline-block">Gestão de Campos e Sedes</p>
+            </div>
+            <button 
+              onClick={() => setIsModalOpen(true)}
+              className="bg-primary-blue text-white px-10 py-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 active:scale-95 group"
             >
-              <div className="p-6 md:p-10">
-                <div className="flex flex-col md:flex-row items-start md:items-center gap-6 mb-8 relative">
-                  <div className="flex items-center gap-4 md:gap-6 w-full md:w-auto">
-                    <div className="bg-gray-50 p-2 rounded-2xl md:rounded-[1.75rem] w-20 h-20 md:w-24 md:h-24 flex items-center justify-center overflow-hidden border-2 border-dashed border-gray-100 group-hover:border-primary-blue/20 transition-all shadow-inner bg-white flex-shrink-0">
-                      {location.logoUrl ? (
-                        <img src={location.logoUrl} alt={location.name} className="w-full h-full object-contain p-1 md:p-2" />
-                      ) : (
-                        <MapPin className="w-8 h-8 md:w-10 md:h-10 text-gray-100" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-xl md:text-2xl font-black italic uppercase text-primary-gray leading-tight truncate group-hover:text-primary-blue transition-colors">{location.name}</h3>
-                      <div className="flex items-center gap-1.5 mt-2 text-primary-yellow">
-                        {[...Array(5)].map((_, i) => (
-                          <Shield key={i} size={10} className="fill-current" />
-                        ))}
+              <Plus className="w-5 h-5 text-primary-yellow transition-transform group-hover:rotate-12" /> Novo Local
+            </button>
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative group">
+            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-blue transition-colors w-6 h-6" />
+            <input 
+              type="text" 
+              placeholder="Pesquisar arena pelo nome ou endereço..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-white border-2 border-gray-100 rounded-3xl py-6 pl-16 pr-8 focus:outline-none focus:border-primary-blue transition-all text-primary-blue font-bold placeholder:text-gray-300 shadow-sm"
+            />
+          </div>
+
+          {/* Locations Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {filteredLocations.length === 0 ? (
+              <div className="col-span-full py-32 bg-white rounded-[3rem] border-2 border-dashed border-gray-100 text-center flex flex-col items-center opacity-30">
+                <MapPin className="w-20 h-20 text-gray-400 mb-6" />
+                <p className="text-gray-500 font-black uppercase tracking-[0.3em] italic">Nenhum local encontrado</p>
+              </div>
+            ) : (
+              filteredLocations.map((location) => (
+                <motion.div 
+                  layout
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  key={location.id} 
+                  className="bg-white rounded-[2.5rem] border-2 border-gray-100 overflow-hidden group hover:border-primary-blue/30 hover:shadow-2xl transition-all shadow-sm relative flex flex-col justify-between"
+                >
+                  <div className="p-6 md:p-8">
+                    <div className="flex flex-col md:flex-row items-start md:items-center gap-6 mb-6 relative">
+                      <div className="flex items-center gap-4 md:gap-6 w-full md:w-auto">
+                        <div className="bg-gray-50 p-2 rounded-2xl md:rounded-[1.75rem] w-20 h-20 md:w-24 md:h-24 flex items-center justify-center overflow-hidden border-2 border-dashed border-gray-100 group-hover:border-primary-blue/20 transition-all shadow-inner bg-white flex-shrink-0">
+                          {location.logoUrl ? (
+                            <img src={location.logoUrl} alt={location.name} className="w-full h-full object-contain p-1 md:p-2" />
+                          ) : (
+                            <MapPin className="w-8 h-8 md:w-10 md:h-10 text-gray-100" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-xl md:text-2xl font-black italic uppercase text-primary-gray leading-tight truncate group-hover:text-primary-blue transition-colors">{location.name}</h3>
+                          <div className="flex items-center gap-1.5 mt-2 text-primary-yellow">
+                            {[...Array(5)].map((_, i) => (
+                              <Shield key={i} size={10} className="fill-current" />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex md:flex-col gap-2 md:gap-3 absolute top-0 right-0 md:relative md:top-auto md:right-auto">
+                        <button 
+                          onClick={() => handleEdit(location)}
+                          className="p-2.5 md:p-3 bg-white hover:bg-primary-blue text-primary-blue hover:text-white rounded-xl transition-all border-2 border-primary-blue/10 shadow-sm group/btn active:scale-95"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 md:w-4 md:h-4 group-hover/btn:text-primary-yellow transition-colors" />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(location.id)}
+                          className="p-2.5 md:p-3 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-all border border-red-100 shadow-sm active:scale-95"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                        </button>
                       </div>
                     </div>
+                    
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap gap-3">
+                        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-400 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100">
+                          <Users className="w-3.5 h-3.5 text-primary-blue" /> {location.playerCount || 5} Atletas/Time
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-400 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100">
+                          <Clock className="w-3.5 h-3.5 text-primary-yellow" /> {location.gameDuration || 60} Minutos
+                        </div>
+                      </div>
+                      {location.address && (
+                        <div className="bg-gray-50/50 p-4 rounded-2xl border border-dotted border-gray-200 group-hover:bg-gray-50 transition-colors">
+                          <p className="text-gray-400 text-[10px] font-bold flex items-start gap-3 leading-relaxed italic">
+                            <Map className="w-4 h-4 mt-0.5 flex-shrink-0 text-primary-blue/30" />
+                            {location.address}
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex md:flex-col gap-2 md:gap-3 absolute top-0 right-0 md:relative md:top-auto md:right-auto">
-                    <button 
-                      onClick={() => handleEdit(location)}
-                      className="p-2.5 md:p-3 bg-white hover:bg-primary-blue text-primary-blue hover:text-white rounded-xl transition-all border-2 border-primary-blue/10 shadow-sm group/btn active:scale-95"
+
+                  {/* Tournament Action for Location */}
+                  <div className="p-4 bg-gray-50 border-t border-gray-100">
+                    <button
+                      onClick={() => handleOpenLocationTournaments(location.id)}
+                      className="w-full bg-slate-900 hover:bg-amber-400 hover:text-slate-950 text-white font-black text-xs uppercase tracking-wider py-3 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-sm"
                     >
-                      <Edit2 className="w-3.5 h-3.5 md:w-4 md:h-4 group-hover/btn:text-primary-yellow transition-colors" />
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(location.id)}
-                      className="p-2.5 md:p-3 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-all border border-red-100 shadow-sm active:scale-95"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                      <Trophy className="w-4 h-4 text-amber-400 group-hover:text-slate-950" /> Campeonatos desta Arena
                     </button>
                   </div>
-                </div>
-                
-                <div className="space-y-6">
-                  <div className="flex flex-wrap gap-3">
-                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-400 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100">
-                      <Users className="w-3.5 h-3.5 text-primary-blue" /> {location.playerCount || 5} Atletas/Time
-                    </div>
-                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-400 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100">
-                      <Clock className="w-3.5 h-3.5 text-primary-yellow" /> {location.gameDuration || 60} Minutos
-                    </div>
-                  </div>
-                  {location.address && (
-                    <div className="bg-gray-50/50 p-5 rounded-2xl border border-dotted border-gray-200 group-hover:bg-gray-50 transition-colors">
-                      <p className="text-gray-400 text-[10px] font-bold flex items-start gap-3 leading-relaxed italic">
-                        <Map className="w-4 h-4 mt-0.5 flex-shrink-0 text-primary-blue/30" />
-                        {location.address}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          ))
-        )}
-      </div>
+                </motion.div>
+              ))
+            )}
+          </div>
+        </>
+      )}
 
       {/* Modal */}
       <AnimatePresence>
@@ -354,3 +413,4 @@ export default function LocationManagement() {
     </div>
   );
 }
+
