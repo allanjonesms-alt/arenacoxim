@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, onSnapshot, getDocs, doc, getDoc, addDoc, updateDoc, setDoc, serverTimestamp, query, orderBy, limit, where, runTransaction } from 'firebase/firestore';
-import { Player, Location, Match, Card, OddsEngineConfig, AdminData, OddsSimulationHistory, ScoringRules } from '../types';
-import { MapPin, Swords, ArrowRightLeft, Target, Trophy, Percent, Shield, Zap, CalendarDays, Settings2, Activity, ArrowUp, ArrowDown, Save, History, Wallet, ArrowUpRight, Search, TrendingUp, Trash2, CheckCircle2, XCircle, FileText, X } from 'lucide-react';
+import { collection, onSnapshot, getDocs, doc, getDoc, addDoc, updateDoc, setDoc, deleteDoc, serverTimestamp, query, orderBy, limit, where, runTransaction } from 'firebase/firestore';
+import { Player, Location, Match, Card, OddsEngineConfig, AdminData, OddsSimulationHistory, ScoringRules, BoostedBet, BoostedBetSubItem } from '../types';
+import { MapPin, Swords, ArrowRightLeft, Target, Trophy, Percent, Shield, Zap, CalendarDays, Settings2, Activity, ArrowUp, ArrowDown, Save, History, Wallet, ArrowUpRight, Search, TrendingUp, Trash2, CheckCircle2, XCircle, FileText, X, Plus } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getPositionAbbr, getPositionColor, getPlayerFinalOverall } from '../utils/playerUtils';
@@ -40,7 +40,163 @@ export default function SimuladorConfrontos({ adminData }: Props) {
   const [simulationHistory, setSimulationHistory] = useState<OddsSimulationHistory[]>([]);
   const [isSavingHistory, setIsSavingHistory] = useState(false);
   const [longTermSearch, setLongTermSearch] = useState('');
-  const [activeBetTab, setActiveBetTab] = useState<'linha' | 'goleiro' | 'pontuador'>('linha');
+  const [activeBetTab, setActiveBetTab] = useState<'linha' | 'goleiro' | 'pontuador' | 'turbinadas'>('linha');
+
+  // Boosted Bets (Apostas Turbinadas) State & Modal
+  const [boostedBets, setBoostedBets] = useState<BoostedBet[]>([]);
+  const [isBoostedModalOpen, setIsBoostedModalOpen] = useState(false);
+  const [editingBoostedBet, setEditingBoostedBet] = useState<BoostedBet | null>(null);
+
+  const [boostItems, setBoostItems] = useState<BoostedBetSubItem[]>([
+    { betType: 'GOLS NO MÊS', targetName: '', targetType: 'player', requiredValue: '+10' }
+  ]);
+  const [boostOdd, setBoostOdd] = useState('2,00');
+  const [boostDisplayText, setBoostDisplayText] = useState('');
+  const [boostActive, setBoostActive] = useState(true);
+  const [isCustomDisplayText, setIsCustomDisplayText] = useState(false);
+
+  // Real-time listener for Boosted Bets
+  useEffect(() => {
+    const unsubBoosted = onSnapshot(collection(db, 'boostedBets'), (snap) => {
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })) as BoostedBet[];
+      list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      setBoostedBets(list);
+    }, (err) => {
+      console.error("Error loading boosted bets:", err);
+    });
+    return () => unsubBoosted();
+  }, []);
+
+  const resetBoostedForm = () => {
+    setBoostItems([{ betType: 'GOLS NO MÊS', targetName: '', targetType: 'player', requiredValue: '+10' }]);
+    setBoostOdd('2,00');
+    setBoostDisplayText('');
+    setBoostActive(true);
+    setIsCustomDisplayText(false);
+    setEditingBoostedBet(null);
+  };
+
+  const handleOpenCreateBoosted = () => {
+    resetBoostedForm();
+    setIsBoostedModalOpen(true);
+  };
+
+  const handleOpenEditBoosted = (bet: BoostedBet) => {
+    setEditingBoostedBet(bet);
+    if (bet.items && bet.items.length > 0) {
+      setBoostItems(bet.items);
+    } else {
+      setBoostItems([{
+        betType: bet.betType || 'GOLS NO MÊS',
+        targetName: bet.targetName || '',
+        targetType: bet.targetType || 'player',
+        requiredValue: bet.requiredValue || '+10'
+      }]);
+    }
+    setBoostOdd(String(bet.odd || '2.00').replace('.', ','));
+    setBoostDisplayText(bet.displayText || '');
+    setBoostActive(bet.active !== false);
+    setIsCustomDisplayText(true);
+    setIsBoostedModalOpen(true);
+  };
+
+  const handleAddBoostItem = () => {
+    if (boostItems.length >= 3) return;
+    setBoostItems(prev => [
+      ...prev,
+      { betType: 'GOLS NO MÊS', targetName: '', targetType: 'player', requiredValue: '+10' }
+    ]);
+  };
+
+  const handleRemoveBoostItem = (index: number) => {
+    if (boostItems.length <= 1) return;
+    setBoostItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateBoostItem = (index: number, field: keyof BoostedBetSubItem, value: any) => {
+    setBoostItems(prev => prev.map((item, i) => i === index ? { ...item, [field]: value } : item));
+  };
+
+  // Auto-generate display text unless modified manually
+  useEffect(() => {
+    if (!isCustomDisplayText) {
+      const validItems = boostItems.filter(i => i.targetName.trim().length > 0);
+      if (validItems.length > 0) {
+        const phrases = validItems.map(item => {
+          let suffix = 'no mês';
+          if (item.betType === 'PONTOS NO MÊS') suffix = 'pontos no mês';
+          else if (item.betType === 'GOLS NA PARTIDA') suffix = 'gols na partida';
+          else if (item.betType === 'GOLS SOFRIDOS') suffix = 'gols sofridos';
+          else if (item.betType === 'ASSISTÊNCIAS NO MÊS') suffix = 'assistências no mês';
+          else if (item.betType === 'VITÓRIA DA EQUIPE') suffix = 'vitórias';
+
+          const cleanVal = (item.requiredValue || '').replace('+', '').trim();
+          return `${item.targetName} ${cleanVal ? cleanVal + ' ou mais ' : ''}${suffix}`.trim();
+        });
+
+        const numVal = parseFloat(boostOdd.replace(',', '.')) || 2.0;
+        const formattedOdd = numVal.toFixed(2).replace('.', ',');
+        setBoostDisplayText(`${phrases.join(' + ')} - odd ${formattedOdd}`);
+      }
+    }
+  }, [boostItems, boostOdd, isCustomDisplayText]);
+
+  const handleSaveBoostedBet = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const validItems = boostItems.filter(i => i.targetName.trim().length > 0);
+    if (validItems.length === 0 || !boostOdd || !boostDisplayText) {
+      alert('Por favor, preencha o Time/Jogador de pelo menos 1 aposta, a Odd e o Texto de Exibição.');
+      return;
+    }
+
+    try {
+      const numOdd = parseFloat(boostOdd.replace(',', '.')) || 1.0;
+      const primaryItem = validItems[0];
+      const betData = {
+        items: validItems,
+        betType: validItems.length > 1 ? `COMBINADA (${validItems.length})` : primaryItem.betType,
+        targetName: validItems.map(i => i.targetName).join(' + '),
+        targetType: primaryItem.targetType || 'other',
+        requiredValue: validItems.map(i => i.requiredValue).join(' / '),
+        odd: numOdd,
+        displayText: boostDisplayText,
+        active: boostActive,
+        createdAt: editingBoostedBet?.createdAt || Date.now()
+      };
+
+      if (editingBoostedBet?.id) {
+        await updateDoc(doc(db, 'boostedBets', editingBoostedBet.id), betData);
+      } else {
+        await addDoc(collection(db, 'boostedBets'), betData);
+      }
+
+      setIsBoostedModalOpen(false);
+      resetBoostedForm();
+      alert('Aposta Turbinada salva com sucesso!');
+    } catch (err: any) {
+      console.error('Error saving boosted bet:', err);
+      alert('Erro ao salvar aposta turbinada: ' + err.message);
+    }
+  };
+
+  const handleToggleBoostedActive = async (bet: BoostedBet) => {
+    if (!bet.id) return;
+    try {
+      await updateDoc(doc(db, 'boostedBets', bet.id), { active: !bet.active });
+    } catch (err: any) {
+      console.error('Error toggling boosted bet:', err);
+    }
+  };
+
+  const handleDeleteBoostedBet = async (betId: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir esta aposta turbinada?')) return;
+    try {
+      await deleteDoc(doc(db, 'boostedBets', betId));
+    } catch (err: any) {
+      console.error('Error deleting boosted bet:', err);
+      alert('Erro ao excluir: ' + err.message);
+    }
+  };
 
   const [showBetsReport, setShowBetsReport] = useState(false);
   const [activeBets, setActiveBets] = useState<any[]>([]);
@@ -374,13 +530,18 @@ export default function SimuladorConfrontos({ adminData }: Props) {
     
     const getOdd = (p: number) => {
         const margin = getDynamicMargin(p);
-        const odd = 1 / (p * margin);
+        const rawOdd = 1 / (p * margin);
         
-        // Limites estritos para futebol amador (inibir esquemas de apostas com retornos gigantes)
+        // Ponderação para calibrar as odds de gols/assistências individuais:
+        // Eleva odds de alta probabilidade (para não ficarem extremamente baixas, ex: 1.10 -> 1.33)
+        // Reduz odds de baixa probabilidade (para não ficarem extremamente distantes, ex: 12.00 -> 7.33)
+        const weightedOdd = Math.pow(rawOdd, 0.70) * 1.25;
+        
+        // Limites estritos para futebol amador
         const maxOdd = oddsConfig?.maxOdd ?? 12.00;
-        if (odd < 1.01) return '1.01';
-        if (odd > maxOdd) return maxOdd.toFixed(2);
-        return odd.toFixed(2);
+        if (weightedOdd < 1.15) return '1.15';
+        if (weightedOdd > maxOdd) return maxOdd.toFixed(2);
+        return weightedOdd.toFixed(2);
     };
     
     return {
@@ -1066,7 +1227,9 @@ export default function SimuladorConfrontos({ adminData }: Props) {
       const marketProb = blendedProb * houseMargin;
       
       const rawOdd = marketProb > 0 ? (1 / marketProb) : maxOddConfig;
-      const odd = Math.max(1.15, Math.min(maxOddConfig, Number(rawOdd.toFixed(2))));
+      // Reduce odds by half for top monthly scorer market
+      const halvedOdd = rawOdd / 2;
+      const odd = Math.max(1.05, Math.min(maxOddConfig, Number(halvedOdd.toFixed(2))));
 
       return {
         ...item,
@@ -1871,6 +2034,16 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                     <><Shield className="w-3.5 h-3.5" /> Pontuador: OFF</>
                   )}
                 </button>
+
+                <button
+                  type="button"
+                  onClick={handleOpenCreateBoosted}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-[10px] sm:text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all cursor-pointer active:scale-95"
+                  title="Criar nova aposta turbinada personalizada"
+                >
+                  <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                  <span>+ Aposta Turbinada</span>
+                </button>
               </div>
             </div>
 
@@ -1887,7 +2060,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
             </div>
 
             {/* Abas para Apostas no Longo Prazo */}
-            <div className="flex border-b border-white/20 mb-6 gap-2">
+            <div className="flex flex-wrap border-b border-white/20 mb-6 gap-2">
               <button
                 type="button"
                 onClick={() => setActiveBetTab('linha')}
@@ -1913,18 +2086,126 @@ export default function SimuladorConfrontos({ adminData }: Props) {
               <button
                 type="button"
                 onClick={() => setActiveBetTab('pontuador')}
-                className={`pb-3 px-4 text-xs sm:text-sm font-black uppercase tracking-wider border-b-2 transition-all ${
+                className={`pb-3 px-4 text-xs sm:text-sm font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
                   activeBetTab === 'pontuador'
-                    ? 'border-amber-500 text-amber-600'
-                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                    ? 'border-amber-300 text-amber-300'
+                    : 'border-transparent text-white/70 hover:text-white'
                 }`}
               >
                 Maior Pontuador
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveBetTab('turbinadas')}
+                className={`pb-3 px-4 text-xs sm:text-sm font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeBetTab === 'turbinadas'
+                    ? 'border-amber-300 text-amber-300'
+                    : 'border-transparent text-amber-400/80 hover:text-amber-300'
+                }`}
+              >
+                <Zap className="w-4 h-4 fill-amber-300 text-amber-300" />
+                <span>Apostas Turbinadas ({boostedBets.length})</span>
               </button>
             </div>
 
             {/* Listagem de Jogadores e Odds por Categoria */}
             <div className="space-y-4">
+              {activeBetTab === 'turbinadas' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-white/20 pb-3">
+                    <h4 className="text-sm font-black uppercase tracking-wider text-amber-300 flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-amber-300" /> Apostas Turbinadas Cadastradas ({boostedBets.length})
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={handleOpenCreateBoosted}
+                      className="bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    >
+                      <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                      <span>+ Nova Aposta Turbinada</span>
+                    </button>
+                  </div>
+
+                  {boostedBets.length === 0 ? (
+                    <div className="bg-black/20 border border-white/10 rounded-2xl p-8 text-center space-y-3">
+                      <Zap className="w-8 h-8 text-amber-300 mx-auto opacity-50" />
+                      <p className="text-xs text-white/70 font-semibold">Nenhuma aposta turbinada cadastrada ainda.</p>
+                      <button
+                        type="button"
+                        onClick={handleOpenCreateBoosted}
+                        className="text-xs font-black text-amber-300 underline hover:text-amber-200 cursor-pointer"
+                      >
+                        Criar a primeira aposta turbinada agora
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {boostedBets.map((boost) => (
+                        <div
+                          key={boost.id}
+                          className={`bg-black/30 border rounded-2xl p-4 flex flex-col justify-between gap-3 transition-all ${
+                            boost.active !== false ? 'border-amber-400/40' : 'border-white/10 opacity-60'
+                          }`}
+                        >
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[10px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded">
+                                {boost.betType || 'GOLS NO MÊS'}
+                              </span>
+                              <span
+                                className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                                  boost.active !== false ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                                }`}
+                              >
+                                {boost.active !== false ? 'ATIVA' : 'INATIVA'}
+                              </span>
+                            </div>
+                            <p className="text-sm font-black text-white leading-snug">
+                              {boost.displayText}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center justify-between border-t border-white/10 pt-3">
+                            <div className="text-xs font-black text-amber-300">
+                              Odd: @ {Number(boost.odd).toFixed(2).replace('.', ',')}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleBoostedActive(boost)}
+                                className={`text-[10px] font-black px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                                  boost.active !== false
+                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 hover:bg-amber-500/30'
+                                    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30'
+                                }`}
+                              >
+                                {boost.active !== false ? 'Desativar' : 'Ativar'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditBoosted(boost)}
+                                className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all cursor-pointer"
+                                title="Editar Aposta"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteBoostedBet(boost.id!)}
+                                className="p-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-300 rounded-lg transition-all cursor-pointer"
+                                title="Excluir Aposta"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {activeBetTab === 'linha' && (
                 <div className="space-y-4">
                   <h4 className="text-sm font-black uppercase tracking-wider text-emerald-600 border-b border-gray-150 pb-2 flex items-center justify-between">
@@ -2433,6 +2714,238 @@ export default function SimuladorConfrontos({ adminData }: Props) {
               <span>Painel de Resultados ArenaBet</span>
               <span>Total: {activeBets.length} apostas</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CRIAR / EDITAR APOSTA TURBINADA */}
+      {isBoostedModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-3xl p-6 sm:p-8 max-w-lg w-full text-white shadow-2xl relative my-8 space-y-5 animate-in fade-in zoom-in duration-200">
+            <button
+              type="button"
+              onClick={() => setIsBoostedModalOpen(false)}
+              className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all text-white/80 hover:text-white cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-white/10 pb-4">
+              <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-lg shrink-0">
+                <Zap className="w-6 h-6 fill-slate-950" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black uppercase italic tracking-tight text-white">
+                  {editingBoostedBet ? 'Editar Aposta Turbinada' : 'Criar Aposta Turbinada'}
+                </h3>
+                <p className="text-xs text-amber-200/80 font-medium">
+                  Configure cotações especiais e frases promocionais para os apostadores.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveBoostedBet} className="space-y-4">
+              {/* Seção de Apostas Combinadas (Até 3) */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                  <div>
+                    <label className="text-xs font-black uppercase text-amber-300 tracking-wider block">
+                      Apostas a Combinar ({boostItems.length}/3)
+                    </label>
+                    <p className="text-[10px] text-gray-400 font-medium">
+                      Combine até 3 opções de apostas em uma cotação turbinada única.
+                    </p>
+                  </div>
+                  {boostItems.length < 3 && (
+                    <button
+                      type="button"
+                      onClick={handleAddBoostItem}
+                      className="text-[11px] font-black uppercase bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 px-3 py-1.5 rounded-xl hover:from-amber-300 hover:to-amber-400 transition-all flex items-center gap-1 cursor-pointer shadow-md active:scale-95 shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                      <span>+ Combinar (+1)</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
+                  {boostItems.map((item, idx) => (
+                    <div key={idx} className="bg-black/50 border border-amber-400/30 rounded-2xl p-3.5 space-y-3 relative shadow-inner">
+                      <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                        <span className="text-[11px] font-black uppercase text-amber-300 tracking-wider flex items-center gap-1.5">
+                          <Zap className="w-3.5 h-3.5 fill-amber-300 text-amber-300" />
+                          Aposta #{idx + 1} da Combinação
+                        </span>
+                        {boostItems.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveBoostItem(idx)}
+                            className="text-red-400 hover:text-red-300 text-xs font-bold flex items-center gap-1 px-2 py-0.5 hover:bg-red-500/20 rounded-lg transition-all cursor-pointer"
+                            title="Remover esta aposta da combinação"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Remover</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-amber-200 uppercase block mb-1">
+                            Tipo da Aposta
+                          </label>
+                          <select
+                            value={item.betType}
+                            onChange={(e) => handleUpdateBoostItem(idx, 'betType', e.target.value)}
+                            className="w-full bg-slate-950 border border-white/20 rounded-xl px-2.5 py-2 text-xs text-white focus:ring-2 focus:ring-amber-400 outline-none font-semibold"
+                          >
+                            <option value="GOLS NO MÊS">GOLS NO MÊS</option>
+                            <option value="PONTOS NO MÊS">PONTOS NO MÊS</option>
+                            <option value="GOLS NA PARTIDA">GOLS NA PARTIDA</option>
+                            <option value="GOLS SOFRIDOS">GOLS SOFRIDOS</option>
+                            <option value="ASSISTÊNCIAS NO MÊS">ASSISTÊNCIAS NO MÊS</option>
+                            <option value="VITÓRIA DA EQUIPE">VITÓRIA DA EQUIPE</option>
+                            <option value="OUTRO">OUTRO (PERSONALIZADO)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-amber-200 uppercase block mb-1">
+                            Valor / Meta
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Ex: +10 ou 10"
+                            value={item.requiredValue}
+                            onChange={(e) => handleUpdateBoostItem(idx, 'requiredValue', e.target.value)}
+                            className="w-full bg-slate-950 border border-white/20 rounded-xl px-2.5 py-2 text-xs text-white placeholder-white/40 focus:ring-2 focus:ring-amber-400 outline-none font-bold"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-amber-200 uppercase block mb-1">
+                          Time ou Jogador
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <select
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (!val) return;
+                              if (val.startsWith('p:')) {
+                                const p = players.find(x => x.id === val.replace('p:', ''));
+                                if (p) {
+                                  handleUpdateBoostItem(idx, 'targetName', p.nickname || p.name);
+                                  handleUpdateBoostItem(idx, 'targetType', 'player');
+                                }
+                              } else if (val.startsWith('t:')) {
+                                handleUpdateBoostItem(idx, 'targetName', val.replace('t:', ''));
+                                handleUpdateBoostItem(idx, 'targetType', 'team');
+                              }
+                            }}
+                            className="w-full bg-slate-950 border border-white/20 rounded-xl px-2.5 py-2 text-[11px] text-white focus:ring-2 focus:ring-amber-400 outline-none"
+                          >
+                            <option value="">-- Selecionar da Lista --</option>
+                            <optgroup label="Times">
+                              <option value="t:Time Azul">Time Azul</option>
+                              <option value="t:Time Amarelo">Time Amarelo</option>
+                            </optgroup>
+                            <optgroup label="Atletas">
+                              {players.map(p => (
+                                <option key={p.id} value={`p:${p.id}`}>{p.name} {p.nickname ? `(${p.nickname})` : ''}</option>
+                              ))}
+                            </optgroup>
+                          </select>
+
+                          <input
+                            type="text"
+                            placeholder="Ou digite o nome"
+                            value={item.targetName}
+                            onChange={(e) => {
+                              handleUpdateBoostItem(idx, 'targetName', e.target.value);
+                              handleUpdateBoostItem(idx, 'targetType', 'other');
+                            }}
+                            className="w-full bg-slate-950 border border-white/20 rounded-xl px-2.5 py-2 text-xs text-white placeholder-white/40 focus:ring-2 focus:ring-amber-400 outline-none font-bold"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Odd (Cotação Especial) */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-xs font-black uppercase text-amber-300 tracking-wider block">
+                  Odd (Cotação Turbinada Final)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: 4,50"
+                  value={boostOdd}
+                  onChange={(e) => setBoostOdd(e.target.value)}
+                  className="w-full bg-black/40 border border-white/20 rounded-xl px-3 py-2.5 text-sm text-amber-300 placeholder-white/50 focus:ring-2 focus:ring-amber-400 outline-none font-black"
+                />
+              </div>
+
+              {/* Texto para ser Exibido */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black uppercase text-amber-300 tracking-wider block">
+                    Texto a ser Exibido ao Apostador
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomDisplayText(false)}
+                    className="text-[10px] text-amber-300/80 hover:text-amber-200 underline font-bold cursor-pointer"
+                  >
+                    Gerar Automático
+                  </button>
+                </div>
+                <textarea
+                  rows={2}
+                  value={boostDisplayText}
+                  onChange={(e) => {
+                    setBoostDisplayText(e.target.value);
+                    setIsCustomDisplayText(true);
+                  }}
+                  placeholder="Ex: Zé Augusto 10 gols + Time Azul 3 vitórias - odd 4,50"
+                  className="w-full bg-black/40 border border-white/20 rounded-xl px-3 py-2.5 text-xs text-white placeholder-white/50 focus:ring-2 focus:ring-amber-400 outline-none font-semibold leading-relaxed"
+                />
+              </div>
+
+              {/* Checkbox Ativa */}
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="boostActiveCheck"
+                  checked={boostActive}
+                  onChange={(e) => setBoostActive(e.target.checked)}
+                  className="w-4 h-4 accent-amber-400 rounded cursor-pointer"
+                />
+                <label htmlFor="boostActiveCheck" className="text-xs font-bold text-white cursor-pointer select-none">
+                  Aposta Ativa (visível imediatamente no setor de apostas)
+                </label>
+              </div>
+
+              {/* Botões do formulário */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setIsBoostedModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs uppercase cursor-pointer transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider cursor-pointer shadow-lg transition-all active:scale-95 flex items-center gap-2"
+                >
+                  <Zap className="w-4 h-4 fill-slate-950" />
+                  <span>Salvar Aposta Turbinada</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

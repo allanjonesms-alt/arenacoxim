@@ -160,6 +160,36 @@
         "createdAt": { "type": "integer", "description": "Timestamp when banner was created" }
       },
       "required": ["imageUrlDesktop", "imageUrlMobile", "link", "active"]
+    },
+    "BoostedBet": {
+      "title": "BoostedBet",
+      "description": "A boosted bet created by administrators with special odds",
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "description": "Up to 3 combined bet items",
+          "items": {
+            "type": "object",
+            "properties": {
+              "betType": { "type": "string" },
+              "targetName": { "type": "string" },
+              "targetType": { "type": "string" },
+              "requiredValue": { "type": "string" }
+            }
+          }
+        },
+        "betType": { "type": "string", "description": "Type of bet e.g. GOLS NO MÊS" },
+        "targetName": { "type": "string", "description": "Player or Team name" },
+        "targetType": { "type": "string", "enum": ["player", "team", "other"] },
+        "targetId": { "type": "string" },
+        "requiredValue": { "type": "string", "description": "Required threshold e.g. +10" },
+        "odd": { "type": "number", "description": "Boosted odd value e.g. 2.0" },
+        "displayText": { "type": "string", "description": "Full text to be displayed to bettors" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["betType", "targetName", "requiredValue", "odd", "displayText", "active"]
     }
   },
   "firestore": {
@@ -198,6 +228,10 @@
     "/banners/{bannerId}": {
       "schema": "Banner",
       "description": "Collection of promotional/informational banners"
+    },
+    "/boostedBets/{boostedId}": {
+      "schema": "BoostedBet",
+      "description": "Collection of boosted bets created by admin"
     }
   }
 }

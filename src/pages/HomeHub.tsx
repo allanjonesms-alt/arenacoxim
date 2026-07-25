@@ -14,10 +14,14 @@ import {
   FileText,
   Newspaper,
   Image,
-  Trash2
-, Star, X } from 'lucide-react';
+  Trash2,
+  Star, 
+  X,
+  Zap,
+  ChevronRight
+} from 'lucide-react';
 import { motion } from 'motion/react';
-import { AdminData, News, Location, Team, ScoringRules, Player, Card } from '../types';
+import { AdminData, News, Location, Team, ScoringRules, Player, Card, BoostedBet } from '../types';
 import { collection, query, orderBy, onSnapshot, deleteDoc, doc, where, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { handleFirestoreError, OperationType } from '../App';
@@ -47,6 +51,7 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
   const [news, setNews] = useState<News[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
+  const [boostedBets, setBoostedBets] = useState<BoostedBet[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const [promoConfig, setPromoConfig] = useState({
@@ -101,10 +106,16 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
       setCards(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Card)));
     }, (err) => console.error("Error loading cards in HomeHub:", err));
 
+    const unsubscribeBoosted = onSnapshot(collection(db, 'boostedBets'), (snapshot) => {
+      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as BoostedBet[];
+      setBoostedBets(list.filter(b => b.active !== false));
+    }, (err) => console.error("Error loading boosted bets in HomeHub:", err));
+
     return () => {
       unsubscribeNews();
       unsubscribePlayers();
       unsubscribeCards();
+      unsubscribeBoosted();
     };
   }, [adminData]);
 
@@ -260,21 +271,73 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
       <div className="-mx-4 sm:-mx-6 lg:-mx-8 lg:-mt-0">
          <ShopeeBanner className="rounded-none sm:rounded-b-2xl border-x-0 border-t-0" />
       </div>
+
+      {/* Active Boosted Bets Section */}
+      {boostedBets.length > 0 && (
+        <div className="space-y-3 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-950 p-5 sm:p-6 rounded-[2rem] border border-amber-400/40 shadow-xl relative overflow-hidden my-4">
+          <div className="absolute -right-12 -top-12 w-40 h-40 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
+          
+          <div className="flex items-center justify-between gap-2 relative z-10">
+            <div className="flex items-center gap-2.5">
+              <div className="bg-amber-400/20 p-2 rounded-xl border border-amber-400/30">
+                <Zap className="w-5 h-5 fill-amber-400 text-amber-400 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-black uppercase italic tracking-tight text-white flex items-center gap-2">
+                  Apostas Turbinadas 
+                  <span className="text-[10px] font-black uppercase tracking-widest bg-amber-400 text-slate-950 px-2 py-0.5 rounded-md shadow-xs not-italic">
+                    ODDS ESPECIAIS 🚀
+                  </span>
+                </h3>
+                <p className="text-xs text-amber-300/80 font-bold">Cotações especiais ativas na Arena</p>
+              </div>
+            </div>
+            
+            <Link
+              to="/apostas"
+              className="hidden sm:flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider px-4 py-2 rounded-xl transition-all shadow-md active:scale-95"
+            >
+              Ir para Apostas <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2 relative z-10">
+            {boostedBets.map((boost) => (
+              <div
+                key={boost.id}
+                className="bg-slate-800/90 border border-amber-400/30 hover:border-amber-400 rounded-2xl p-4 flex flex-col justify-between gap-3 transition-all hover:scale-[1.01] shadow-md group"
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[9px] font-black uppercase tracking-widest bg-amber-400 text-slate-950 px-2 py-0.5 rounded-md flex items-center gap-1 font-extrabold">
+                      <Zap className="w-2.5 h-2.5 fill-slate-950" />
+                      {boost.betType && !boost.betType.startsWith('COMBINADA') ? boost.betType : 'TURBINADA'}
+                    </span>
+                    <span className="text-lg font-black text-amber-300">
+                      @ {Number(boost.odd).toFixed(2).replace('.', ',')}
+                    </span>
+                  </div>
+                  <p className="text-xs font-black text-white leading-snug">
+                    {boost.displayText}
+                  </p>
+                </div>
+
+                <Link
+                  to="/apostas"
+                  className="w-full bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs uppercase tracking-wider py-2.5 rounded-xl transition-all shadow-md active:scale-95 text-center flex items-center justify-center gap-1.5"
+                >
+                  Apostar Agora <TrendingUp className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       
       <div className="space-y-10">
         <div className="space-y-8">
           
-          {user && (
-        <div className="py-2 hidden md:flex justify-center">
-          <Link 
-            to="/apostas"
-            className="bg-primary-blue text-white px-8 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-900 transition-all shadow-md active:scale-95 flex items-center justify-center gap-3 w-full max-w-sm border border-white/10"
-          >
-            <TrendingUp className="w-5 h-5 text-primary-yellow" />
-            Apostas
-          </Link>
-        </div>
-      )}
+
       
       {/* 1. Botões Públicos */}
           <motion.div 

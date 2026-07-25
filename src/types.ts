@@ -220,3 +220,24 @@ export interface OddsSimulationHistory {
   oddDraw: string;
   oddB: string;
 }
+
+export interface BoostedBetSubItem {
+  betType: string;
+  targetName: string;
+  targetType?: 'player' | 'team' | 'other';
+  requiredValue: string;
+}
+
+export interface BoostedBet {
+  id?: string;
+  items?: BoostedBetSubItem[];
+  betType: string;
+  targetName: string;
+  targetType?: 'player' | 'team' | 'other';
+  targetId?: string;
+  requiredValue: string;
+  odd: number;
+  displayText: string;
+  active: boolean;
+  createdAt?: number;
+}

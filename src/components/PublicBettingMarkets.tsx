@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, query, where, getDoc, doc, addDoc, runTransaction } from 'firebase/firestore';
-import { Match, OddsEngineConfig, Player, Card, ScoringRules } from '../types';
+import { Match, OddsEngineConfig, Player, Card, ScoringRules, BoostedBet } from '../types';
 import { TrendingUp, Shield, Trophy, Target, Zap, CalendarDays, Search, ChevronDown, ChevronUp, ArrowLeft, ChevronRight, Clock, Users } from 'lucide-react';
 import { getPositionAbbr, getPositionColor, getPlayerFinalOverall } from '../utils/playerUtils';
 import { calculateMatchPoints } from '../utils/scoringEngine';
@@ -48,6 +48,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
   const [scoringRules, setScoringRules] = useState<ScoringRules | null>(null);
   const [bettingParams, setBettingParams] = useState<any>({ maxBetAmount: 1.00 });
   const [betSettings, setBetSettings] = useState<any>({});
+  const [boostedBets, setBoostedBets] = useState<BoostedBet[]>([]);
   const [allBets, setAllBets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeMarketTab, setActiveMarketTab] = useState<'matches' | 'longTerm'>('matches');
@@ -116,11 +117,19 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
       setLoading(false);
     });
 
+    const unsubBoosted = onSnapshot(collection(db, 'boostedBets'), snap => {
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })) as BoostedBet[];
+      setBoostedBets(list.filter(b => b.active !== false));
+    }, (err) => {
+      console.error("Error loading boosted bets:", err);
+    });
+
     return () => {
       unsubMatches();
       unsubPlayers();
       unsubCards();
       unsubBets();
+      unsubBoosted();
       unsubBetsSettings();
       unsubBettingParams();
       unsubOdds();
@@ -395,13 +404,18 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
     
     const getOdd = (p: number) => {
         const margin = getDynamicMargin(p);
-        const odd = 1 / (p * margin);
+        const rawOdd = 1 / (p * margin);
         
-        // Limites estritos para futebol amador (inibir esquemas de apostas com retornos gigantes)
+        // Ponderação para calibrar as odds de gols/assistências individuais:
+        // Eleva odds de alta probabilidade (para não ficarem extremamente baixas, ex: 1.10 -> 1.33)
+        // Reduz odds de baixa probabilidade (para não ficarem extremamente distantes, ex: 12.00 -> 7.33)
+        const weightedOdd = Math.pow(rawOdd, 0.70) * 1.25;
+        
+        // Limites estritos para futebol amador
         const maxOdd = oddsConfig?.maxOdd ?? 12.00;
-        if (odd < 1.01) return '1.01';
-        if (odd > maxOdd) return maxOdd.toFixed(2);
-        return odd.toFixed(2);
+        if (weightedOdd < 1.15) return '1.15';
+        if (weightedOdd > maxOdd) return maxOdd.toFixed(2);
+        return weightedOdd.toFixed(2);
     };
     
     return {
@@ -720,7 +734,9 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
       const marketProb = blendedProb * houseMargin;
       
       const rawOdd = marketProb > 0 ? (1 / marketProb) : maxOddConfig;
-      const odd = Math.max(1.15, Math.min(maxOddConfig, Number(rawOdd.toFixed(2))));
+      // Reduce odds by half for top monthly scorer market
+      const halvedOdd = rawOdd / 2;
+      const odd = Math.max(1.05, Math.min(maxOddConfig, Number(halvedOdd.toFixed(2))));
 
       return {
         ...item,
@@ -1026,7 +1042,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
     return timeA.localeCompare(timeB);
   });
 
-  const isAnyMarketOpen = sortedBettableMatches.length > 0 || (betSettings.longTermMonthlyGoals?.enabled);
+  const isAnyMarketOpen = sortedBettableMatches.length > 0 || (betSettings.longTermMonthlyGoals?.enabled) || boostedBets.length > 0;
 
   if (!isAnyMarketOpen) {
     return (
@@ -1158,47 +1174,86 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
 
           {/* 2. Match Goals (Linhas por partida) */}
           {isMatchGoalsEnabled && (
-            <div className="space-y-4 pt-4 border-t border-white/20">
-              <div className="text-xs font-black text-amber-300 uppercase tracking-[0.2em] bg-black/25 border border-white/20 py-3 px-4 rounded-2xl flex items-center gap-2">
-                <Zap className="w-4 h-4 text-emerald-400" /> Total de Gols Marcados no {gameTitle}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {calculatePoissonMatchGoals(selectedMatch).map((opt) => (
-                  <div key={opt.line} className="flex items-center justify-between bg-black/20 border border-white/20 rounded-2xl p-3 gap-3">
-                    <span className="text-sm font-black text-white tracking-wider">Total: {opt.line} Gols</span>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setSelectedBet({
-                          match: selectedMatch,
-                          market: 'matchGoals',
-                          selection: `over_${opt.line}`,
-                          odd: opt.oddOver,
-                          matchInfo: `${gameTitle} - Azul vs Amarelo`,
-                          selectedOutcome: `Mais de ${opt.line} Gols`
-                        })}
-                        className="bg-white/10 hover:bg-white/20 text-white hover:border-amber-300 border border-white/20 font-black text-xs px-4 py-2 rounded-xl transition-all flex flex-col items-center min-w-[85px] cursor-pointer shadow-xs active:scale-95"
-                      >
-                        <span className="text-[9px] text-white/80 font-bold uppercase mb-0.5">Mais de</span>
-                        <span className="text-sm font-black text-amber-300">@ {opt.oddOver}</span>
-                      </button>
-                      <button
-                        onClick={() => setSelectedBet({
-                          match: selectedMatch,
-                          market: 'matchGoals',
-                          selection: `under_${opt.line}`,
-                          odd: opt.oddUnder,
-                          matchInfo: `${gameTitle} - Azul vs Amarelo`,
-                          selectedOutcome: `Menos de ${opt.line} Gols`
-                        })}
-                        className="bg-white/10 hover:bg-white/20 text-white hover:border-amber-300 border border-white/20 font-black text-xs px-4 py-2 rounded-xl transition-all flex flex-col items-center min-w-[85px] cursor-pointer shadow-xs active:scale-95"
-                      >
-                        <span className="text-[9px] text-white/80 font-bold uppercase mb-0.5">Menos de</span>
-                        <span className="text-sm font-black text-amber-300">@ {opt.oddUnder}</span>
-                      </button>
-                    </div>
+            <div className="pt-2">
+              <div className="bg-[#2B2B2B] text-white rounded-xl overflow-hidden border border-zinc-700/70 shadow-2xl">
+                {/* Header Bar */}
+                <div className="flex items-center justify-between px-4 py-3 bg-[#2B2B2B] border-b border-zinc-700/50">
+                  <span className="text-white font-bold text-sm sm:text-base tracking-wide">
+                    Total de Gols - Alternativas
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="bg-[#00E676] text-black text-[10px] font-black px-1.5 py-0.5 rounded tracking-wide uppercase">
+                      CA
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-zinc-300" />
                   </div>
-                ))}
+                </div>
+
+                {/* Table Header */}
+                <div className="grid grid-cols-12 bg-[#1E1E1E] text-zinc-300 font-bold py-2.5 px-3 border-b border-zinc-700/60 text-xs sm:text-sm">
+                  <div className="col-span-3"></div>
+                  <div className="col-span-4 text-center">Mais de</div>
+                  <div className="col-span-5 text-center">Menos de</div>
+                </div>
+
+                {/* Table Body Rows */}
+                <div className="divide-y divide-zinc-700/50">
+                  {calculatePoissonMatchGoals(selectedMatch).map((opt) => {
+                    const isSelectedOver = selectedBet?.market === 'matchGoals' && selectedBet?.match?.id === selectedMatch.id && selectedBet?.selection === `over_${opt.line}`;
+                    const isSelectedUnder = selectedBet?.market === 'matchGoals' && selectedBet?.match?.id === selectedMatch.id && selectedBet?.selection === `under_${opt.line}`;
+
+                    return (
+                      <div key={opt.line} className="grid grid-cols-12 items-center hover:bg-zinc-800/40 transition-colors py-1">
+                        {/* Column 1: Line value with right border */}
+                        <div className="col-span-3 text-center text-zinc-200 font-semibold text-xs sm:text-sm py-2 border-r border-zinc-700/60">
+                          {opt.line}
+                        </div>
+
+                        {/* Column 2: Mais de */}
+                        <div className="col-span-4 px-2 py-0.5 flex justify-center">
+                          <button
+                            onClick={() => setSelectedBet({
+                              match: selectedMatch,
+                              market: 'matchGoals',
+                              selection: `over_${opt.line}`,
+                              odd: opt.oddOver,
+                              matchInfo: `${gameTitle} - Azul vs Amarelo`,
+                              selectedOutcome: `Mais de ${opt.line} Gols`
+                            })}
+                            className={`w-full py-1.5 px-2 rounded-md text-center transition-all cursor-pointer font-bold text-xs sm:text-sm ${
+                              isSelectedOver
+                                ? 'bg-[#505050] text-[#FFD700] ring-1 ring-amber-400/60 shadow-md'
+                                : 'bg-transparent hover:bg-[#404040] text-[#FFD700]'
+                            }`}
+                          >
+                            {opt.oddOver}
+                          </button>
+                        </div>
+
+                        {/* Column 3: Menos de */}
+                        <div className="col-span-5 px-2 py-0.5 flex justify-center">
+                          <button
+                            onClick={() => setSelectedBet({
+                              match: selectedMatch,
+                              market: 'matchGoals',
+                              selection: `under_${opt.line}`,
+                              odd: opt.oddUnder,
+                              matchInfo: `${gameTitle} - Azul vs Amarelo`,
+                              selectedOutcome: `Menos de ${opt.line} Gols`
+                            })}
+                            className={`w-full py-1.5 px-2 rounded-md text-center transition-all cursor-pointer font-bold text-xs sm:text-sm ${
+                              isSelectedUnder
+                                ? 'bg-[#505050] text-[#FFD700] ring-1 ring-amber-400/60 shadow-md'
+                                : 'bg-transparent hover:bg-[#404040] text-[#FFD700]'
+                            }`}
+                          >
+                            {opt.oddUnder}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -1407,6 +1462,75 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
   // ALL MATCHES CARDS LIST VIEW
   return (
     <div className="space-y-8 mt-8">
+      {/* SECTION: APOSTAS TURBINADAS (BOOSTED BETS) */}
+      {boostedBets.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b border-amber-200/60 pb-3">
+            <h3 className="text-xl font-black uppercase italic tracking-tight text-slate-900 flex items-center gap-2">
+              <Zap className="w-6 h-6 fill-amber-400 text-amber-500 animate-pulse" />
+              <span className="bg-gradient-to-r from-amber-600 via-amber-500 to-amber-700 bg-clip-text text-transparent">
+                Apostas Turbinadas
+              </span>
+              <span className="text-[10px] font-black uppercase tracking-widest bg-amber-100 text-amber-800 border border-amber-300 px-2.5 py-0.5 rounded-full">
+                ODDS ESPECIAIS 🚀
+              </span>
+            </h3>
+            <span className="text-xs font-bold text-gray-500">
+              {boostedBets.length} {boostedBets.length === 1 ? 'opção disponível' : 'opções disponíveis'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {boostedBets.map((boost) => (
+              <div
+                key={boost.id}
+                className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white rounded-[1.5rem] p-5 shadow-xl border border-amber-400/40 hover:border-amber-400 transition-all duration-300 flex flex-col justify-between gap-4 group relative overflow-hidden"
+              >
+                {/* Subtle light accent */}
+                <div className="absolute -right-8 -top-8 w-24 h-24 bg-amber-400/10 rounded-full blur-xl group-hover:bg-amber-400/20 transition-all pointer-events-none" />
+
+                <div className="space-y-2 relative z-10">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-md shadow-xs flex items-center gap-1">
+                      <Zap className="w-3 h-3 fill-slate-950" />
+                      {boost.betType && !boost.betType.startsWith('COMBINADA') ? boost.betType : 'TURBINADA'}
+                    </span>
+                  </div>
+
+                  <p className="text-sm font-black text-white leading-snug pt-1">
+                    {boost.displayText}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between border-t border-white/10 pt-3 relative z-10">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-black uppercase text-gray-400 tracking-wider">Odd Especial</span>
+                    <span className="text-xl font-black text-amber-300">
+                      @ {Number(boost.odd).toFixed(2).replace('.', ',')}
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => setSelectedBet({
+                      market: 'boosted',
+                      selection: boost.id,
+                      odd: Number(boost.odd).toFixed(2),
+                      matchInfo: `Aposta Turbinada - ${boost.betType || 'Especial'}`,
+                      selectedOutcome: boost.displayText,
+                      matchId: 'boosted'
+                    })}
+                    className="px-4 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span>Apostar</span>
+                    <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* SECTION 1: PROXIMOS JOGOS */}
       {sortedBettableMatches.length > 0 && (
         <div className="space-y-4">
