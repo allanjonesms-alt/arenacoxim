@@ -52,6 +52,7 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
   const [players, setPlayers] = useState<Player[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
   const [boostedBets, setBoostedBets] = useState<BoostedBet[]>([]);
+  const [activeTournament, setActiveTournament] = useState<{ id?: string; name: string } | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const [promoConfig, setPromoConfig] = useState({
@@ -111,11 +112,22 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
       setBoostedBets(list.filter(b => b.active !== false));
     }, (err) => console.error("Error loading boosted bets in HomeHub:", err));
 
+    const unsubscribeTournaments = onSnapshot(collection(db, 'tournaments'), (snapshot) => {
+      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const active = list.find((t: any) => t.status === 'em_andamento') || list[0];
+      if (active && (active as any).name) {
+        setActiveTournament({ id: active.id, name: (active as any).name });
+      } else {
+        setActiveTournament({ name: '10º Torneio e Churrasco ACS' });
+      }
+    }, (err) => console.error("Error loading tournaments in HomeHub:", err));
+
     return () => {
       unsubscribeNews();
       unsubscribePlayers();
       unsubscribeCards();
       unsubscribeBoosted();
+      unsubscribeTournaments();
     };
   }, [adminData]);
 
@@ -381,8 +393,36 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
 
 
 
+      {/* Active Tournament Banner/Button above Results */}
+      <div className="pt-2 border-t border-gray-100 mb-4">
+        <Link
+          to="/campeonato"
+          className="group relative flex items-center justify-between w-full bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 p-4 sm:p-5 rounded-2xl sm:rounded-3xl shadow-lg border border-amber-300/50 transition-all hover:scale-[1.01] active:scale-[0.99] overflow-hidden"
+        >
+          {/* Subtle glow background */}
+          <div className="absolute right-0 top-0 w-64 h-64 bg-white/20 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-transform" />
+
+          <div className="flex items-center gap-3 relative z-10 min-w-0">
+            <div className="bg-slate-950 text-amber-400 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl shadow-md group-hover:rotate-6 transition-transform shrink-0">
+              <Trophy className="w-6 h-6 sm:w-7 sm:h-7 stroke-[2.5]" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base sm:text-xl font-black uppercase italic tracking-tight text-slate-950 leading-tight truncate">
+                {activeTournament?.name || '10º Torneio e Churrasco ACS'}
+              </h3>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-950 text-amber-400 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider shadow-md shrink-0 group-hover:bg-slate-900 ml-2">
+            <span className="hidden sm:inline">Ver Tabela e Jogos</span>
+            <span className="sm:hidden">Ver</span>
+            <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
+      </div>
+
       {/* 3. Seção Resultados e Jogos */}
-        <div className="pt-2 border-t border-gray-100">
+        <div>
            <PublicDashboard 
              adminData={adminData}
              sharedLocations={sharedLocations}
