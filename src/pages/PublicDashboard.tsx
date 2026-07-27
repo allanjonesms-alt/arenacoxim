@@ -764,7 +764,7 @@ export default function PublicDashboard({
             </div>
           ) : (
             <>
-              {matches.slice(0, 6).map((match, idx) => (
+              {matches.slice(0, 4).map((match, idx) => (
                 <motion.div 
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -850,7 +850,7 @@ export default function PublicDashboard({
                 </motion.div>
               ))}
 
-              {matches.length > 6 && (
+              {matches.length > 4 && (
                 <button 
                   onClick={() => navigate('/resultados')}
                   className={isCompact ? "col-span-full w-full bg-white border-2 border-primary-blue text-primary-blue py-3 rounded-2xl font-black uppercase tracking-widest hover:bg-primary-blue hover:text-white transition-all shadow-sm active:scale-95 group flex items-center justify-center gap-2 text-xs" : "w-full bg-white border-2 border-primary-blue text-primary-blue py-5 rounded-3xl font-black uppercase tracking-widest hover:bg-primary-blue hover:text-white transition-all shadow-sm active:scale-95 group flex items-center justify-center gap-3"}
