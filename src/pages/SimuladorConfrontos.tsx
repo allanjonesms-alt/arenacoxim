@@ -51,6 +51,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
     { betType: 'GOLS NO MÊS', targetName: '', targetType: 'player', requiredValue: '+10' }
   ]);
   const [boostOdd, setBoostOdd] = useState('2,00');
+  const [boostTitle, setBoostTitle] = useState('');
   const [boostDisplayText, setBoostDisplayText] = useState('');
   const [boostActive, setBoostActive] = useState(true);
   const [isCustomDisplayText, setIsCustomDisplayText] = useState(false);
@@ -69,6 +70,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
 
   const resetBoostedForm = () => {
     setBoostItems([{ betType: 'GOLS NO MÊS', targetName: '', targetType: 'player', requiredValue: '+10' }]);
+    setBoostTitle('');
     setBoostOdd('2,00');
     setBoostDisplayText('');
     setBoostActive(true);
@@ -83,6 +85,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
 
   const handleOpenEditBoosted = (bet: BoostedBet) => {
     setEditingBoostedBet(bet);
+    setBoostTitle(bet.title || '');
     if (bet.items && bet.items.length > 0) {
       setBoostItems(bet.items);
     } else {
@@ -153,6 +156,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
       const numOdd = parseFloat(boostOdd.replace(',', '.')) || 1.0;
       const primaryItem = validItems[0];
       const betData = {
+        title: boostTitle.trim(),
         items: validItems,
         betType: validItems.length > 1 ? `COMBINADA (${validItems.length})` : primaryItem.betType,
         targetName: validItems.map(i => i.targetName).join(' + '),
@@ -2160,7 +2164,12 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                                 {boost.active !== false ? 'ATIVA' : 'INATIVA'}
                               </span>
                             </div>
-                            <p className="text-sm font-black text-white leading-snug">
+                            {boost.title && (
+                              <h5 className="text-xs font-black uppercase text-amber-300 tracking-tight pt-0.5">
+                                {boost.title}
+                              </h5>
+                            )}
+                            <p className="text-sm font-black text-white leading-snug whitespace-pre-line">
                               {boost.displayText}
                             </p>
                           </div>
@@ -2874,6 +2883,20 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                 </div>
               </div>
 
+              {/* Título da Aposta */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-xs font-black uppercase text-amber-300 tracking-wider block">
+                  Título da Aposta (Exibido no topo do card)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Combo de Artilheiros, Super Múltipla, Vencedor + Gols..."
+                  value={boostTitle}
+                  onChange={(e) => setBoostTitle(e.target.value)}
+                  className="w-full bg-black/40 border border-white/20 rounded-xl px-3 py-2.5 text-xs text-white placeholder-white/50 focus:ring-2 focus:ring-amber-400 outline-none font-bold"
+                />
+              </div>
+
               {/* Odd (Cotação Especial) */}
               <div className="space-y-1.5 pt-1">
                 <label className="text-xs font-black uppercase text-amber-300 tracking-wider block">
@@ -2903,14 +2926,14 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                   </button>
                 </div>
                 <textarea
-                  rows={2}
+                  rows={3}
                   value={boostDisplayText}
                   onChange={(e) => {
                     setBoostDisplayText(e.target.value);
                     setIsCustomDisplayText(true);
                   }}
-                  placeholder="Ex: Zé Augusto 10 gols + Time Azul 3 vitórias - odd 4,50"
-                  className="w-full bg-black/40 border border-white/20 rounded-xl px-3 py-2.5 text-xs text-white placeholder-white/50 focus:ring-2 focus:ring-amber-400 outline-none font-semibold leading-relaxed"
+                  placeholder={"Ex:\nZé Augusto 10 gols\nTime Azul 3 vitórias\nOdd 4,50"}
+                  className="w-full bg-black/40 border border-white/20 rounded-xl px-3 py-2.5 text-xs text-white placeholder-white/50 focus:ring-2 focus:ring-amber-400 outline-none font-semibold leading-relaxed whitespace-pre-line resize-y"
                 />
               </div>
 

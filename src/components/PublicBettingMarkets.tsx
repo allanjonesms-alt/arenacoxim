@@ -1497,7 +1497,13 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                     </span>
                   </div>
 
-                  <p className="text-sm font-black text-white leading-snug pt-1">
+                  {boost.title && (
+                    <h4 className="text-base font-black uppercase text-amber-300 tracking-tight pt-1">
+                      {boost.title}
+                    </h4>
+                  )}
+
+                  <p className="text-sm font-black text-white leading-snug pt-0.5 whitespace-pre-line">
                     {boost.displayText}
                   </p>
                 </div>
@@ -1515,7 +1521,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                       market: 'boosted',
                       selection: boost.id,
                       odd: Number(boost.odd).toFixed(2),
-                      matchInfo: `Aposta Turbinada - ${boost.betType || 'Especial'}`,
+                      matchInfo: boost.title ? `Aposta Turbinada - ${boost.title}` : `Aposta Turbinada - ${boost.betType || 'Especial'}`,
                       selectedOutcome: boost.displayText,
                       matchId: 'boosted'
                     })}

@@ -230,6 +230,7 @@ export interface BoostedBetSubItem {
 
 export interface BoostedBet {
   id?: string;
+  title?: string;
   items?: BoostedBetSubItem[];
   betType: string;
   targetName: string;

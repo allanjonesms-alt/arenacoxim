@@ -331,7 +331,12 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
                       @ {Number(boost.odd).toFixed(2).replace('.', ',')}
                     </span>
                   </div>
-                  <p className="text-xs font-black text-white leading-snug">
+                  {boost.title && (
+                    <h4 className="text-sm font-black uppercase text-amber-300 tracking-tight pt-0.5">
+                      {boost.title}
+                    </h4>
+                  )}
+                  <p className="text-xs font-black text-white leading-snug whitespace-pre-line">
                     {boost.displayText}
                   </p>
                 </div>
