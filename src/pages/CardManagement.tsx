@@ -579,9 +579,9 @@ export default function CardManagement() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between mt-1">
-                    <div>
-                      <h3 className="font-black uppercase tracking-tight text-primary-blue text-sm">
+                  <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-100">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-black uppercase tracking-tight text-primary-blue text-sm truncate">
                         {item.name}
                       </h3>
                       <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">
@@ -589,41 +589,43 @@ export default function CardManagement() {
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        startEdit(item);
-                      }}
-                      className="p-2.5 bg-blue-50 hover:bg-blue-500 text-blue-500 hover:text-white rounded-xl transition-all shadow-sm"
-                      title="Editar Card"
-                    >
-                      <Edit size={16} />
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startEdit(item);
+                        }}
+                        className="p-2 bg-blue-100 hover:bg-blue-600 text-blue-700 hover:text-white rounded-xl transition-all shadow-sm border border-blue-200"
+                        title="Editar Card"
+                      >
+                        <Edit size={16} />
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSetDefault(item.id);
-                      }}
-                      className={`p-2.5 rounded-xl transition-all shadow-sm ${item.isDefault ? 'bg-emerald-500 text-white' : 'bg-gray-100 hover:bg-emerald-500 text-gray-500 hover:text-white'}`}
-                      title={item.isDefault ? 'Card Padrão' : 'Definir como Padrão'}
-                    >
-                      <CheckCircle size={16} />
-                    </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSetDefault(item.id);
+                        }}
+                        className={`p-2 rounded-xl transition-all shadow-sm border ${item.isDefault ? 'bg-emerald-600 border-emerald-700 text-white font-bold' : 'bg-gray-100 border-gray-200 hover:bg-emerald-600 text-gray-700 hover:text-white'}`}
+                        title={item.isDefault ? 'Card Padrão' : 'Definir como Padrão'}
+                      >
+                        <CheckCircle size={16} />
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(item.id, item.name);
-                      }}
-                      className="p-2.5 bg-red-50 hover:bg-red-500 text-red-500 hover:text-white rounded-xl transition-all shadow-sm"
-                      title="Excluir Card"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(item.id, item.name);
+                        }}
+                        className="p-2 bg-red-100 hover:bg-red-600 text-red-700 hover:text-white rounded-xl transition-all shadow-sm border border-red-200"
+                        title="Excluir Card"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
 
                   {item.description && (

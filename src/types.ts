@@ -287,6 +287,7 @@ export interface Tournament {
   locationId: string; // Associated Location ID
   status: 'planejamento' | 'em_andamento' | 'finalizado';
   format: 'GRUPOS' | 'PLAYOFFS' | 'GRUPOS_E_PLAYOFFS';
+  groupMatchFormat?: 'NORMAL' | 'CRUZADO'; // NORMAL: times jogam dentro do grupo | CRUZADO: Grupo A enfrenta Grupo B
   groupsCount: number; // e.g. 1, 2, 4
   qualifiersPerGroup: number; // e.g. 2 teams qualify from each group
   teams: TournamentTeam[];

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { db } from '../firebase';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { Tournament, Location, Player, TournamentTeam, TournamentMatch } from '../types';
+import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { Tournament, Location, Player, TournamentTeam, TournamentMatch, TournamentMatchEvent, AdminData } from '../types';
 import { 
   Trophy, 
   Shield, 
@@ -18,12 +19,21 @@ import {
   Zap, 
   Award,
   Search,
-  Filter
+  Filter,
+  Edit2,
+  Plus,
+  Trash2,
+  X,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../App';
 
-export default function PublicTournament() {
+interface PublicTournamentProps {
+  adminData?: AdminData | null;
+}
+
+export default function PublicTournament({ adminData }: PublicTournamentProps) {
   const [locations, setLocations] = useState<Location[]>([]);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -33,7 +43,20 @@ export default function PublicTournament() {
   
   const [activeTab, setActiveTab] = useState<'standings' | 'playoffs' | 'matches' | 'teams' | 'scorers'>('standings');
   const [matchFilterStatus, setMatchFilterStatus] = useState<'all' | 'scheduled' | 'finished'>('all');
-  const [teamSearchTerm, setTeamSearchTerm] = useState<string>('');
+
+  // Match Editing Modal State (For Admin/Master)
+  const [editingMatch, setEditingMatch] = useState<TournamentMatch | null>(null);
+  const [scoreA, setScoreA] = useState<number>(0);
+  const [scoreB, setScoreB] = useState<number>(0);
+  const [matchStatus, setMatchStatus] = useState<'scheduled' | 'live' | 'finished'>('finished');
+  const [matchDate, setMatchDate] = useState<string>('');
+  const [matchTime, setMatchTime] = useState<string>('');
+  const [matchMvpId, setMatchMvpId] = useState<string>('');
+  const [matchEvents, setMatchEvents] = useState<TournamentMatchEvent[]>([]);
+
+  // Event creation helpers
+  const [newEventPlayerId, setNewEventPlayerId] = useState<string>('');
+  const [newEventType, setNewEventType] = useState<'goal' | 'assist'>('goal');
 
   // 1. Listen to Locations
   useEffect(() => {
@@ -78,8 +101,72 @@ export default function PublicTournament() {
   // Selected Location object
   const activeLocation = locations.find(l => l.id === (activeTournament?.locationId || selectedLocationId));
 
+  // Check if current user is admin/master and has rights to edit matches
+  const canEditMatch = !!adminData && (
+    adminData.role === 'master' || 
+    adminData.role === 'admin' || 
+    (adminData.locationId && activeTournament?.locationId && adminData.locationId === activeTournament.locationId)
+  );
+
   // Helper to get player by ID
   const getPlayer = (id: string) => players.find(p => p.id === id);
+
+  // Open Match Editor Modal
+  const handleOpenEditMatchModal = (match: TournamentMatch) => {
+    setEditingMatch(match);
+    setScoreA(match.scoreA ?? 0);
+    setScoreB(match.scoreB ?? 0);
+    setMatchStatus(match.status || 'finished');
+    setMatchDate(match.date || new Date().toISOString().split('T')[0]);
+    setMatchTime(match.time || '19:00');
+    setMatchMvpId(match.mvpId || '');
+    setMatchEvents(match.events ? [...match.events] : []);
+    setNewEventPlayerId('');
+  };
+
+  // Save Match Edit
+  const handleSaveMatchResult = async () => {
+    if (!activeTournament || !editingMatch) return;
+
+    const winnerTeamId = scoreA > scoreB ? editingMatch.teamAId : scoreB > scoreA ? editingMatch.teamBId : undefined;
+
+    const updatedMatch: TournamentMatch = {
+      ...editingMatch,
+      scoreA,
+      scoreB,
+      status: matchStatus,
+      date: matchDate,
+      time: matchTime,
+      mvpId: matchMvpId || undefined,
+      winnerTeamId,
+      events: matchEvents
+    };
+
+    const updatedMatches = activeTournament.matches.map(m => m.id === editingMatch.id ? updatedMatch : m);
+
+    try {
+      await updateDoc(doc(db, 'tournaments', activeTournament.id), {
+        matches: updatedMatches
+      });
+
+      setEditingMatch(null);
+      alert("Resultado da partida salvo com sucesso!");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'tournaments');
+    }
+  };
+
+  // Add event (goal or assist)
+  const handleAddEvent = () => {
+    if (!newEventPlayerId) return;
+    setMatchEvents(prev => [...prev, { playerId: newEventPlayerId, type: newEventType }]);
+    setNewEventPlayerId('');
+  };
+
+  // Remove event
+  const handleRemoveEvent = (index: number) => {
+    setMatchEvents(prev => prev.filter((_, idx) => idx !== index));
+  };
 
   // Group Standings Calculation
   const calculateGroupStandings = (tournament: Tournament, groupId: string) => {
@@ -94,7 +181,7 @@ export default function PublicTournament() {
       let goalsAgainst = 0;
 
       tournament.matches
-        .filter(m => m.stage === 'group' && m.groupId === groupId && m.status === 'finished')
+        .filter(m => m.stage === 'group' && (m.teamAId === team.id || m.teamBId === team.id) && m.status === 'finished')
         .forEach(m => {
           if (m.teamAId === team.id || m.teamBId === team.id) {
             played++;
@@ -203,6 +290,14 @@ export default function PublicTournament() {
 
   const tournamentStats = activeTournament ? computeTournamentStats(activeTournament) : null;
 
+  // Active match teams for modal
+  const editingTeamA = activeTournament?.teams.find(t => t.id === editingMatch?.teamAId);
+  const editingTeamB = activeTournament?.teams.find(t => t.id === editingMatch?.teamBId);
+  const editingMatchPlayers = Array.from(new Set([
+    ...(editingTeamA?.playerIds || []),
+    ...(editingTeamB?.playerIds || [])
+  ])).map(id => getPlayer(id)).filter(Boolean) as Player[];
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 max-w-7xl mx-auto px-2 sm:px-4">
       {/* Top Banner & Selector */}
@@ -217,7 +312,7 @@ export default function PublicTournament() {
               </div>
               <div>
                 <span className="text-amber-400 text-xs font-black uppercase tracking-widest flex items-center gap-1.5">
-                  <Flame className="w-4 h-4 fill-amber-400" /> Tabela Oficial do Campeonato
+                  <Flame className="w-4 h-4 fill-amber-400" /> Tabela Oficial do Torneio
                 </span>
                 <h1 className="text-2xl md:text-4xl font-black uppercase italic tracking-tight text-white">
                   {activeTournament ? activeTournament.name : 'Campeonatos da Arena'}
@@ -233,71 +328,16 @@ export default function PublicTournament() {
 
           {/* Location & Tournament Pickers */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* Location Selector */}
-            <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/20 flex items-center gap-2">
-              <Shield className="w-4 h-4 text-amber-400" />
-              <select
-                value={selectedLocationId}
-                onChange={(e) => {
-                  setSelectedLocationId(e.target.value);
-                  setSelectedTournamentId('');
-                }}
-                className="bg-transparent text-white font-black text-xs uppercase tracking-wider focus:outline-none cursor-pointer"
+            {canEditMatch && (
+              <Link
+                to="/admin/tournaments"
+                className="bg-amber-400 hover:bg-amber-300 text-slate-950 px-4 py-2.5 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg transition-all"
               >
-                {locations.map(loc => (
-                  <option key={loc.id} value={loc.id} className="text-slate-900">
-                    {loc.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Tournament Selector */}
-            {locationTournaments.length > 0 && (
-              <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/20 flex items-center gap-2">
-                <Trophy className="w-4 h-4 text-amber-400" />
-                <select
-                  value={activeTournament?.id || ''}
-                  onChange={(e) => setSelectedTournamentId(e.target.value)}
-                  className="bg-transparent text-white font-black text-xs uppercase tracking-wider focus:outline-none cursor-pointer max-w-[200px] truncate"
-                >
-                  {locationTournaments.map(t => (
-                    <option key={t.id} value={t.id} className="text-slate-900">
-                      {t.name} ({t.status === 'em_andamento' ? 'Ativo' : t.status === 'finalizado' ? 'Finalizado' : 'Planejado'})
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <Edit2 className="w-4 h-4" /> Painel de Edição do Torneio
+              </Link>
             )}
           </div>
         </div>
-
-        {/* Quick Tournament Overview Badges */}
-        {activeTournament && (
-          <div className="mt-6 pt-6 border-t border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-4 relative z-10">
-            <div className="bg-white/5 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10">
-              <span className="text-[10px] uppercase font-black tracking-widest text-gray-400 block">Formato</span>
-              <span className="text-sm font-black uppercase italic text-amber-400">{activeTournament.format.replace('_', ' ')}</span>
-            </div>
-
-            <div className="bg-white/5 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10">
-              <span className="text-[10px] uppercase font-black tracking-widest text-gray-400 block">Equipes</span>
-              <span className="text-sm font-black text-white">{activeTournament.teams?.length || 0} Times</span>
-            </div>
-
-            <div className="bg-white/5 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10">
-              <span className="text-[10px] uppercase font-black tracking-widest text-gray-400 block">Jogos Realizados</span>
-              <span className="text-sm font-black text-emerald-400">
-                {tournamentStats?.finishedMatchesCount || 0} de {activeTournament.matches?.length || 0}
-              </span>
-            </div>
-
-            <div className="bg-white/5 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10">
-              <span className="text-[10px] uppercase font-black tracking-widest text-gray-400 block">Gols Marcados</span>
-              <span className="text-sm font-black text-amber-300">{tournamentStats?.totalGoalsScored || 0} Gols</span>
-            </div>
-          </div>
-        )}
       </div>
 
       {!activeTournament ? (
@@ -342,7 +382,7 @@ export default function PublicTournament() {
                   : 'bg-white text-gray-500 hover:bg-gray-50'
               }`}
             >
-              <Calendar className="w-4 h-4 text-amber-400" /> Jogos ({activeTournament.matches?.length || 0})
+              <Calendar className="w-4 h-4 text-amber-400" /> Jogos do Torneio ({activeTournament.matches?.length || 0})
             </button>
 
             <button
@@ -448,6 +488,55 @@ export default function PublicTournament() {
                           </tbody>
                         </table>
                       </div>
+
+                      {/* Group Matches List */}
+                      {(() => {
+                        const groupTeamIds = new Set(activeTournament.teams.filter(t => t.groupId === group.id).map(t => t.id));
+                        const groupMatches = activeTournament.matches.filter(m => 
+                          m.stage === 'group' && (m.groupId === group.id || groupTeamIds.has(m.teamAId) || groupTeamIds.has(m.teamBId))
+                        );
+
+                        if (groupMatches.length === 0) return null;
+
+                        return (
+                          <div className="p-4 bg-gray-50/80 border-t border-gray-100">
+                            <h5 className="text-xs font-black uppercase tracking-wider text-slate-700 mb-3 flex items-center justify-between">
+                              <span>Jogos do {group.name}</span>
+                              <span className="text-[10px] text-gray-400 font-bold">
+                                {groupMatches.length} Partida(s)
+                              </span>
+                            </h5>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {groupMatches.map(m => {
+                                const teamA = activeTournament.teams.find(t => t.id === m.teamAId);
+                                const teamB = activeTournament.teams.find(t => t.id === m.teamBId);
+                                return (
+                                  <div key={m.id} className="bg-white p-3.5 rounded-2xl border border-gray-200 shadow-sm flex flex-col justify-between gap-2 hover:border-amber-400 transition-all">
+                                    <div className="flex items-center justify-between font-black text-xs text-slate-900">
+                                      <span className="truncate max-w-[40%]">{teamA?.name || 'Time A'}</span>
+                                      <span className="bg-slate-900 text-amber-400 px-3 py-1 rounded-xl font-black text-sm shadow-inner">
+                                        {m.scoreA ?? '-'} x {m.scoreB ?? '-'}
+                                      </span>
+                                      <span className="truncate max-w-[40%] text-right">{teamB?.name || 'Time B'}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[10px] text-gray-400 font-bold border-t border-gray-100 pt-2">
+                                      <span>{m.date ? `${m.date} ${m.time || ''}` : 'A Agendar'}</span>
+                                      {canEditMatch && (
+                                        <button
+                                          onClick={() => handleOpenEditMatchModal(m)}
+                                          className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black px-3 py-1.5 rounded-xl flex items-center gap-1.5 uppercase tracking-wider text-[10px] shadow-sm transition-all active:scale-95"
+                                        >
+                                          <Edit2 className="w-3 h-3" /> Editar Partida
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })
@@ -516,6 +605,15 @@ export default function PublicTournament() {
                             </div>
                           </div>
                         )}
+
+                        {canEditMatch && (
+                          <button
+                            onClick={() => handleOpenEditMatchModal(match)}
+                            className="w-full mt-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" /> Editar Partida / Lançar Placar
+                          </button>
+                        )}
                       </div>
                     );
                   })
@@ -579,7 +677,7 @@ export default function PublicTournament() {
                           <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
                             match.status === 'finished' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                           }`}>
-                            {match.status === 'finished' ? 'Finalizada' : 'Agendada'}
+                            {match.status === 'finished' ? 'Finalizada' : match.status === 'live' ? 'Em Andamento' : 'Agendada'}
                           </span>
                         </div>
 
@@ -626,8 +724,17 @@ export default function PublicTournament() {
                           </div>
                         )}
 
-                        <div className="text-[10px] text-gray-400 font-bold text-right pt-1">
-                          {match.date} às {match.time}
+                        <div className="flex items-center justify-between text-[10px] text-gray-400 font-bold pt-1 border-t border-gray-50">
+                          <span>{match.date} às {match.time}</span>
+
+                          {canEditMatch && (
+                            <button
+                              onClick={() => handleOpenEditMatchModal(match)}
+                              className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-xl transition-all flex items-center gap-1 shadow-sm"
+                            >
+                              <Edit2 className="w-3 h-3" /> Editar Partida
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -817,6 +924,213 @@ export default function PublicTournament() {
           )}
         </div>
       )}
+
+      {/* MATCH EDITING MODAL FOR ADMIN / MASTER */}
+      <AnimatePresence>
+        {editingMatch && canEditMatch && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setEditingMatch(null)}
+              className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden my-8 max-h-[90vh] flex flex-col z-10"
+            >
+              <div className="bg-slate-900 p-5 flex items-center justify-between text-white border-b border-gray-800">
+                <div className="flex items-center gap-2">
+                  <Edit2 className="w-5 h-5 text-amber-400" />
+                  <div>
+                    <h3 className="text-base font-black uppercase italic text-amber-400">Editar Partida do Torneio</h3>
+                    <p className="text-[10px] text-gray-400 font-bold">
+                      {editingTeamA?.name || 'Time A'} vs {editingTeamB?.name || 'Time B'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setEditingMatch(null)}
+                  className="p-1.5 rounded-xl hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-5 overflow-y-auto flex-1">
+                {/* Status selector */}
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-black text-gray-400 tracking-wider">Status do Jogo</label>
+                  <select
+                    value={matchStatus}
+                    onChange={(e) => setMatchStatus(e.target.value as any)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-black text-slate-900"
+                  >
+                    <option value="scheduled">AGENDADA</option>
+                    <option value="live">EM ANDAMENTO</option>
+                    <option value="finished">FINALIZADA (Calcula Tabela e Artilharia)</option>
+                  </select>
+                </div>
+
+                {/* Score inputs */}
+                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 flex items-center justify-around gap-4">
+                  <div className="text-center space-y-2">
+                    <p className="text-xs font-black uppercase text-slate-900 max-w-[100px] truncate">
+                      {editingTeamA?.name || 'Time A'}
+                    </p>
+                    <input
+                      type="number"
+                      min={0}
+                      value={scoreA}
+                      onChange={(e) => setScoreA(parseInt(e.target.value) || 0)}
+                      className="w-16 text-center bg-white border-2 border-primary-blue rounded-2xl py-2 text-2xl font-black text-primary-blue outline-none"
+                    />
+                  </div>
+
+                  <span className="text-xl font-black text-gray-400 italic">X</span>
+
+                  <div className="text-center space-y-2">
+                    <p className="text-xs font-black uppercase text-slate-900 max-w-[100px] truncate">
+                      {editingTeamB?.name || 'Time B'}
+                    </p>
+                    <input
+                      type="number"
+                      min={0}
+                      value={scoreB}
+                      onChange={(e) => setScoreB(parseInt(e.target.value) || 0)}
+                      className="w-16 text-center bg-white border-2 border-primary-blue rounded-2xl py-2 text-2xl font-black text-primary-blue outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Match Date and Time */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-black text-gray-400">Data do Jogo</label>
+                    <input
+                      type="date"
+                      value={matchDate}
+                      onChange={(e) => setMatchDate(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-black"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-black text-gray-400">Horário</label>
+                    <input
+                      type="time"
+                      value={matchTime}
+                      onChange={(e) => setMatchTime(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-black"
+                    />
+                  </div>
+                </div>
+
+                {/* MVP Selection */}
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-black text-gray-400 tracking-wider flex items-center gap-1">
+                    <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" /> Craque da Partida (MVP)
+                  </label>
+                  <select
+                    value={matchMvpId}
+                    onChange={(e) => setMatchMvpId(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-3 text-xs font-black text-slate-900"
+                  >
+                    <option value="">Nenhum Craque selecionado</option>
+                    {editingMatchPlayers.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.nickname || p.position})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Event Creation (Goals and Assists) */}
+                <div className="space-y-3 pt-3 border-t border-gray-100">
+                  <label className="text-[10px] uppercase font-black text-gray-400 tracking-wider block">
+                    Gols & Assistências do Jogo
+                  </label>
+
+                  <div className="flex gap-2">
+                    <select
+                      value={newEventPlayerId}
+                      onChange={(e) => setNewEventPlayerId(e.target.value)}
+                      className="flex-1 bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-black text-slate-900"
+                    >
+                      <option value="">Selecione o Atleta...</option>
+                      {editingMatchPlayers.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={newEventType}
+                      onChange={(e) => setNewEventType(e.target.value as any)}
+                      className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs font-black text-slate-900"
+                    >
+                      <option value="goal">Gol ⚽</option>
+                      <option value="assist">Assistência 👟</option>
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={handleAddEvent}
+                      className="bg-primary-blue text-white px-3 py-2.5 rounded-xl text-xs font-black uppercase flex items-center gap-1 hover:bg-blue-800 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" /> Add
+                    </button>
+                  </div>
+
+                  {/* Events list */}
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                    {matchEvents.length === 0 ? (
+                      <p className="text-[10px] text-gray-400 italic">Nenhum evento registrado ainda.</p>
+                    ) : (
+                      matchEvents.map((evt, idx) => {
+                        const pl = getPlayer(evt.playerId);
+                        return (
+                          <div key={idx} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-xl text-xs font-bold text-slate-800">
+                            <span>
+                              {evt.type === 'goal' ? '⚽ Gol de' : '👟 Assistência de'}: <strong>{pl ? (pl.nickname || pl.name) : 'Atleta'}</strong>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveEvent(idx)}
+                              className="text-red-500 hover:text-red-700 p-1"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditingMatch(null)}
+                    className="px-5 py-2.5 rounded-xl text-xs font-black uppercase text-gray-500"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveMatchResult}
+                    className="bg-primary-blue text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-blue-800 transition-all shadow-md active:scale-95"
+                  >
+                    Salvar Resultado
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

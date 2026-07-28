@@ -18,7 +18,8 @@ import {
   Star, 
   X,
   Zap,
-  ChevronRight
+  ChevronRight,
+  Dices
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { AdminData, News, Location, Team, ScoringRules, Player, Card, BoostedBet } from '../types';
@@ -140,7 +141,7 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
     }
   };
 
-  // Public menu cards (reduced to 2)
+  // Public menu cards
   const publicCards = [
     {
       title: 'Atletas\n ',
@@ -172,63 +173,67 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
   // Admin-only menu cards
   const adminCards = [
     {
-      title: 'ArenaBet',
-      subtitle: 'Escale equipes, calcule probabilidades e odds de confrontos.',
-      icon: TrendingUp,
-      to: '/admin/arenabet',
-      gradient: 'from-purple-500 to-fuchsia-700',
-    },
-    {
-      title: 'Gerenciar Atletas',
-      subtitle: 'Cadastrar novos atletas, editar notas de overall e posições.',
-      icon: Users,
-      to: '/admin/players',
-      gradient: 'from-cyan-600 to-blue-700',
-    },
-    {
-      title: 'Rodadas & Partidas',
-      subtitle: 'Inserir dados das partidas, gols, assistências e súmulas.',
+      title: 'Partidas',
       icon: Calendar,
       to: '/admin/matches',
       gradient: 'from-rose-500 to-red-600',
     },
     {
+      title: 'Gerenciar Atletas',
+      icon: Users,
+      to: '/admin/players',
+      gradient: 'from-cyan-600 to-blue-700',
+    },
+    {
+      title: 'Sorteio de Times',
+      icon: Dices,
+      to: '/admin/sorteio',
+      gradient: 'from-emerald-600 to-teal-800',
+    },
+    {
+      title: 'Gerenciar Torneios & Placares',
+      icon: Trophy,
+      to: '/admin/tournaments',
+      gradient: 'from-amber-500 to-yellow-600',
+    },
+    {
+      title: 'ArenaBet',
+      icon: TrendingUp,
+      to: '/admin/arenabet',
+      gradient: 'from-purple-500 to-fuchsia-700',
+    },
+    {
       title: 'Painel Admin',
-      subtitle: 'Controle geral do sistema e relatório de atividades.',
       icon: LayoutDashboard,
       to: '/admin',
       gradient: 'from-slate-700 to-slate-900',
     },
     {
       title: 'Tabela Geral',
-      subtitle: 'Classificação cumulativa de pontuação total por local.',
       icon: Trophy,
       to: '/admin/score-table',
       gradient: 'from-yellow-500 to-amber-600',
     },
     {
       title: 'Gerenciar Times',
-      subtitle: 'Criar, organizar, dar cores e escalar elencos.',
       icon: ShieldCheck,
       to: '/admin/teams',
       gradient: 'from-indigo-600 to-violet-700',
     },
     {
       title: 'Gerenciar Notícias',
-      subtitle: 'Adicionar ou remover destaques rápidos.',
       icon: Newspaper,
       to: '/admin/news',
       gradient: 'from-emerald-500 to-teal-700',
     },
     {
       title: 'Gerenciar CARDS',
-      subtitle: 'Upload e customização de fundos de cartas.',
       icon: Image,
       to: '/admin/cards',
+      gradient: 'from-violet-600 to-purple-800',
     },
     {
       title: 'Melhores do Mês',
-      subtitle: 'Gerenciar os destaques mensais e cartas bônus.',
       icon: Star,
       to: '/admin/awards',
       gradient: 'from-yellow-500 to-amber-700',
@@ -239,21 +244,18 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
   const masterCards = [
     {
       title: 'Sedes e Locais',
-      subtitle: 'Gerenciar arenas, quadras esportivas e brasões.',
       icon: MapPin,
       to: '/admin/locations',
       gradient: 'from-purple-600 to-fuchsia-800',
     },
     {
       title: 'Gerenciar Staff',
-      subtitle: 'Conceder acessos de administrador por email oficial.',
       icon: UserIcon,
       to: '/admin/admins',
       gradient: 'from-fuchsia-600 to-pink-700',
     },
     {
       title: 'Regras de Súmula',
-      subtitle: 'Ajustar pontuações de gols, assistências e vitórias.',
       icon: FileText,
       to: '/admin/scoring',
       gradient: 'from-orange-500 to-red-500',
@@ -566,34 +568,64 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4"
           >
             {adminCards.map((card, idx) => {
               const IconComponent = card.icon;
               return (
                 <motion.div variants={itemVariants} key={idx} className="group">
                   <Link to={card.to} className="block h-full">
-                    <div className={`relative h-full overflow-hidden rounded-[2rem] bg-gradient-to-br ${card.gradient} text-white p-6 shadow-sm transition-all duration-300 hover:scale-[1.03] hover:shadow-lg flex flex-col justify-between border border-white/10 active:scale-95`}>
+                    <div className={`relative h-full overflow-hidden rounded-2xl bg-gradient-to-br ${card.gradient} text-white p-3.5 sm:p-4 shadow-sm transition-all duration-300 hover:scale-[1.02] hover:shadow-md flex flex-col justify-between border border-white/10 active:scale-95`}>
                       
-                      <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-white/5 rounded-full blur-xl group-hover:scale-125 transition-transform" />
+                      <div className="absolute top-0 right-0 -mr-6 -mt-6 w-24 h-24 bg-white/5 rounded-full blur-lg group-hover:scale-125 transition-transform" />
                       
-                      <div className="space-y-4 relative z-10 flex-grow">
-                        <div className="bg-white/10 p-3 rounded-2xl w-12 h-12 flex items-center justify-center border border-white/25">
-                          <IconComponent className="w-6 h-6 text-white" />
+                      <div className="space-y-2.5 relative z-10 flex-grow">
+                        <div className="bg-white/10 p-2 sm:p-2.5 rounded-xl w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center border border-white/20">
+                          <IconComponent className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                         </div>
                         
-                        <div className="space-y-1">
-                          <h3 className="text-lg font-black uppercase tracking-tight italic">
+                        <div>
+                          <h3 className="text-xs sm:text-sm font-black uppercase tracking-tight italic leading-tight">
                             {card.title}
                           </h3>
-                          <p className="text-white/80 text-xs font-medium leading-relaxed">
-                            {card.subtitle}
-                          </p>
                         </div>
                       </div>
 
-                      <div className="pt-6 mt-auto flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#F9D423] opacity-90 group-hover:opacity-100 group-hover:underline">
-                        Configurar <motion.span animate={{ x: [0, 4, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>→</motion.span>
+                      <div className="pt-2 mt-2 flex items-center gap-1.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-[#F9D423] opacity-90 group-hover:opacity-100 group-hover:underline">
+                        Acessar <motion.span animate={{ x: [0, 3, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>→</motion.span>
+                      </div>
+                    </div>
+                  </Link>
+                </motion.div>
+              );
+            })}
+
+            {isMaster && masterCards.map((card, idx) => {
+              const IconComponent = card.icon;
+              return (
+                <motion.div variants={itemVariants} key={`master-${idx}`} className="group">
+                  <Link to={card.to} className="block h-full">
+                    <div className={`relative h-full overflow-hidden rounded-2xl bg-gradient-to-br ${card.gradient} text-white p-3.5 sm:p-4 shadow-sm transition-all duration-300 hover:scale-[1.02] hover:shadow-md flex flex-col justify-between border border-white/10 active:scale-95`}>
+                      
+                      <div className="absolute top-0 right-0 -mr-6 -mt-6 w-24 h-24 bg-white/5 rounded-full blur-lg group-hover:scale-125 transition-transform" />
+                      
+                      <div className="space-y-2.5 relative z-10 flex-grow">
+                        <div className="bg-white/10 p-2 sm:p-2.5 rounded-xl w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center border border-white/20">
+                          <IconComponent className="w-4 h-4 sm:w-5 sm:h-5 text-primary-yellow" />
+                        </div>
+                        
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="text-xs sm:text-sm font-black uppercase tracking-tight italic leading-tight">
+                            {card.title}
+                          </h3>
+                          <span className="bg-white/20 text-white text-[7px] sm:text-[8px] font-black uppercase tracking-wider px-1 py-0.5 rounded">
+                            Master
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 mt-2 flex items-center gap-1.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-primary-yellow group-hover:underline">
+                        Acessar Master <motion.span animate={{ x: [0, 3, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>→</motion.span>
                       </div>
                     </div>
                   </Link>
@@ -601,44 +633,6 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
               );
             })}
           </motion.div>
-
-            {isMaster && masterCards.map((card, idx) => {
-              const IconComponent = card.icon;
-              return (
-                <motion.div variants={itemVariants} key={`master-${idx}`} className="group">
-                  <Link to={card.to} className="block h-full">
-                    <div className={`relative h-full overflow-hidden rounded-[2rem] bg-gradient-to-br ${card.gradient} text-white p-6 shadow-sm transition-all duration-300 hover:scale-[1.03] hover:shadow-lg flex flex-col justify-between border border-white/10 active:scale-95`}>
-                      
-                      <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-white/5 rounded-full blur-xl group-hover:scale-125 transition-transform" />
-                      
-                      <div className="space-y-4 relative z-10 flex-grow">
-                        <div className="bg-white/10 p-3 rounded-2xl w-12 h-12 flex items-center justify-center border border-white/25">
-                          <IconComponent className="w-6 h-6 text-primary-yellow" />
-                        </div>
-                        
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-lg font-black uppercase tracking-tight italic">
-                              {card.title}
-                            </h3>
-                            <span className="bg-white/20 text-white text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded">
-                              Master
-                            </span>
-                          </div>
-                          <p className="text-white/80 text-xs font-medium leading-relaxed">
-                            {card.subtitle}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="pt-6 mt-auto flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-primary-yellow group-hover:underline">
-                        Configurar Master <motion.span animate={{ x: [0, 4, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>→</motion.span>
-                      </div>
-                    </div>
-                  </Link>
-                </motion.div>
-              );
-            })}
         </div>
       )}
 

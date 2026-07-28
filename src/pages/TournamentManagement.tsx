@@ -86,6 +86,7 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
   const [editingTournamentId, setEditingTournamentId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [format, setFormat] = useState<'GRUPOS' | 'PLAYOFFS' | 'GRUPOS_E_PLAYOFFS'>('GRUPOS_E_PLAYOFFS');
+  const [groupMatchFormat, setGroupMatchFormat] = useState<'NORMAL' | 'CRUZADO'>('NORMAL');
   const [groupsCount, setGroupsCount] = useState<number>(2);
   const [qualifiersPerGroup, setQualifiersPerGroup] = useState<number>(2);
   const [teamsCount, setTeamsCount] = useState<number>(4);
@@ -199,6 +200,7 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
     setEditingTournamentId(null);
     setName('');
     setFormat('GRUPOS_E_PLAYOFFS');
+    setGroupMatchFormat('NORMAL');
     setGroupsCount(2);
     setQualifiersPerGroup(2);
     setTeamsCount(4);
@@ -223,6 +225,7 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
     setEditingTournamentId(t.id);
     setName(t.name);
     setFormat(t.format);
+    setGroupMatchFormat(t.groupMatchFormat || 'NORMAL');
     setGroupsCount(t.groupsCount || 1);
     setQualifiersPerGroup(t.qualifiersPerGroup || 2);
     setTeamsCount(t.teams.length);
@@ -257,6 +260,7 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
       locationId: selectedLocationId,
       status: 'em_andamento',
       format,
+      groupMatchFormat: (format === 'PLAYOFFS') ? 'NORMAL' : groupMatchFormat,
       groupsCount: numG,
       qualifiersPerGroup: (format === 'GRUPOS') ? 0 : qualifiersPerGroup,
       teams: formTeams,
@@ -272,7 +276,12 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
         const docRef = await addDoc(collection(db, 'tournaments'), tournamentData);
         // Auto generate initial group matches if format includes groups
         if (format === 'GRUPOS' || format === 'GRUPOS_E_PLAYOFFS') {
-          await generateGroupMatchesForTournament(docRef.id, formTeams, groupsList);
+          const { newGroupMatches, safeGroups, safeTeams } = await generateGroupMatchesForTournament(docRef.id, formTeams, groupsList, groupMatchFormat);
+          await updateDoc(doc(db, 'tournaments', docRef.id), {
+            matches: newGroupMatches,
+            groups: safeGroups,
+            teams: safeTeams
+          });
         }
       }
       setIsCreateModalOpen(false);
@@ -281,32 +290,132 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
     }
   };
 
-  // Auto Generate Round-Robin Group Matches
-  const generateGroupMatchesForTournament = async (tId: string, teams: TournamentTeam[], groups: TournamentGroup[]) => {
-    const matches: TournamentMatch[] = [];
+  // Auto Generate Group Matches (NORMAL or CRUZADO)
+  const generateGroupMatchesForTournament = async (
+    tId: string, 
+    teams: TournamentTeam[], 
+    groups: TournamentGroup[],
+    matchFormat: 'NORMAL' | 'CRUZADO' = 'NORMAL'
+  ) => {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+    // 1. Ensure groups list is valid
+    let safeGroups = [...(groups || [])];
+    if (safeGroups.length === 0) {
+      const numG = activeTournament?.groupsCount || 2;
+      for (let i = 0; i < numG; i++) {
+        const gLetter = alphabet[i] || `${i + 1}`;
+        safeGroups.push({ id: gLetter, name: `Grupo ${gLetter}` });
+      }
+    }
+
+    // 2. Ensure every team has a valid groupId
+    const safeTeams = (teams || []).map((t, idx) => ({
+      ...t,
+      groupId: t.groupId || safeGroups[idx % safeGroups.length]?.id || 'A'
+    }));
+
+    const newGroupMatches: TournamentMatch[] = [];
     const today = new Date().toISOString().split('T')[0];
 
-    groups.forEach(group => {
-      const groupTeams = teams.filter(t => t.groupId === group.id);
-      for (let i = 0; i < groupTeams.length; i++) {
-        for (let j = i + 1; j < groupTeams.length; j++) {
-          matches.push({
-            id: `m_${Date.now()}_${group.id}_${i}_${j}`,
-            stage: 'group',
-            groupId: group.id,
-            groupName: group.name,
-            teamAId: groupTeams[i].id,
-            teamBId: groupTeams[j].id,
-            date: today,
-            time: '19:00',
-            status: 'scheduled',
-            events: []
-          });
+    if (matchFormat === 'CRUZADO' && safeGroups.length >= 2) {
+      // Cruzado: Teams in Group A play against Teams in Group B
+      const groupPairs: [TournamentGroup, TournamentGroup][] = [];
+      if (safeGroups.length === 2) {
+        groupPairs.push([safeGroups[0], safeGroups[1]]);
+      } else {
+        for (let g = 0; g < safeGroups.length; g += 2) {
+          const g1 = safeGroups[g];
+          const g2 = safeGroups[g + 1] || safeGroups[0];
+          groupPairs.push([g1, g2]);
         }
       }
-    });
 
-    await updateDoc(doc(db, 'tournaments', tId), { matches });
+      groupPairs.forEach(([g1, g2]) => {
+        const g1Teams = safeTeams.filter(t => t.groupId === g1.id);
+        const g2Teams = safeTeams.filter(t => t.groupId === g2.id);
+
+        for (let i = 0; i < g1Teams.length; i++) {
+          for (let j = 0; j < g2Teams.length; j++) {
+            newGroupMatches.push({
+              id: `m_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+              stage: 'group',
+              groupId: `${g1.id}x${g2.id}`,
+              groupName: `Chave Cruzada (${g1.name} x ${g2.name})`,
+              teamAId: g1Teams[i].id,
+              teamBId: g2Teams[j].id,
+              date: today,
+              time: '19:00',
+              status: 'scheduled',
+              events: []
+            });
+          }
+        }
+      });
+    } else {
+      // Normal: Round-robin inside own group
+      safeGroups.forEach(group => {
+        const groupTeams = safeTeams.filter(t => t.groupId === group.id);
+        for (let i = 0; i < groupTeams.length; i++) {
+          for (let j = i + 1; j < groupTeams.length; j++) {
+            newGroupMatches.push({
+              id: `m_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+              stage: 'group',
+              groupId: group.id,
+              groupName: group.name,
+              teamAId: groupTeams[i].id,
+              teamBId: groupTeams[j].id,
+              date: today,
+              time: '19:00',
+              status: 'scheduled',
+              events: []
+            });
+          }
+        }
+      });
+    }
+
+    return { newGroupMatches, safeGroups, safeTeams };
+  };
+
+  const handleRegenerateGroupMatches = async () => {
+    if (!activeTournament) return;
+    const formatText = activeTournament.groupMatchFormat === 'CRUZADO' 
+      ? 'CRUZADO (Grupo A x Grupo B)' 
+      : 'NORMAL (Interno no Grupo)';
+
+    if (!window.confirm(`Deseja regerar a tabela de jogos dos grupos no formato ${formatText}? Os jogos de grupo atuais serão atualizados.`)) return;
+
+    try {
+      const playoffMatches = (activeTournament.matches || []).filter(m => m.stage === 'playoff');
+
+      const { newGroupMatches, safeGroups, safeTeams } = await generateGroupMatchesForTournament(
+        activeTournament.id,
+        activeTournament.teams,
+        activeTournament.groups,
+        activeTournament.groupMatchFormat || 'NORMAL'
+      );
+
+      const combinedMatches = [...newGroupMatches, ...playoffMatches];
+
+      await updateDoc(doc(db, 'tournaments', activeTournament.id), {
+        matches: combinedMatches,
+        groups: safeGroups,
+        teams: safeTeams
+      });
+
+      setActiveTournament(prev => prev ? {
+        ...prev,
+        matches: combinedMatches,
+        groups: safeGroups,
+        teams: safeTeams
+      } : null);
+
+      alert(`Tabela de jogos regerada com sucesso! (${newGroupMatches.length} partidas de grupo geradas)`);
+    } catch (err) {
+      console.error("Erro ao regerar jogos do grupo:", err);
+      alert("Erro ao regerar tabela de jogos do grupo. Tente novamente.");
+    }
   };
 
   const handleDeleteTournament = async (tId: string) => {
@@ -333,7 +442,7 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
       let goalsAgainst = 0;
 
       tournament.matches
-        .filter(m => m.stage === 'group' && m.groupId === groupId && m.status === 'finished')
+        .filter(m => m.stage === 'group' && (m.teamAId === team.id || m.teamBId === team.id) && m.status === 'finished')
         .forEach(m => {
           if (m.teamAId === team.id || m.teamBId === team.id) {
             played++;
@@ -628,11 +737,16 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
               <RotateCcw className="w-4 h-4" /> Voltar para Lista
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-xl font-black uppercase italic text-primary-blue">{activeTournament.name}</h3>
               <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-md bg-amber-400 text-slate-950">
                 {activeTournament.format}
               </span>
+              {activeTournament.format !== 'PLAYOFFS' && (
+                <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-md bg-slate-900 text-amber-400">
+                  {activeTournament.groupMatchFormat === 'CRUZADO' ? 'Chave Cruzada' : 'Chave Normal'}
+                </span>
+              )}
             </div>
 
             <button
@@ -846,6 +960,23 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
           {/* TAB CONTENT: MATCHES */}
           {activeTab === 'matches' && (
             <div className="space-y-4">
+              {activeTournament.groups.length > 0 && (
+                <div className="bg-white p-4 rounded-3xl border border-gray-100 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-700">Formato dos Grupos:</span>
+                    <span className="bg-amber-400 text-slate-950 font-black text-xs uppercase px-3 py-1 rounded-xl shadow-sm">
+                      {activeTournament.groupMatchFormat === 'CRUZADO' ? 'CRUZADO (Grupo A x Grupo B)' : 'NORMAL (Interno no Grupo)'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleRegenerateGroupMatches}
+                    className="bg-slate-900 hover:bg-slate-800 text-amber-400 font-black text-xs uppercase tracking-wider px-4 py-2.5 rounded-2xl transition-all shadow-md active:scale-95 flex items-center gap-2 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-amber-400" /> Regerar Jogos dos Grupos
+                  </button>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {activeTournament.matches.length === 0 ? (
                   <div className="col-span-2 bg-white p-12 text-center rounded-3xl border border-gray-100">
@@ -1105,6 +1236,52 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
                     </div>
                   )}
                 </div>
+
+                {/* Formato de Confrontos na Fase de Grupos */}
+                {format !== 'PLAYOFFS' && (
+                  <div className="space-y-2 bg-amber-50/70 p-4 rounded-2xl border border-amber-200/80">
+                    <label className="text-[10px] uppercase font-black text-amber-900 tracking-widest block">
+                      Formato de Confrontos (Fase de Grupos)
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setGroupMatchFormat('NORMAL')}
+                        className={`p-3.5 rounded-2xl border text-left flex flex-col transition-all cursor-pointer ${
+                          groupMatchFormat === 'NORMAL'
+                            ? 'bg-amber-400 border-amber-500 text-slate-950 font-black shadow-md ring-2 ring-amber-400/50'
+                            : 'bg-white border-amber-200 text-slate-700 font-bold hover:bg-amber-100/50'
+                        }`}
+                      >
+                        <span className="text-xs uppercase italic font-black flex items-center justify-between">
+                          <span>NORMAL</span>
+                          {groupMatchFormat === 'NORMAL' && <Check className="w-4 h-4 stroke-[3]" />}
+                        </span>
+                        <span className="text-[11px] opacity-85 font-medium mt-1">
+                          Os times se enfrentam dentro do seu próprio grupo.
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setGroupMatchFormat('CRUZADO')}
+                        className={`p-3.5 rounded-2xl border text-left flex flex-col transition-all cursor-pointer ${
+                          groupMatchFormat === 'CRUZADO'
+                            ? 'bg-amber-400 border-amber-500 text-slate-950 font-black shadow-md ring-2 ring-amber-400/50'
+                            : 'bg-white border-amber-200 text-slate-700 font-bold hover:bg-amber-100/50'
+                        }`}
+                      >
+                        <span className="text-xs uppercase italic font-black flex items-center justify-between">
+                          <span>CRUZADO</span>
+                          {groupMatchFormat === 'CRUZADO' && <Check className="w-4 h-4 stroke-[3]" />}
+                        </span>
+                        <span className="text-[11px] opacity-85 font-medium mt-1">
+                          Os times de um grupo enfrentam todos os times do outro grupo (Ex: Grupo A vs Grupo B).
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Number of Teams */}
                 <div className="space-y-2">

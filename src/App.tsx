@@ -40,6 +40,8 @@ import ApostasUsuario from './pages/ApostasUsuario';
 import BancoUsuario from './pages/BancoUsuario';
 import UserManagement from './pages/UserManagement';
 import PublicTournament from './pages/PublicTournament';
+import TournamentManagement from './pages/TournamentManagement';
+import SorteioTimes from './pages/SorteioTimes';
 
 export enum OperationType {
   CREATE = 'create',
@@ -579,7 +581,7 @@ export default function App() {
         <main className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-28 md:pb-8 ${routerLocation.pathname === '/' ? 'pt-0' : 'py-8'}`}>
           <Routes>
             <Route path="/" element={<HomeHub user={user} isAdmin={isAdmin} adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
-            <Route path="/campeonato" element={<PublicTournament />} />
+            <Route path="/campeonato" element={<PublicTournament adminData={adminData} />} />
             <Route path="/apostas" element={<ApostasUsuario user={user} isMaster={isAdmin && adminData?.role === 'master'} />} />
             <Route path="/banco" element={<BancoUsuario user={user} />} />
             <Route path="/dashboard" element={<PublicDashboard adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
@@ -607,6 +609,8 @@ export default function App() {
                 )}
                 
                 <Route path="/admin/matches" element={<MatchManagement adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
+                <Route path="/admin/sorteio" element={<SorteioTimes adminData={adminData} sharedLocations={locations} />} />
+                <Route path="/admin/tournaments" element={<TournamentManagement adminData={adminData} />} />
                 <Route path="/admin/news" element={<NewsManagement />} />
                 <Route path="/admin/banners" element={<BannerManagement />} />
                 <Route path="/admin/awards" element={<MonthlyAwardsManagement adminData={adminData} locations={locations} />} />

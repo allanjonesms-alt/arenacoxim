@@ -190,6 +190,10 @@ export default function AdminPanel({ adminData }: AdminPanelProps) {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-4">
+            <Link to="/admin/tournaments" className="bg-gradient-to-r from-amber-500 to-yellow-600 text-slate-950 p-6 rounded-3xl border border-amber-400 flex items-center justify-between shadow-md hover:shadow-lg transition-all group">
+              <span className="font-black uppercase tracking-widest text-slate-950">Gerenciar Torneios</span>
+              <Trophy className="text-slate-950 w-6 h-6" />
+            </Link>
             <Link to="/admin/locations" className="bg-white p-6 rounded-3xl border border-gray-100 flex items-center justify-between shadow-sm hover:shadow-md transition-all group">
               <span className="font-black uppercase tracking-widest text-primary-gray group-hover:text-primary-blue transition-colors">Gerenciar Locais</span>
               <Plus className="text-primary-blue w-6 h-6" />
