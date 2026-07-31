@@ -109,8 +109,8 @@ export default function CardManagement() {
             let currentWidth = targetWidth;
             let currentHeight = targetHeight;
             
-            // Failsafe auto-downscale loop if PNG size is somehow still close to Firestore limit of 1 MiB
-            while (finalDataUrl.length > 900000 && currentWidth > 120) {
+            // Failsafe auto-downscale loop to guarantee payload stays well below 150 KB (~200,000 characters)
+            while (finalDataUrl.length > 200000 && currentWidth > 100) {
               currentWidth = Math.round(currentWidth * 0.8);
               currentHeight = Math.round(currentHeight * 0.8);
               
@@ -210,7 +210,7 @@ export default function CardManagement() {
             let currentWidth = targetWidth;
             let currentHeight = targetHeight;
             
-            while (finalDataUrl.length > 900000 && currentWidth > 120) {
+            while (finalDataUrl.length > 200000 && currentWidth > 100) {
               currentWidth = Math.round(currentWidth * 0.8);
               currentHeight = Math.round(currentHeight * 0.8);
               

@@ -123,8 +123,8 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
     if (!imgElement) return;
 
     const canvas = document.createElement('canvas');
-    // Save image to a high-quality 400x400 size for performance and storage
-    const outputSize = 400;
+    // Save image to a 280x280 size optimized for player card avatars and fast cloud storage
+    const outputSize = 280;
     canvas.width = outputSize;
     canvas.height = outputSize;
     const ctx = canvas.getContext('2d');
@@ -163,8 +163,11 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
         }
       }
 
-      // Export as PNG to preserve transparent background
-      const dataUrl = canvas.toDataURL('image/png');
+      // Export as PNG if white background was removed, or JPEG if solid background (much smaller footprint)
+      const dataUrl = removeWhiteBg
+        ? canvas.toDataURL('image/png')
+        : canvas.toDataURL('image/jpeg', 0.82);
+
       onConfirm(dataUrl);
     }
   };

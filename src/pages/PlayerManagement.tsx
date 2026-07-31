@@ -13,6 +13,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PlayerSummaryModal } from '../components/PlayerSummaryModal';
 import { ImageCropModal } from '../components/ImageCropModal';
+import { compressBase64Image } from '../utils/imageUtils';
 
 interface PlayerManagementProps {
   adminData?: AdminData | null;
@@ -284,6 +285,10 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
     console.log("Overall value calculated (including card & awards bonus):", overallValue);
 
     try {
+      // Compress photoUrl and cardBgUrl if base64 to ensure total payload stays under Firestore document limits (~100KB max per image)
+      const finalPhotoUrl = photoUrl ? await compressBase64Image(photoUrl, 280, 80) : '';
+      const finalCardBgUrl = cardBgUrl ? await compressBase64Image(cardBgUrl, 280, 100) : null;
+
       if (editingPlayer) {
         console.log("Updating player ID:", editingPlayer.id);
         console.log("Current name:", name, "nickname:", nickname, "cardBgUrl (state):", cardBgUrl);
@@ -292,8 +297,8 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
           nickname: nickname.toUpperCase().trim(),
           position,
           locationId,
-          photoUrl: photoUrl || '',
-          cardBgUrl: cardBgUrl || null, // Ensure we are saving something
+          photoUrl: finalPhotoUrl,
+          cardBgUrl: finalCardBgUrl,
           gmail: gmail.toLowerCase().trim() || null,
           phone: phone.trim() || null,
           overallValue: overallValue,
@@ -321,8 +326,8 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
           nickname: nickname.toUpperCase().trim(),
           position,
           locationId,
-          photoUrl: photoUrl || '',
-          cardBgUrl: cardBgUrl || availableCards.find(c => c.isDefault)?.imageUrl || '',
+          photoUrl: finalPhotoUrl,
+          cardBgUrl: finalCardBgUrl || availableCards.find(c => c.isDefault)?.imageUrl || '',
           gmail: gmail.toLowerCase().trim() || null,
           phone: phone.trim() || null,
           stats: { wins: 0, goals: 0, assists: 0, matches: 0, points: 0 },

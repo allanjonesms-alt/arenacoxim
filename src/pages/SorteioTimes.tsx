@@ -548,12 +548,13 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
     setIsDrawDone(true);
     setSelectedForSwap(null);
 
-    // Open animated draw stage
-    setCurrentStepIndex(0);
+    // Open animated draw stage in waiting mode
+    setCurrentStepIndex(-1);
     setIsAnimatedDrawActive(true);
     setIsFinalViewActive(false);
     setIsAutoPlaying(false);
-    triggerShuffleEffect(sequence[0]);
+    setIsShuffling(false);
+    setShuffleName('');
   };
 
   const handleCopyTeamsToClipboard = () => {
@@ -602,7 +603,10 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
 
   // Step Controls
   const handleNextStep = () => {
-    if (currentStepIndex < drawSequence.length - 1) {
+    if (currentStepIndex < 0) {
+      setCurrentStepIndex(0);
+      triggerShuffleEffect(drawSequence[0]);
+    } else if (currentStepIndex < drawSequence.length - 1) {
       const nextIdx = currentStepIndex + 1;
       setCurrentStepIndex(nextIdx);
       triggerShuffleEffect(drawSequence[nextIdx]);
@@ -618,6 +622,10 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
       setCurrentStepIndex(prevIdx);
       setIsShuffling(false);
       setShuffleName(drawSequence[prevIdx].player.name);
+    } else if (currentStepIndex === 0) {
+      setCurrentStepIndex(-1);
+      setIsShuffling(false);
+      setShuffleName('');
     }
   };
 
@@ -632,7 +640,10 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (isAutoPlaying && isAnimatedDrawActive && !isShuffling && !isFinalViewActive) {
-      if (currentStepIndex < drawSequence.length - 1) {
+      if (currentStepIndex < 0) {
+        // Start first step immediately when autoplay toggled on
+        handleNextStep();
+      } else if (currentStepIndex < drawSequence.length - 1) {
         timer = setTimeout(() => {
           handleNextStep();
         }, 4800); // 4.8s pause between draws so users can analyze the updated team
@@ -1233,7 +1244,7 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
                 ) : (
                   <button
                     type="button"
-                    onClick={() => { setIsFinalViewActive(false); setCurrentStepIndex(0); }}
+                    onClick={() => { setIsFinalViewActive(false); setCurrentStepIndex(-1); setIsAutoPlaying(false); }}
                     className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center gap-1.5"
                   >
                     <Eye className="w-4 h-4" /> Rever Passo a Passo
@@ -1381,15 +1392,21 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
                 {/* Progress Indicator */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs font-black uppercase text-slate-400 px-2">
-                    <span>Atleta {currentStepIndex + 1} de {drawSequence.length}</span>
-                    <span className={`px-2.5 py-0.5 rounded-full ${drawSequence[currentStepIndex]?.potBadgeBg} ${drawSequence[currentStepIndex]?.potBadgeText}`}>
-                      {drawSequence[currentStepIndex]?.potName} ({drawSequence[currentStepIndex]?.potShort})
-                    </span>
+                    <span>Atleta {currentStepIndex < 0 ? 0 : currentStepIndex + 1} de {drawSequence.length}</span>
+                    {currentStepIndex >= 0 && drawSequence[currentStepIndex] ? (
+                      <span className={`px-2.5 py-0.5 rounded-full ${drawSequence[currentStepIndex].potBadgeBg} ${drawSequence[currentStepIndex].potBadgeText}`}>
+                        {drawSequence[currentStepIndex].potName} ({drawSequence[currentStepIndex].potShort})
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                        Aguardando Início
+                      </span>
+                    )}
                   </div>
                   <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
                     <motion.div
                       className="h-full bg-gradient-to-r from-emerald-500 to-teal-400"
-                      animate={{ width: `${((currentStepIndex + 1) / drawSequence.length) * 100}%` }}
+                      animate={{ width: `${currentStepIndex < 0 ? 0 : ((currentStepIndex + 1) / drawSequence.length) * 100}%` }}
                       transition={{ duration: 0.3 }}
                     />
                   </div>
@@ -1409,12 +1426,26 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
                     </div>
 
                     <p className="text-xs font-black uppercase tracking-widest text-emerald-400">
-                      {isShuffling ? 'Sorteando Atleta...' : 'Atleta Sorteado!'}
+                      {currentStepIndex < 0 ? 'Palco do Sorteio' : isShuffling ? 'Sorteando Atleta...' : 'Atleta Sorteado!'}
                     </p>
 
                     {/* Player Card Spotlight */}
                     <div className="py-2 flex flex-col items-center justify-center min-h-[220px]">
-                      {isShuffling ? (
+                      {currentStepIndex < 0 ? (
+                        <div className="py-6 flex flex-col items-center justify-center min-h-[220px] text-center space-y-3">
+                          <div className="w-20 h-20 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-xl">
+                            <Dices className="w-10 h-10 animate-pulse" />
+                          </div>
+                          <div className="space-y-1 px-2">
+                            <h3 className="text-base sm:text-lg font-black uppercase text-white tracking-tight italic">
+                              Pronto para o Sorteio!
+                            </h3>
+                            <p className="text-xs text-slate-400 font-bold max-w-xs leading-relaxed">
+                              Clique em <span className="text-primary-yellow font-black">"Sortear 1º Atleta"</span> ou ative a <span className="text-emerald-400 font-black">"Reprodução Auto"</span> para começar.
+                            </p>
+                          </div>
+                        </div>
+                      ) : isShuffling ? (
                         <motion.div 
                           animate={{ scale: [0.98, 1.02, 0.98] }}
                           transition={{ repeat: Infinity, duration: 0.15 }}
@@ -1505,7 +1536,7 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
                     </div>
 
                     {/* Destination Team Callout */}
-                    {!isShuffling && drawSequence[currentStepIndex] && (
+                    {currentStepIndex >= 0 && !isShuffling && drawSequence[currentStepIndex] && (
                       <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -1523,7 +1554,7 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
                       <button
                         type="button"
                         onClick={handlePrevStep}
-                        disabled={currentStepIndex === 0 || isShuffling}
+                        disabled={currentStepIndex < 0 || isShuffling}
                         className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl disabled:opacity-30 transition border border-slate-700"
                         title="Anterior"
                       >
@@ -1550,7 +1581,7 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
                         disabled={currentStepIndex === drawSequence.length - 1 || isShuffling}
                         className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-black text-xs uppercase tracking-wider transition flex items-center gap-1.5 border border-slate-700 disabled:opacity-30"
                       >
-                        Próximo <SkipForward className="w-4 h-4 text-primary-yellow" />
+                        {currentStepIndex < 0 ? 'Sortear 1º Atleta' : 'Próximo'} <SkipForward className="w-4 h-4 text-primary-yellow" />
                       </button>
                     </div>
                   </motion.div>
@@ -1563,71 +1594,82 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
                     transition={{ type: 'spring', damping: 20 }}
                     className="h-full bg-gradient-to-br from-slate-900 via-emerald-950/80 to-slate-950 border-2 border-emerald-500/80 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 relative overflow-hidden text-left flex flex-col justify-between"
                   >
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between border-b border-emerald-500/30 pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <span className="flex h-3.5 w-3.5 relative">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
-                          </span>
-                          <div>
-                            <span className="text-[10px] font-black uppercase text-emerald-400 tracking-widest block">
-                              Composição Atual da Equipe
-                            </span>
-                            <h3 className="text-base sm:text-lg font-black uppercase italic tracking-tight text-white">
-                              Como ficou o <span className="text-primary-yellow underline decoration-emerald-500">{drawSequence[currentStepIndex]?.teamName}</span>
-                            </h3>
-                          </div>
+                    {currentStepIndex < 0 ? (
+                      <div className="py-8 text-center space-y-3 my-auto flex flex-col items-center justify-center min-h-[220px]">
+                        <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                          <Sparkles className="w-7 h-7 text-primary-yellow" />
                         </div>
-                        <span className="text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded-xl shrink-0">
-                          {currentStepTeams.find(t => t.id === drawSequence[currentStepIndex]?.teamId)?.players.length || 0} Atleta(s)
-                        </span>
+                        <h3 className="text-sm font-black uppercase text-white italic">
+                          Montagem das Equipes
+                        </h3>
+                        <p className="text-xs text-slate-400 font-bold max-w-xs leading-relaxed">
+                          Assim que o primeiro atleta for sorteado, a escalação em tempo real do seu time aparecerá aqui.
+                        </p>
                       </div>
-
-                      {/* Roster of chosen team up to this point */}
-                      <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                        {!isShuffling && drawSequence[currentStepIndex] ? (
-                          currentStepTeams
-                            .find(t => t.id === drawSequence[currentStepIndex]?.teamId)
-                            ?.players.map((item, pIdx) => {
-                              const isNewlyDrawn = item.player.id === drawSequence[currentStepIndex]?.player.id;
-                              return (
-                                <motion.div
-                                  key={item.player.id || pIdx}
-                                  initial={isNewlyDrawn ? { scale: 0.85, opacity: 0 } : false}
-                                  animate={{ scale: 1, opacity: 1 }}
-                                  className={`flex items-center justify-between p-2.5 rounded-2xl text-xs font-bold border transition ${
-                                    isNewlyDrawn
-                                      ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white border-emerald-300 shadow-xl ring-2 ring-emerald-400/60'
-                                      : 'bg-slate-800/90 text-slate-200 border-slate-700/80'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2 truncate pr-1">
-                                    <span className={`text-[10px] font-black ${isNewlyDrawn ? 'text-amber-300' : 'text-slate-400'}`}>
-                                      #{pIdx + 1}
-                                    </span>
-                                    <span className="truncate">
-                                      {item.player.nickname || item.player.name}
-                                    </span>
-                                    {isNewlyDrawn && (
-                                      <span className="text-[9px] font-black uppercase bg-primary-yellow text-slate-950 px-2 py-0.5 rounded-full shadow animate-pulse shrink-0">
-                                        Recém Sorteado!
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md shrink-0 ${item.potBadgeBg} ${item.potBadgeText}`}>
-                                    {item.potShort}
-                                  </span>
-                                </motion.div>
-                              );
-                            })
-                        ) : (
-                          <div className="py-8 text-center text-slate-500 font-bold text-xs uppercase italic">
-                            Sorteando atleta para o time...
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between border-b border-emerald-500/30 pb-3">
+                          <div className="flex items-center gap-2.5">
+                            <span className="flex h-3.5 w-3.5 relative">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
+                            </span>
+                            <div>
+                              <h3 className="text-base sm:text-xl font-black uppercase italic tracking-tight text-primary-yellow">
+                                {drawSequence[currentStepIndex]?.teamName}
+                              </h3>
+                            </div>
                           </div>
-                        )}
+                          <span className="text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded-xl shrink-0">
+                            {currentStepTeams.find(t => t.id === drawSequence[currentStepIndex]?.teamId)?.players.length || 0} Atleta(s)
+                          </span>
+                        </div>
+
+                        {/* Roster of chosen team up to this point */}
+                        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                          {!isShuffling && drawSequence[currentStepIndex] ? (
+                            currentStepTeams
+                              .find(t => t.id === drawSequence[currentStepIndex]?.teamId)
+                              ?.players.map((item, pIdx) => {
+                                const isNewlyDrawn = item.player.id === drawSequence[currentStepIndex]?.player.id;
+                                return (
+                                  <motion.div
+                                    key={item.player.id || pIdx}
+                                    initial={isNewlyDrawn ? { scale: 0.85, opacity: 0 } : false}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    className={`flex items-center justify-between p-2.5 rounded-2xl text-xs font-bold border transition ${
+                                      isNewlyDrawn
+                                        ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white border-emerald-300 shadow-xl ring-2 ring-emerald-400/60'
+                                        : 'bg-slate-800/90 text-slate-200 border-slate-700/80'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 truncate pr-1">
+                                      <span className={`text-[10px] font-black ${isNewlyDrawn ? 'text-amber-300' : 'text-slate-400'}`}>
+                                        #{pIdx + 1}
+                                      </span>
+                                      <span className="truncate">
+                                        {item.player.nickname || item.player.name}
+                                      </span>
+                                      {isNewlyDrawn && (
+                                        <span className="text-[9px] font-black uppercase bg-primary-yellow text-slate-950 px-2 py-0.5 rounded-full shadow animate-pulse shrink-0">
+                                          Recém Sorteado!
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md shrink-0 ${item.potBadgeBg} ${item.potBadgeText}`}>
+                                      {item.potShort}
+                                    </span>
+                                  </motion.div>
+                                );
+                              })
+                          ) : (
+                            <div className="py-8 text-center text-slate-500 font-bold text-xs uppercase italic">
+                              Sorteando atleta para o time...
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     <div className="pt-2 border-t border-slate-800/80 text-[10px] text-emerald-400 font-extrabold uppercase italic flex items-center justify-between">
                       <span>Pausa para Análise da Equipe</span>
