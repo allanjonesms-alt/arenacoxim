@@ -150,7 +150,7 @@ export const RandomSelectionModal: React.FC<RandomSelectionModalProps> = ({
             setTimeout(() => {
               selectionRefs.current.currentIndex++;
               selectNext();
-            }, 3000);
+            }, 4800);
           }
         }, 1000);
       } else {

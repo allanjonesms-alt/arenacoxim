@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
-import { collection, onSnapshot, query, where, getDoc, doc, addDoc, runTransaction } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, getDoc, getDocs, doc, addDoc, runTransaction } from 'firebase/firestore';
 import { Match, OddsEngineConfig, Player, Card, ScoringRules, BoostedBet } from '../types';
 import { TrendingUp, Shield, Trophy, Target, Zap, CalendarDays, Search, ChevronDown, ChevronUp, ArrowLeft, ChevronRight, Clock, Users } from 'lucide-react';
 import { getPositionAbbr, getPositionColor, getPlayerFinalOverall } from '../utils/playerUtils';
@@ -65,7 +65,35 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
 
   // For placing a bet
   const [selectedBet, setSelectedBet] = useState<any | null>(null);
-  const [betAmount, setBetAmount] = useState<string>('');
+  const [betAmount, setBetAmount] = useState<string>('1,00');
+  const [isSubmittingBet, setIsSubmittingBet] = useState<boolean>(false);
+
+  const getUserBet = (targetMatchId: string, market: string, selection: string) => {
+    if (!user?.uid || !allBets || allBets.length === 0) return null;
+    const mId = targetMatchId || 'long_term';
+    return allBets.find(b =>
+      b.userId === user.uid &&
+      b.status !== 'cancelled' &&
+      (b.matchId === mId || (mId === 'long_term' && (!b.matchId || b.matchId === 'long_term'))) &&
+      b.market === market &&
+      String(b.selection) === String(selection)
+    );
+  };
+
+  const existingUserBet = useMemo(() => {
+    if (!selectedBet || !user?.uid) return null;
+    const targetMatchId = selectedBet.match?.id || selectedBet.matchId || 'long_term';
+    return getUserBet(targetMatchId, selectedBet.market, String(selectedBet.selection));
+  }, [selectedBet, user?.uid, allBets]);
+
+  useEffect(() => {
+    if (selectedBet) {
+      setBetAmount('1,00');
+    }
+  }, [selectedBet]);
+
+  const parsedBetAmt = parseFloat(betAmount.replace(',', '.')) || 0;
+  const isValidBetAmt = parsedBetAmt >= 0.50 && parsedBetAmt <= 2.00;
 
   useEffect(() => {
     // Fetch odds config
@@ -307,17 +335,31 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
         // Normalize
         const sumProb = finalProbA + finalProbDraw + finalProbB;
         
+        const calcOddA = 1 / ((finalProbA / sumProb) * margin);
+        let calcOddDraw = 1 / ((finalProbDraw / sumProb) * margin);
+        const calcOddB = 1 / ((finalProbB / sumProb) * margin);
+        const underdogOdd = Math.max(calcOddA, calcOddB);
+        if (calcOddDraw > underdogOdd) {
+          calcOddDraw = underdogOdd;
+        }
+
         return {
-          oddA: (1 / ((finalProbA / sumProb) * margin)).toFixed(2),
-          oddDraw: (1 / ((finalProbDraw / sumProb) * margin)).toFixed(2),
-          oddB: (1 / ((finalProbB / sumProb) * margin)).toFixed(2)
+          oddA: calcOddA.toFixed(2),
+          oddDraw: calcOddDraw.toFixed(2),
+          oddB: calcOddB.toFixed(2)
         };
       }
     }
 
+    let finalBaseDraw = baseOddDraw;
+    const underdogBase = Math.max(baseOddA, baseOddB);
+    if (finalBaseDraw > underdogBase) {
+      finalBaseDraw = underdogBase;
+    }
+
     return {
       oddA: baseOddA.toFixed(2),
-      oddDraw: baseOddDraw.toFixed(2),
+      oddDraw: finalBaseDraw.toFixed(2),
       oddB: baseOddB.toFixed(2)
     };
   };
@@ -955,15 +997,44 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
   }, [user?.uid, balance]);
 
   const handlePlaceBet = async () => {
-    const finalBetAmt = Math.min(1.00, bettingParams?.maxBetAmount || 1.00);
-    if (!selectedBet || finalBetAmt <= 0) return;
+    if (!selectedBet || !user?.uid || isSubmittingBet) return;
+
+    if (existingUserBet) {
+      alert("Você já realizou uma aposta nesta mesma opção! Cada usuário tem o limite de 1 aposta por opção para evitar apostas duplicadas.");
+      return;
+    }
+
+    if (!isValidBetAmt) {
+      alert("O valor da aposta deve ser entre R$ 0,50 e R$ 2,00.");
+      return;
+    }
+
+    const targetMatchId = selectedBet.match?.id || selectedBet.matchId || 'long_term';
+    const targetMarket = selectedBet.market;
+    const targetSelection = String(selectedBet.selection);
 
     if (selectedBet.match && isMatchWithin30MinOrPast(selectedBet.match.date, selectedBet.match.time)) {
       alert("As apostas nesta partida foram encerradas (encerradas às 18:00 do dia do jogo).");
       return;
     }
 
+    setIsSubmittingBet(true);
+
     try {
+      // Double check in Firestore to prevent accidental rapid double clicks
+      const dupQuery = query(
+        collection(db, 'bets'),
+        where('userId', '==', user.uid),
+        where('matchId', '==', targetMatchId),
+        where('market', '==', targetMarket),
+        where('selection', '==', targetSelection)
+      );
+      const dupSnap = await getDocs(dupQuery);
+      const hasActiveDup = dupSnap.docs.some(doc => doc.data().status !== 'cancelled');
+      if (hasActiveDup) {
+        throw new Error("Aposta duplicada! Você já possui uma aposta ativa registrada nesta opção.");
+      }
+
       let isUnpaidPending = false;
 
       await runTransaction(db, async (t) => {
@@ -972,7 +1043,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
         if (!userSnap.exists()) throw new Error("Usuário não encontrado");
         
         const currentBalance = Number(userSnap.data().balance) || 0;
-        const betAmt = finalBetAmt;
+        const betAmt = parsedBetAmt;
         
         if (currentBalance >= betAmt) {
           t.update(userRef, { balance: currentBalance - betAmt });
@@ -987,11 +1058,11 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
         const newBetRef = doc(collection(db, 'bets'));
         t.set(newBetRef, {
           userId: user.uid,
-          userEmail: user.email,
-          userName: user.displayName || user.email,
-          matchId: selectedBet.match?.id || selectedBet.matchId || 'long_term',
-          market: selectedBet.market,
-          selection: selectedBet.selection,
+          userEmail: user.email || '',
+          userName: user.displayName || user.email || 'Usuário',
+          matchId: targetMatchId,
+          market: targetMarket,
+          selection: targetSelection,
           odd: Number(selectedBet.odd),
           odds: Number(selectedBet.odd),
           amount: betAmt,
@@ -1003,7 +1074,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
       });
       
       setSelectedBet(null);
-      setBetAmount('');
+      setBetAmount('1,00');
       if (isUnpaidPending) {
         alert("Aposta registrada como pendente! Ela só será aprovada e ativada após a inclusão de saldo na sua conta.");
       } else {
@@ -1012,6 +1083,8 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
     } catch (error: any) {
       console.error(error);
       alert(error.message || "Erro ao realizar aposta.");
+    } finally {
+      setIsSubmittingBet(false);
     }
   };
 
@@ -1390,71 +1463,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
           </button>
         </div>
 
-        {/* Modal for placing bets */}
-        {selectedBet && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-            <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-              <div className="bg-gradient-to-br from-primary-blue to-blue-900 p-6 text-white relative overflow-hidden">
-                <h3 className="font-black text-xl">Confirmar Aposta</h3>
-                <p className="text-blue-100 text-xs font-semibold mt-1 uppercase tracking-wider">{selectedBet.matchInfo}</p>
-              </div>
-              <div className="p-6 space-y-4">
-                <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Palpite</span>
-                    <span className="text-sm font-black text-gray-800">{selectedBet.selectedOutcome}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Odd</span>
-                    <span className="text-2xl font-black text-primary-blue">{selectedBet.odd}</span>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <label className="text-xs font-black uppercase text-gray-500">Valor da Aposta (Fixo)</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <span className="text-gray-500 font-bold">R$</span>
-                    </div>
-                    <input
-                      type="number"
-                      value={Math.min(1.00, bettingParams?.maxBetAmount || 1.00)}
-                      readOnly
-                      className="w-full pl-12 pr-4 py-3 bg-gray-100 border border-gray-200 rounded-xl font-bold text-gray-500 focus:outline-none cursor-not-allowed"
-                    />
-                  </div>
-                  <div className="text-right text-xs font-bold text-gray-500 mt-2">
-                    Retorno Potencial: <span className="text-emerald-500 font-black">R$ {(Math.min(1.00, bettingParams?.maxBetAmount || 1.00) * Number(selectedBet.odd)).toFixed(2)}</span>
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button 
-                    onClick={() => setSelectedBet(null)}
-                    className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors cursor-pointer text-xs uppercase"
-                  >
-                    Cancelar
-                  </button>
-                  <button 
-                    onClick={handlePlaceBet}
-                    className={`flex-1 font-black py-3 rounded-xl transition-colors cursor-pointer text-xs uppercase tracking-wider text-white ${
-                      balance >= Math.min(1.00, bettingParams?.maxBetAmount || 1.00)
-                        ? 'bg-emerald-600 hover:bg-emerald-700 shadow-md'
-                        : 'bg-amber-600 hover:bg-amber-700 shadow-md'
-                    }`}
-                  >
-                    {balance >= Math.min(1.00, bettingParams?.maxBetAmount || 1.00) ? 'Confirmar Aposta' : 'Apostar (Pendente de Saldo)'}
-                  </button>
-                </div>
-                {balance < Math.min(1.00, bettingParams?.maxBetAmount || 1.00) && (
-                  <p className="text-[10px] text-amber-800 font-bold text-center mt-2 bg-amber-50 p-2.5 rounded-xl border border-amber-200 leading-tight">
-                    Você não possui saldo no momento. A aposta de R$ {(Math.min(1.00, bettingParams?.maxBetAmount || 1.00)).toFixed(2)} será gravada como pendente e aprovada após a inclusão de saldo.
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Back Button Footer */}
       </div>
     );
   }
@@ -2078,55 +2087,135 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
             </div>
             <div className="p-6 space-y-4">
               <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
-                <div className="flex flex-col">
+                <div className="flex flex-col min-w-0 flex-1 pr-2">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Palpite</span>
-                  <span className="text-sm font-black text-gray-800">{selectedBet.selectedOutcome}</span>
+                  <span className="text-sm font-black text-gray-800 whitespace-pre-line">{selectedBet.selectedOutcome}</span>
                 </div>
-                <div className="text-right">
+                <div className="text-right shrink-0">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Odd</span>
                   <span className="text-2xl font-black text-primary-blue">{selectedBet.odd}</span>
                 </div>
               </div>
-              
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase text-gray-500">Valor da Aposta (Fixo)</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <span className="text-gray-500 font-bold">R$</span>
-                  </div>
-                  <input
-                    type="number"
-                    value={Math.min(1.00, bettingParams?.maxBetAmount || 1.00)}
-                    readOnly
-                    className="w-full pl-12 pr-4 py-3 bg-gray-100 border border-gray-200 rounded-xl font-bold text-gray-500 focus:outline-none cursor-not-allowed"
-                  />
-                </div>
-                <div className="text-right text-xs font-bold text-gray-500 mt-2">
-                  Retorno Potencial: <span className="text-emerald-500 font-black">R$ {(Math.min(1.00, bettingParams?.maxBetAmount || 1.00) * Number(selectedBet.odd)).toFixed(2)}</span>
-                </div>
-              </div>
 
-              <div className="flex gap-3 pt-4">
+              {existingUserBet ? (
+                <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 text-amber-900 text-xs space-y-2">
+                  <p className="flex items-center gap-1.5 font-black text-amber-800 text-sm">
+                    <Shield className="w-4 h-4 text-amber-600 shrink-0" />
+                    Aposta Já Realizada
+                  </p>
+                  <p className="font-semibold text-gray-700 leading-snug">
+                    Você já possui uma aposta efetuada nesta mesma opção no valor de <strong className="text-amber-900">R$ {existingUserBet.amount.toFixed(2).replace('.', ',')}</strong>.
+                  </p>
+                  <p className="text-[10.5px] text-amber-800 font-bold bg-amber-100/80 p-2.5 rounded-xl border border-amber-200/60 leading-tight">
+                    ⚠️ Regra de Segurança: Cada apostador tem o limite de apenas 1 aposta por opção de palpite para evitar apostas acidentais em duplicidade.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black uppercase text-gray-600 tracking-wider">
+                      Valor da Aposta (R$ 0,50 a R$ 2,00)
+                    </label>
+                  </div>
+
+                  {/* Quick selection chips */}
+                  <div className="grid grid-cols-4 gap-2">
+                    {['0,50', '1,00', '1,50', '2,00'].map((val) => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setBetAmount(val)}
+                        className={`py-2 text-xs font-black rounded-xl border transition-all cursor-pointer ${
+                          betAmount === val || betAmount === val.replace(',', '.')
+                            ? 'bg-primary-blue text-white border-primary-blue shadow-sm'
+                            : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        R$ {val}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Custom input */}
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <span className="text-gray-500 font-bold">R$</span>
+                    </div>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={betAmount}
+                      onChange={(e) => setBetAmount(e.target.value)}
+                      placeholder="1,00"
+                      className={`w-full pl-12 pr-4 py-3 bg-white border rounded-xl font-bold text-gray-800 focus:outline-none focus:ring-2 ${
+                        isValidBetAmt ? 'border-gray-300 focus:ring-primary-blue' : 'border-red-400 focus:ring-red-400 bg-red-50/50'
+                      }`}
+                    />
+                  </div>
+
+                  {!isValidBetAmt && (
+                    <p className="text-[11px] font-bold text-red-600">
+                      O valor da aposta deve ser entre R$ 0,50 e R$ 2,00.
+                    </p>
+                  )}
+
+                  <div className="flex justify-between items-center text-xs font-bold text-gray-600 pt-1">
+                    <span>Retorno Potencial:</span>
+                    <span className="text-emerald-600 font-black text-base">
+                      R$ {(parsedBetAmt * Number(selectedBet.odd)).toFixed(2).replace('.', ',')}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-3">
                 <button 
+                  type="button"
                   onClick={() => setSelectedBet(null)}
-                  className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors cursor-pointer text-xs uppercase"
+                  disabled={isSubmittingBet}
+                  className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors cursor-pointer text-xs uppercase disabled:opacity-50"
                 >
                   Cancelar
                 </button>
-                <button 
-                  onClick={handlePlaceBet}
-                  className={`flex-1 font-black py-3 rounded-xl transition-colors cursor-pointer text-xs uppercase tracking-wider text-white ${
-                    balance >= Math.min(1.00, bettingParams?.maxBetAmount || 1.00)
-                      ? 'bg-emerald-600 hover:bg-emerald-700 shadow-md'
-                      : 'bg-amber-600 hover:bg-amber-700 shadow-md'
-                  }`}
-                >
-                  {balance >= Math.min(1.00, bettingParams?.maxBetAmount || 1.00) ? 'Confirmar Aposta' : 'Apostar (Pendente de Saldo)'}
-                </button>
+
+                {existingUserBet ? (
+                  <button
+                    type="button"
+                    disabled
+                    className="flex-1 bg-gray-300 text-gray-500 font-black py-3 rounded-xl text-xs uppercase tracking-wider cursor-not-allowed shadow-none"
+                  >
+                    Aposta Já Realizada
+                  </button>
+                ) : (
+                  <button 
+                    type="button"
+                    onClick={handlePlaceBet}
+                    disabled={isSubmittingBet || !isValidBetAmt}
+                    className={`flex-1 font-black py-3 rounded-xl transition-all text-xs uppercase tracking-wider text-white shadow-md flex items-center justify-center gap-2 ${
+                      isSubmittingBet || !isValidBetAmt
+                        ? 'bg-gray-400 cursor-not-allowed shadow-none'
+                        : balance >= parsedBetAmt
+                        ? 'bg-emerald-600 hover:bg-emerald-700 cursor-pointer active:scale-95'
+                        : 'bg-amber-600 hover:bg-amber-700 cursor-pointer active:scale-95'
+                    }`}
+                  >
+                    {isSubmittingBet ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Processando...</span>
+                      </>
+                    ) : balance >= parsedBetAmt ? (
+                      `Confirmar (R$ ${parsedBetAmt.toFixed(2).replace('.', ',')})`
+                    ) : (
+                      `Apostar (Pendente de Saldo)`
+                    )}
+                  </button>
+                )}
               </div>
-              {balance < Math.min(1.00, bettingParams?.maxBetAmount || 1.00) && (
+
+              {!existingUserBet && balance < parsedBetAmt && (
                 <p className="text-[10px] text-amber-800 font-bold text-center mt-2 bg-amber-50 p-2.5 rounded-xl border border-amber-200 leading-tight">
-                  Você não possui saldo no momento. A aposta de R$ {(Math.min(1.00, bettingParams?.maxBetAmount || 1.00)).toFixed(2)} será gravada como pendente e aprovada após a inclusão de saldo.
+                  Você não possui saldo suficiente no momento. A aposta de R$ {parsedBetAmt.toFixed(2).replace('.', ',')} será gravada como pendente e ativada após a inclusão de saldo.
                 </p>
               )}
             </div>

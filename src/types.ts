@@ -240,6 +240,7 @@ export interface BoostedBet {
   odd: number;
   displayText: string;
   active: boolean;
+  status?: 'pending' | 'won' | 'lost';
   createdAt?: number;
 }
 

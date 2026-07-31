@@ -1,4 +1,4 @@
-import { collection, query, where, getDocs, doc, runTransaction } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, runTransaction, writeBatch } from 'firebase/firestore';
 
 /**
  * Checks if a user has bets in status 'pending_payment'.
@@ -62,3 +62,79 @@ export async function processPendingPaymentBets(db: any, userId: string): Promis
     return 0;
   }
 }
+
+/**
+ * Automatically evaluates pending bets for a finished match based on final scores.
+ * Sets `evaluatedResult: 'won' | 'lost'` and `evaluatedReason` so the Admin Master can approve payouts.
+ */
+export async function autoEvaluateMatchBets(db: any, matchId: string, scoreA: number, scoreB: number): Promise<number> {
+  if (!matchId) return 0;
+
+  try {
+    const betsRef = collection(db, 'bets');
+    const q = query(
+      betsRef,
+      where('matchId', '==', matchId),
+      where('status', '==', 'pending')
+    );
+
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return 0;
+
+    const winner = scoreA > scoreB ? 'teamA' : scoreB > scoreA ? 'teamB' : 'draw';
+    const totalGoals = scoreA + scoreB;
+    const matchOutcomeStr = `Placar Final: ${scoreA} x ${scoreB} (${winner === 'teamA' ? 'Vitória Time Azul' : winner === 'teamB' ? 'Vitória Time Amarelo' : 'Empate'})`;
+
+    let evaluatedCount = 0;
+    const batch = writeBatch(db);
+
+    snapshot.docs.forEach((d) => {
+      const bet = d.data();
+      let outcome: 'won' | 'lost' | null = null;
+      let reason = matchOutcomeStr;
+
+      if (bet.market === 'matchWinner') {
+        const sel = String(bet.selection || '').toLowerCase();
+        if (sel === 'teama' || sel === 'time a' || sel === 'azul' || sel === 'time azul') {
+          outcome = winner === 'teamA' ? 'won' : 'lost';
+        } else if (sel === 'teamb' || sel === 'time b' || sel === 'amarelo' || sel === 'time amarelo') {
+          outcome = winner === 'teamB' ? 'won' : 'lost';
+        } else if (sel === 'draw' || sel === 'empate') {
+          outcome = winner === 'draw' ? 'won' : 'lost';
+        }
+      } else if (bet.market === 'matchGoals') {
+        const sel = String(bet.selection || bet.selectedOutcome || '');
+        const numMatch = sel.match(/(\d+[.,]?\d*)/);
+        if (numMatch) {
+          const line = parseFloat(numMatch[1].replace(',', '.'));
+          if (sel.toLowerCase().includes('mais') || sel.toLowerCase().includes('over')) {
+            outcome = totalGoals > line ? 'won' : 'lost';
+            reason = `Total de Gols: ${totalGoals} (${totalGoals > line ? 'Mais que ' + line : 'Menos que ' + line})`;
+          } else if (sel.toLowerCase().includes('menos') || sel.toLowerCase().includes('under')) {
+            outcome = totalGoals < line ? 'won' : 'lost';
+            reason = `Total de Gols: ${totalGoals} (${totalGoals < line ? 'Menos que ' + line : 'Mais que ' + line})`;
+          }
+        }
+      }
+
+      if (outcome) {
+        evaluatedCount++;
+        batch.update(d.ref, {
+          evaluatedResult: outcome,
+          evaluatedReason: reason,
+          autoEvaluatedAt: new Date().toISOString()
+        });
+      }
+    });
+
+    if (evaluatedCount > 0) {
+      await batch.commit();
+    }
+
+    return evaluatedCount;
+  } catch (error) {
+    console.error("Error auto evaluating match bets:", error);
+    return 0;
+  }
+}
+

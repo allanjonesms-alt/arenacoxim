@@ -71,6 +71,12 @@ export const calculateMatchOdds = (
   oddDraw = Math.max(1.01, oddDraw);
   oddB = Math.max(1.01, oddB);
 
+  // A odd do empate nunca deve ser superior à vitória do time menos favorito (zebra)
+  const underdogOdd = Math.max(oddA, oddB);
+  if (oddDraw > underdogOdd) {
+    oddDraw = underdogOdd;
+  }
+
   return {
     oddA: oddA.toFixed(2),
     oddDraw: oddDraw.toFixed(2),

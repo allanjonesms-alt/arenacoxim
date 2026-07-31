@@ -15,6 +15,7 @@ import { PlayerSelectionModal } from '../components/PlayerSelectionModal';
 import { calculateMatchPoints, MatchEvent } from '../utils/scoringEngine';
 import { calculateGrade } from '../utils/gradeUtils';
 import { getPositionAbbr, getPositionColor } from '../utils/playerUtils';
+import { autoEvaluateMatchBets } from '../utils/bettingUtils';
 
 const DEFAULT_RULES: ScoringRules = {
   id: 'scoring',
@@ -371,6 +372,11 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
     });
 
     await batch.commit();
+    try {
+      await autoEvaluateMatchBets(db, match.id, scoreA, scoreB);
+    } catch (e) {
+      console.error("Auto bet evaluation error:", e);
+    }
     setActiveMatch(null);
   };
 
@@ -539,6 +545,11 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
         // If it was already finished, we need to recalculate all stats to be safe
         // If it was live, we could just increment, but recalculateAllStats is more robust for historical edits
         await recalculateAllStats();
+        try {
+          await autoEvaluateMatchBets(db, match.id, sA, sB);
+        } catch (e) {
+          console.error("Auto bet evaluation error:", e);
+        }
         
         onClose();
       } catch (error) {

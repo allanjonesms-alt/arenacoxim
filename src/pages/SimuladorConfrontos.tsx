@@ -8,6 +8,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { getPositionAbbr, getPositionColor, getPlayerFinalOverall } from '../utils/playerUtils';
 import { handleFirestoreError, OperationType } from '../App';
 import { calculateMatchPoints } from '../utils/scoringEngine';
+import { autoEvaluateMatchBets } from '../utils/bettingUtils';
 
 interface Props {
   adminData?: AdminData | null;
@@ -258,13 +259,13 @@ export default function SimuladorConfrontos({ adminData }: Props) {
     }
   };
 
-  const handleSettleBet = async (bet: any, outcome: 'won' | 'lost') => {
+  const handleSettleBet = async (bet: any, outcome: 'won' | 'lost', skipConfirm = false) => {
     const prize = bet.amount * (bet.odds || bet.odd || 1);
     const confirmMsg = outcome === 'won' 
       ? `Confirmar que o palpite GANHOU? O usuário receberá R$ ${prize.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`
       : `Confirmar que o palpite PERDEU? O saldo do usuário não sofrerá alterações.`;
     
-    if (!window.confirm(confirmMsg)) return;
+    if (!skipConfirm && !window.confirm(confirmMsg)) return;
 
     try {
       await runTransaction(db, async (transaction) => {
@@ -273,7 +274,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
         if (!betSnap.exists()) {
           throw new Error("Aposta não encontrada.");
         }
-        if (betSnap.data()?.status !== 'pending') {
+        if (betSnap.data()?.status !== 'pending' && betSnap.data()?.status !== 'pending_payment') {
           throw new Error("Aposta já finalizada.");
         }
 
@@ -292,11 +293,106 @@ export default function SimuladorConfrontos({ adminData }: Props) {
         
         transaction.update(betRef, { status: outcome, settledAt: new Date().toISOString() });
       });
-      alert(`Aposta finalizada como ${outcome === 'won' ? 'GANHA' : 'PERDIDA'} com sucesso!`);
+      if (!skipConfirm) {
+        alert(`Aposta finalizada como ${outcome === 'won' ? 'GANHA' : 'PERDIDA'} com sucesso!`);
+      }
     } catch (error: any) {
       console.error("Erro ao finalizar aposta:", error);
-      alert("Erro ao finalizar aposta: " + error.message);
+      if (!skipConfirm) {
+        alert("Erro ao finalizar aposta: " + error.message);
+      }
     }
+  };
+
+  const handleSettleBoostedBet = async (boost: BoostedBet, outcome: 'won' | 'lost') => {
+    if (!boost.id) return;
+    const confirmMsg = outcome === 'won'
+      ? `Confirmar resultado como GANHA (WIN) para a Aposta Turbinada "${boost.title || boost.displayText}"?\n\nIsso atualizará todas as apostas dos usuários nesta opção para que o pagamento possa ser aprovado.`
+      : `Confirmar resultado como PERDIDA (LOSS) para a Aposta Turbinada "${boost.title || boost.displayText}"?\n\nTodas as apostas dos usuários nesta opção serão marcadas como PERDIDAS.`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      // 1. Update boosted bet document
+      await updateDoc(doc(db, 'boostedBets', boost.id), {
+        status: outcome,
+        settledAt: new Date().toISOString()
+      });
+
+      // 2. Query matching active user bets
+      const betsRef = collection(db, 'bets');
+      const q = query(betsRef, where('status', '==', 'pending'));
+      const snapshot = await getDocs(q);
+      
+      const matchingBets = snapshot.docs.filter(d => {
+        const data = d.data();
+        return (data.market === 'boosted' || data.matchId === 'boosted') && (
+          data.selection === boost.id || 
+          data.boostedBetId === boost.id || 
+          data.selectedOutcome === boost.displayText ||
+          data.selection === boost.displayText ||
+          (boost.title && (data.matchInfo || '').includes(boost.title))
+        );
+      });
+
+      if (matchingBets.length === 0) {
+        alert(`Aposta Turbinada marcada como ${outcome === 'won' ? 'WIN' : 'LOSS'}! Nenhuma aposta de usuário pendente foi encontrada no momento para esta opção.`);
+        return;
+      }
+
+      let processedCount = 0;
+      if (outcome === 'won') {
+        const autoPay = window.confirm(
+          `Foram encontradas ${matchingBets.length} aposta(s) ativa(s) de usuário(s) nesta Aposta Turbinada.\n\n` +
+          `Clique OK para PAGAR AUTOMATICAMENTE (creditar o saldo dos usuários agora) ou Cancelar para apenas marcar como GANHA aguardando aprovação individual no relatório de apostas.`
+        );
+
+        for (const betDoc of matchingBets) {
+          const betData = { id: betDoc.id, ...betDoc.data() };
+          if (autoPay) {
+            await handleSettleBet(betData, 'won', true);
+          } else {
+            await updateDoc(doc(db, 'bets', betDoc.id), {
+              evaluatedResult: 'won',
+              autoEvaluatedAt: new Date().toISOString()
+            });
+          }
+          processedCount++;
+        }
+      } else {
+        for (const betDoc of matchingBets) {
+          const betData = { id: betDoc.id, ...betDoc.data() };
+          await handleSettleBet(betData, 'lost', true);
+          processedCount++;
+        }
+      }
+
+      alert(`Sucesso! Aposta Turbinada definida como ${outcome === 'won' ? 'WIN' : 'LOSS'} e ${processedCount} aposta(s) de usuário(s) atualizada(s).`);
+    } catch (err: any) {
+      console.error("Erro ao definir resultado da aposta turbinada:", err);
+      alert("Erro ao processar aposta turbinada: " + err.message);
+    }
+  };
+
+  const handleBatchApproveWonBets = async (wonBets: any[]) => {
+    if (!wonBets || wonBets.length === 0) return;
+    const totalPayout = wonBets.reduce((acc, b) => acc + (b.amount * (b.odds || b.odd || 1)), 0);
+
+    if (!window.confirm(`Aprovar e PAGAR TODAS as ${wonBets.length} apostas avaliadas como GANHAS?\n\nTotal de prêmios a serem creditados nos saldos: R$ ${totalPayout.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`)) {
+      return;
+    }
+
+    let successCount = 0;
+    for (const bet of wonBets) {
+      try {
+        await handleSettleBet(bet, 'won', true);
+        successCount++;
+      } catch (err) {
+        console.error("Erro ao liquidar aposta no lote:", err);
+      }
+    }
+
+    alert(`Pagamento concluído com sucesso para ${successCount} aposta(s)!`);
   };
 
   // Load data
@@ -437,6 +533,12 @@ export default function SimuladorConfrontos({ adminData }: Props) {
     oddA = Math.max(1.01, oddA);
     oddDraw = Math.max(1.01, oddDraw);
     oddB = Math.max(1.01, oddB);
+
+    // A odd do empate nunca deve ser superior à vitória do time menos favorito (zebra)
+    const underdogOdd = Math.max(oddA, oddB);
+    if (oddDraw > underdogOdd) {
+      oddDraw = underdogOdd;
+    }
 
     return {
       avgA: avgA.toFixed(2).replace(".", ","),
@@ -2148,7 +2250,13 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                         <div
                           key={boost.id}
                           className={`bg-black/30 border rounded-2xl p-4 flex flex-col justify-between gap-3 transition-all ${
-                            boost.active !== false ? 'border-amber-400/40' : 'border-white/10 opacity-60'
+                            boost.status === 'won'
+                              ? 'border-emerald-500/60 bg-emerald-950/20'
+                              : boost.status === 'lost'
+                              ? 'border-rose-500/60 bg-rose-950/20'
+                              : boost.active !== false
+                              ? 'border-amber-400/40'
+                              : 'border-white/10 opacity-60'
                           }`}
                         >
                           <div className="space-y-1.5">
@@ -2156,13 +2264,25 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                               <span className="text-[10px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded">
                                 {boost.betType || 'GOLS NO MÊS'}
                               </span>
-                              <span
-                                className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
-                                  boost.active !== false ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-red-500/20 text-red-300 border border-red-500/30'
-                                }`}
-                              >
-                                {boost.active !== false ? 'ATIVA' : 'INATIVA'}
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                {boost.status === 'won' && (
+                                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3" /> WIN
+                                  </span>
+                                )}
+                                {boost.status === 'lost' && (
+                                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
+                                    <XCircle className="w-3 h-3" /> LOSS
+                                  </span>
+                                )}
+                                <span
+                                  className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                                    boost.active !== false ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                                  }`}
+                                >
+                                  {boost.active !== false ? 'ATIVA' : 'INATIVA'}
+                                </span>
+                              </div>
                             </div>
                             {boost.title && (
                               <h5 className="text-xs font-black uppercase text-amber-300 tracking-tight pt-0.5">
@@ -2172,6 +2292,33 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                             <p className="text-sm font-black text-white leading-snug whitespace-pre-line">
                               {boost.displayText}
                             </p>
+                          </div>
+
+                          {/* WIN / LOSS Action Buttons for Admin Master */}
+                          <div className="bg-slate-900/80 border border-white/10 rounded-xl p-2.5 flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-gray-300">
+                              Resultado Master:
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleSettleBoostedBet(boost, 'won')}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider rounded-lg shadow-sm transition-all cursor-pointer flex items-center gap-1 active:scale-95"
+                                title="Marcar todas as apostas nesta opção como WIN (Ganha)"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>WIN</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSettleBoostedBet(boost, 'lost')}
+                                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase tracking-wider rounded-lg shadow-sm transition-all cursor-pointer flex items-center gap-1 active:scale-95"
+                                title="Marcar todas as apostas nesta opção como LOSS (Perdida)"
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                                <span>LOSS</span>
+                              </button>
+                            </div>
                           </div>
 
                           <div className="flex items-center justify-between border-t border-white/10 pt-3">
@@ -2595,6 +2742,8 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                          (b.matchInfo || '').toLowerCase().includes(s);
                 });
 
+                const evaluatedWonBets = filtered.filter(b => b.evaluatedResult === 'won');
+
                 if (filtered.length === 0) {
                   return (
                     <div className="text-center py-16 space-y-3 bg-white rounded-2xl border border-gray-100 shadow-sm">
@@ -2618,11 +2767,40 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                   if (m === 'long_term' || m === 'longTermMonthlyGoals') return 'Gols no Mês (Linha)';
                   if (m === 'longTermConcededGoals') return 'Gols Sofridos (Goleiros)';
                   if (m === 'longTermMonthlyScorer') return 'Maior Pontuador do Mês';
+                  if (m === 'boosted') return 'Aposta Turbinada';
                   return m || 'Personalizado';
                 };
 
                 return (
                   <div className="space-y-3">
+                    {/* Batch Approval Banner if any bet was auto-evaluated as WON */}
+                    {evaluatedWonBets.length > 0 && (
+                      <div className="bg-emerald-500/10 border border-emerald-500/30 p-3.5 px-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-3 w-3 relative shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                          </span>
+                          <div>
+                            <span className="text-xs font-black text-emerald-900 uppercase tracking-tight block">
+                              {evaluatedWonBets.length} aposta(s) verificada(s) como GANHAS pela automatização
+                            </span>
+                            <span className="text-[10px] font-bold text-emerald-700 block">
+                              Prêmio Total a Creditar: R$ {evaluatedWonBets.reduce((acc, b) => acc + (b.amount * (b.odds || b.odd || 1)), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleBatchApproveWonBets(evaluatedWonBets)}
+                          className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shrink-0"
+                        >
+                          <Zap className="w-4 h-4 fill-current" />
+                          <span>Aprovar Pagamento em Lote ({evaluatedWonBets.length})</span>
+                        </button>
+                      </div>
+                    )}
+
                     {filtered.map(bet => {
                       const prize = bet.amount * (bet.odds || bet.odd || 1);
                       const formattedDate = bet.createdAt 
@@ -2630,7 +2808,16 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                         : 'Sem data';
 
                       return (
-                        <div key={bet.id} className="bg-white rounded-2xl p-4 sm:p-5 border border-gray-150 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-5 group">
+                        <div 
+                          key={bet.id} 
+                          className={`bg-white rounded-2xl p-4 sm:p-5 border shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-5 group ${
+                            bet.evaluatedResult === 'won' 
+                              ? 'border-emerald-300 bg-emerald-50/30' 
+                              : bet.evaluatedResult === 'lost'
+                              ? 'border-rose-200 bg-rose-50/20'
+                              : 'border-gray-150'
+                          }`}
+                        >
                           {/* Left: User details & Date */}
                           <div className="space-y-1 md:max-w-xs min-w-0">
                             <div className="flex items-center gap-2">
@@ -2647,8 +2834,8 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                             </div>
                           </div>
 
-                          {/* Middle: Bet Details */}
-                          <div className="space-y-1.5 flex-1 min-w-0">
+                          {/* Middle: Bet Details & Auto Evaluation Badge */}
+                          <div className="space-y-2 flex-1 min-w-0">
                             <div className="text-xs font-black uppercase tracking-wide text-primary-blue truncate">
                               {bet.matchInfo || 'Azul vs Amarelo'}
                             </div>
@@ -2664,6 +2851,20 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                                 @ {(bet.odds || bet.odd || 1).toFixed(2)}
                               </span>
                             </div>
+
+                            {/* Auto Evaluation Badge */}
+                            {bet.evaluatedResult === 'won' && (
+                              <div className="text-[10px] font-black uppercase tracking-wide text-emerald-800 bg-emerald-100 border border-emerald-300 px-2.5 py-1 rounded-lg flex items-center gap-1.5 w-fit">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span>Verificado pelo Sistema: GANHOU {bet.evaluatedReason ? `(${bet.evaluatedReason})` : ''}</span>
+                              </div>
+                            )}
+                            {bet.evaluatedResult === 'lost' && (
+                              <div className="text-[10px] font-black uppercase tracking-wide text-rose-800 bg-rose-100 border border-rose-300 px-2.5 py-1 rounded-lg flex items-center gap-1.5 w-fit">
+                                <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                                <span>Verificado pelo Sistema: PERDEU {bet.evaluatedReason ? `(${bet.evaluatedReason})` : ''}</span>
+                              </div>
+                            )}
                           </div>
 
                           {/* Right: Values & Actions */}
@@ -2683,18 +2884,24 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                               {/* Settle as Won */}
                               <button
                                 onClick={() => handleSettleBet(bet, 'won')}
-                                className="bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all p-2 rounded-xl border border-emerald-100 flex items-center justify-center gap-1 font-black text-[10px] uppercase cursor-pointer"
-                                title="Aprovar como GANHA"
+                                className={`transition-all p-2 rounded-xl border flex items-center justify-center gap-1 font-black text-[10px] uppercase cursor-pointer shadow-sm active:scale-95 ${
+                                  bet.evaluatedResult === 'won'
+                                    ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-500 ring-2 ring-emerald-400/50'
+                                    : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white border-emerald-100'
+                                }`}
+                                title="Aprovar Pagamento como GANHA"
                               >
                                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                                <span className="hidden sm:inline px-0.5">Ganha</span>
+                                <span className="hidden sm:inline px-0.5">
+                                  {bet.evaluatedResult === 'won' ? 'Aprovar GANHA' : 'Ganha'}
+                                </span>
                               </button>
 
                               {/* Settle as Lost */}
                               <button
                                 onClick={() => handleSettleBet(bet, 'lost')}
-                                className="bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white transition-all p-2 rounded-xl border border-rose-100 flex items-center justify-center gap-1 font-black text-[10px] uppercase cursor-pointer"
-                                title="Aprovar como PERDIDA"
+                                className="bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white transition-all p-2 rounded-xl border border-rose-100 flex items-center justify-center gap-1 font-black text-[10px] uppercase cursor-pointer active:scale-95"
+                                title="Marcar como PERDIDA"
                               >
                                 <XCircle className="w-4 h-4 shrink-0" />
                                 <span className="hidden sm:inline px-0.5">Perdida</span>
@@ -2703,7 +2910,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                               {/* Exclude / Delete */}
                               <button
                                 onClick={() => handleDeleteBet(bet)}
-                                className="bg-slate-100 text-slate-500 hover:bg-red-600 hover:text-white hover:border-red-600 transition-all p-2 rounded-xl border border-slate-200 flex items-center justify-center cursor-pointer"
+                                className="bg-slate-100 text-slate-500 hover:bg-red-600 hover:text-white hover:border-red-600 transition-all p-2 rounded-xl border border-slate-200 flex items-center justify-center cursor-pointer active:scale-95"
                                 title="Excluir / Reembolsar Aposta"
                               >
                                 <Trash2 className="w-4 h-4" />
