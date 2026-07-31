@@ -18,7 +18,6 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
   const [zoom, setZoom] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const [removeWhiteBg, setRemoveWhiteBg] = useState(true);
   const dragStart = useRef({ x: 0, y: 0 });
   const imageRef = useRef<HTMLImageElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -130,7 +129,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
     const ctx = canvas.getContext('2d');
 
     if (ctx) {
-      // Clear to maintain transparency
+      // Clear to maintain transparency by default
       ctx.clearRect(0, 0, outputSize, outputSize);
 
       // Drawing ratio between canvas and UI viewport
@@ -143,28 +142,26 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
       ctx.drawImage(imgElement, destX, destY, destW, destH);
 
-      // Remove white background if selected (chroma keying)
-      if (removeWhiteBg) {
-        try {
-          const imgData = ctx.getImageData(0, 0, outputSize, outputSize);
-          const data = imgData.data;
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            // If the pixel is very close to white, make it transparent
-            if (r > 215 && g > 215 && b > 215) {
-              data[i + 3] = 0; // Alpha = 0 (fully transparent)
-            }
+      // Check for alpha channel (transparent pixels) in the cropped canvas
+      let hasAlpha = false;
+      try {
+        const imgData = ctx.getImageData(0, 0, outputSize, outputSize);
+        const data = imgData.data;
+        for (let i = 3; i < data.length; i += 4) {
+          if (data[i] < 255) {
+            hasAlpha = true;
+            break;
           }
-          ctx.putImageData(imgData, 0, 0);
-        } catch (err) {
-          console.error("Error setting transparent background on player photo crop:", err);
         }
+      } catch (err) {
+        console.error("Error inspecting alpha channel in cropped image:", err);
       }
 
-      // Export as PNG if white background was removed, or JPEG if solid background (much smaller footprint)
-      const dataUrl = removeWhiteBg
+      // If source is PNG/WebP or contains transparent pixels, export as PNG to preserve transparent background
+      const isPngSource = imageSrc.startsWith('data:image/png') || imageSrc.startsWith('data:image/webp') || imageSrc.toLowerCase().endsWith('.png');
+      const exportAsPng = hasAlpha || isPngSource;
+
+      const dataUrl = exportAsPng
         ? canvas.toDataURL('image/png')
         : canvas.toDataURL('image/jpeg', 0.82);
 
@@ -324,20 +321,6 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
                 >
                   <ZoomIn className="w-5 h-5" />
                 </button>
-              </div>
-
-              {/* Automatic White Background Removal Filter Toggle */}
-              <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-100 p-3 rounded-2xl">
-                <input
-                  type="checkbox"
-                  id="crop-remove-white-bg"
-                  checked={removeWhiteBg}
-                  onChange={(e) => setRemoveWhiteBg(e.target.checked)}
-                  className="w-4.5 h-4.5 text-primary-blue rounded border-slate-200 focus:ring-primary-blue accent-primary-blue cursor-pointer"
-                />
-                <label htmlFor="crop-remove-white-bg" className="text-[10px] sm:text-[11px] font-bold uppercase text-slate-600 tracking-wider cursor-pointer leading-tight">
-                  Tirar fundo branco da foto do craque automaticamente
-                </label>
               </div>
 
               {/* Action Buttons */}
