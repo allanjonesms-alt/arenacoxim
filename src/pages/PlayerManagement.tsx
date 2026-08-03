@@ -416,11 +416,22 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
     setIsModalOpen(true);
   };
 
+  const isMasterAllan = (auth.currentUser?.email || adminData?.email || '').toLowerCase().trim() === 'allanjonesms@gmail.com';
+
   const handleDelete = (id: string) => {
+    if (!isMasterAllan) {
+      alert('Apenas o admin master allanjonesms@gmail.com tem permissão para excluir cadastro de atleta.');
+      return;
+    }
     setPlayerToDeleteId(id);
   };
 
   const confirmDelete = async () => {
+    if (!isMasterAllan) {
+      alert('Apenas o admin master allanjonesms@gmail.com tem permissão para excluir cadastro de atleta.');
+      setPlayerToDeleteId(null);
+      return;
+    }
     if (playerToDeleteId) {
       try {
         await deleteDoc(doc(db, 'players', playerToDeleteId));
@@ -835,7 +846,7 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
                   backgroundPosition: 'center'
                 }}
               >
-                {isAdmin && (
+                {isAdmin && isMasterAllan && (
                   <div className="absolute top-[6%] right-[6%] z-20 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all translate-y-0 sm:translate-y-1 sm:group-hover:translate-y-0 flex gap-1">
                     <button 
                       onClick={(e) => {

@@ -49,6 +49,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../App';
+import { cleanUndefinedFields } from '../utils/firestoreUtils';
 import { SoccerBall, SoccerCleat } from '../components/Icons';
 import { calculateMatchPoints } from '../utils/scoringEngine';
 
@@ -271,17 +272,17 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
 
     try {
       if (editingTournamentId) {
-        await updateDoc(doc(db, 'tournaments', editingTournamentId), tournamentData as any);
+        await updateDoc(doc(db, 'tournaments', editingTournamentId), cleanUndefinedFields(tournamentData as any));
       } else {
-        const docRef = await addDoc(collection(db, 'tournaments'), tournamentData);
+        const docRef = await addDoc(collection(db, 'tournaments'), cleanUndefinedFields(tournamentData as any));
         // Auto generate initial group matches if format includes groups
         if (format === 'GRUPOS' || format === 'GRUPOS_E_PLAYOFFS') {
           const { newGroupMatches, safeGroups, safeTeams } = await generateGroupMatchesForTournament(docRef.id, formTeams, groupsList, groupMatchFormat);
-          await updateDoc(doc(db, 'tournaments', docRef.id), {
+          await updateDoc(doc(db, 'tournaments', docRef.id), cleanUndefinedFields({
             matches: newGroupMatches,
             groups: safeGroups,
             teams: safeTeams
-          });
+          }));
         }
       }
       setIsCreateModalOpen(false);
@@ -398,11 +399,11 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
 
       const combinedMatches = [...newGroupMatches, ...playoffMatches];
 
-      await updateDoc(doc(db, 'tournaments', activeTournament.id), {
+      await updateDoc(doc(db, 'tournaments', activeTournament.id), cleanUndefinedFields({
         matches: combinedMatches,
         groups: safeGroups,
         teams: safeTeams
-      });
+      }));
 
       setActiveTournament(prev => prev ? {
         ...prev,
@@ -491,27 +492,35 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
     return standings;
   };
 
-  // Generate Playoff Stage from Group Standings
+  // Generate Playoff Stage from Group Standings (1º de um grupo vs 2º do outro)
   const handleGeneratePlayoffs = async () => {
     if (!activeTournament) return;
     if (activeTournament.groups.length === 0) return;
 
     const qualifiersPerGroup = activeTournament.qualifiersPerGroup || 2;
-    const qualifiedTeams: { team: TournamentTeam; rank: number; groupId: string }[] = [];
+    const groupQualifiers: {
+      groupId: string;
+      groupName: string;
+      standings: { team: TournamentTeam; rank: number }[];
+    }[] = [];
 
     activeTournament.groups.forEach(group => {
       const standings = calculateGroupStandings(activeTournament, group.id);
-      const qualifiers = standings.slice(0, qualifiersPerGroup);
-      qualifiers.forEach((q, idx) => {
-        qualifiedTeams.push({
-          team: q.team,
-          rank: idx + 1,
-          groupId: group.id
-        });
+      const qualifiers = standings.slice(0, qualifiersPerGroup).map((q, idx) => ({
+        team: q.team,
+        rank: idx + 1
+      }));
+      groupQualifiers.push({
+        groupId: group.id,
+        groupName: group.name,
+        standings: qualifiers
       });
     });
 
-    if (qualifiedTeams.length < 2) {
+    let totalQualifiedCount = 0;
+    groupQualifiers.forEach(g => { totalQualifiedCount += g.standings.length; });
+
+    if (totalQualifiedCount < 2) {
       alert("É necessário ter pelo menos 2 times classificados para gerar os playoffs.");
       return;
     }
@@ -519,30 +528,112 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
     const playoffMatches: TournamentMatch[] = [];
     const today = new Date().toISOString().split('T')[0];
 
-    // Determine round name based on count
     let roundName = 'Playoffs';
-    if (qualifiedTeams.length === 2) roundName = 'Grande Final';
-    else if (qualifiedTeams.length <= 4) roundName = 'Semifinal';
-    else if (qualifiedTeams.length <= 8) roundName = 'Quartas de Final';
+    if (totalQualifiedCount === 2) roundName = 'Grande Final';
+    else if (totalQualifiedCount <= 4) roundName = 'Semifinal';
+    else if (totalQualifiedCount <= 8) roundName = 'Quartas de Final';
+    else if (totalQualifiedCount <= 16) roundName = 'Oitavas de Final';
 
-    // Pair qualifiers cross-group e.g. 1st Group A vs 2nd Group B
-    for (let i = 0; i < qualifiedTeams.length; i += 2) {
-      if (i + 1 < qualifiedTeams.length) {
-        const teamA = qualifiedTeams[i].team;
-        const teamB = qualifiedTeams[i + 1].team;
+    const formatTime = (idx: number) => {
+      const startHour = 19;
+      const hour = startHour + idx;
+      return `${hour.toString().padStart(2, '0')}:00`;
+    };
 
-        playoffMatches.push({
-          id: `playoff_${Date.now()}_${i}`,
-          stage: 'playoff',
-          roundName,
-          roundIndex: 1,
-          teamAId: teamA.id,
-          teamBId: teamB.id,
-          date: today,
-          time: '20:00',
-          status: 'scheduled',
-          events: []
-        });
+    // Pair 1st place of a group against 2nd place of another group
+    if (groupQualifiers.length >= 2 && qualifiersPerGroup >= 2) {
+      const numGroups = groupQualifiers.length;
+
+      if (numGroups % 2 === 0) {
+        // Even number of groups (2, 4, 6...): pair adjacent groups (A x B, C x D...)
+        for (let g = 0; g < numGroups; g += 2) {
+          const g1 = groupQualifiers[g];
+          const g2 = groupQualifiers[g + 1];
+
+          const g1_1st = g1.standings.find(s => s.rank === 1)?.team;
+          const g1_2nd = g1.standings.find(s => s.rank === 2)?.team;
+          const g2_1st = g2.standings.find(s => s.rank === 1)?.team;
+          const g2_2nd = g2.standings.find(s => s.rank === 2)?.team;
+
+          // Match 1: 1º do Grupo 1 vs 2º do Grupo 2
+          if (g1_1st && g2_2nd) {
+            playoffMatches.push({
+              id: `playoff_${Date.now()}_${playoffMatches.length}`,
+              stage: 'playoff',
+              roundName,
+              roundIndex: 1,
+              teamAId: g1_1st.id,
+              teamBId: g2_2nd.id,
+              date: today,
+              time: formatTime(playoffMatches.length),
+              status: 'scheduled',
+              events: []
+            });
+          }
+
+          // Match 2: 1º do Grupo 2 vs 2º do Grupo 1
+          if (g2_1st && g1_2nd) {
+            playoffMatches.push({
+              id: `playoff_${Date.now()}_${playoffMatches.length}`,
+              stage: 'playoff',
+              roundName,
+              roundIndex: 1,
+              teamAId: g2_1st.id,
+              teamBId: g1_2nd.id,
+              date: today,
+              time: formatTime(playoffMatches.length),
+              status: 'scheduled',
+              events: []
+            });
+          }
+        }
+      } else {
+        // Odd number of groups (3, 5...): 1º do Grupo i vs 2º do Grupo (i+1)%N
+        for (let g = 0; g < numGroups; g++) {
+          const gCurr = groupQualifiers[g];
+          const gNext = groupQualifiers[(g + 1) % numGroups];
+
+          const curr1st = gCurr.standings.find(s => s.rank === 1)?.team;
+          const next2nd = gNext.standings.find(s => s.rank === 2)?.team;
+
+          if (curr1st && next2nd) {
+            playoffMatches.push({
+              id: `playoff_${Date.now()}_${playoffMatches.length}`,
+              stage: 'playoff',
+              roundName,
+              roundIndex: 1,
+              teamAId: curr1st.id,
+              teamBId: next2nd.id,
+              date: today,
+              time: formatTime(playoffMatches.length),
+              status: 'scheduled',
+              events: []
+            });
+          }
+        }
+      }
+    } else {
+      // Fallback for single group or single qualifier per group
+      const allQualified: TournamentTeam[] = [];
+      groupQualifiers.forEach(g => {
+        g.standings.forEach(s => allQualified.push(s.team));
+      });
+
+      for (let i = 0; i < allQualified.length; i += 2) {
+        if (i + 1 < allQualified.length) {
+          playoffMatches.push({
+            id: `playoff_${Date.now()}_${playoffMatches.length}`,
+            stage: 'playoff',
+            roundName,
+            roundIndex: 1,
+            teamAId: allQualified[i].id,
+            teamBId: allQualified[i + 1].id,
+            date: today,
+            time: formatTime(playoffMatches.length),
+            status: 'scheduled',
+            events: []
+          });
+        }
       }
     }
 
@@ -552,10 +643,10 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
     ];
 
     try {
-      await updateDoc(doc(db, 'tournaments', activeTournament.id), {
+      await updateDoc(doc(db, 'tournaments', activeTournament.id), cleanUndefinedFields({
         matches: updatedMatches
-      });
-      alert(`Fase de Playoffs (${roundName}) gerada com sucesso!`);
+      }));
+      alert(`Fase de Playoffs (${roundName}) com confrontos cruzados (1º x 2º) gerada com sucesso!`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, 'tournaments');
     }
@@ -592,7 +683,7 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
     else if (penaltiesA > penaltiesB) winnerTeamId = teamA.id;
     else if (penaltiesB > penaltiesA) winnerTeamId = teamB.id;
 
-    const updatedMatch: TournamentMatch = {
+    const updatedMatch: TournamentMatch = cleanUndefinedFields({
       ...editingMatch,
       date: matchDate,
       time: matchTime,
@@ -602,17 +693,17 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
       penaltiesB,
       status: 'finished',
       mvpId: matchMvpId || undefined,
-      events: matchEvents,
+      events: matchEvents || [],
       winnerTeamId
-    };
+    });
 
     const updatedMatches = activeTournament.matches.map(m => m.id === editingMatch.id ? updatedMatch : m);
 
     try {
       // 1. Update tournament match in Firestore
-      await updateDoc(doc(db, 'tournaments', activeTournament.id), {
+      await updateDoc(doc(db, 'tournaments', activeTournament.id), cleanUndefinedFields({
         matches: updatedMatches
-      });
+      }));
 
       // 2. CRITICAL: Update player stats in Firestore for players in teamA and teamB!
       await updatePlayerStatsFromTournamentMatch(teamA, teamB, updatedMatch);
@@ -913,7 +1004,16 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
                     </p>
                   </div>
                 ) : (
-                  activeTournament.matches.filter(m => m.stage === 'playoff').map(match => {
+                  [...activeTournament.matches.filter(m => m.stage === 'playoff')]
+                    .sort((a, b) => {
+                      const dateA = a.date || '';
+                      const dateB = b.date || '';
+                      if (dateA !== dateB) return dateA.localeCompare(dateB);
+                      const timeA = (a.time || '99:99').trim().padStart(5, '0');
+                      const timeB = (b.time || '99:99').trim().padStart(5, '0');
+                      return timeA.localeCompare(timeB);
+                    })
+                    .map(match => {
                     const teamA = activeTournament.teams.find(t => t.id === match.teamAId);
                     const teamB = activeTournament.teams.find(t => t.id === match.teamBId);
                     return (
@@ -959,7 +1059,7 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
 
           {/* TAB CONTENT: MATCHES */}
           {activeTab === 'matches' && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               {activeTournament.groups.length > 0 && (
                 <div className="bg-white p-4 rounded-3xl border border-gray-100 flex flex-wrap items-center justify-between gap-3 shadow-sm">
                   <div className="flex items-center gap-2">
@@ -977,56 +1077,147 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {activeTournament.matches.length === 0 ? (
-                  <div className="col-span-2 bg-white p-12 text-center rounded-3xl border border-gray-100">
-                    <p className="text-gray-400 text-xs font-bold uppercase italic">Nenhuma partida agendada neste campeonato.</p>
-                  </div>
-                ) : (
-                  activeTournament.matches.map(match => {
-                    const teamA = activeTournament.teams.find(t => t.id === match.teamAId);
-                    const teamB = activeTournament.teams.find(t => t.id === match.teamBId);
-                    return (
-                      <div key={match.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-3">
-                        <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                          <span className="text-[10px] font-black uppercase tracking-widest text-primary-blue bg-blue-50 px-2.5 py-1 rounded-md">
-                            {match.groupName || match.roundName || 'Fase de Grupos'}
-                          </span>
-                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
-                            match.status === 'finished' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                          }`}>
-                            {match.status === 'finished' ? 'Finalizada' : 'Agendada'}
+              {(() => {
+                const normalizeTimeStr = (t?: string) => {
+                  if (!t) return '99:99';
+                  const trimmed = t.trim();
+                  const parts = trimmed.split(':');
+                  if (parts.length === 2) {
+                    return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+                  }
+                  return trimmed;
+                };
+
+                if (activeTournament.matches.length === 0) {
+                  return (
+                    <div className="bg-white p-12 text-center rounded-3xl border border-gray-100 shadow-sm">
+                      <p className="text-gray-400 text-xs font-bold uppercase italic">Nenhuma partida agendada neste campeonato.</p>
+                    </div>
+                  );
+                }
+
+                // Group matches
+                const groupMap = new Map<string, TournamentMatch[]>();
+
+                activeTournament.matches.forEach(match => {
+                  let groupTitle = 'Fase de Grupos';
+
+                  if (match.groupName) {
+                    groupTitle = match.groupName;
+                  } else if (match.groupId) {
+                    const g = activeTournament.groups?.find(x => x.id === match.groupId);
+                    groupTitle = g ? g.name : `Grupo ${match.groupId}`;
+                  } else if (match.stage === 'playoff') {
+                    groupTitle = match.roundName || 'Mata-Mata / Playoffs';
+                  } else {
+                    const teamA = activeTournament.teams?.find(t => t.id === match.teamAId);
+                    const g = teamA?.groupId ? activeTournament.groups?.find(x => x.id === teamA.groupId) : null;
+                    if (g) {
+                      groupTitle = g.name;
+                    }
+                  }
+
+                  if (!groupMap.has(groupTitle)) {
+                    groupMap.set(groupTitle, []);
+                  }
+                  groupMap.get(groupTitle)!.push(match);
+                });
+
+                // Sort matches in each group chronologically (ascending date & time)
+                groupMap.forEach((mList) => {
+                  mList.sort((a, b) => {
+                    const dateA = a.date || '';
+                    const dateB = b.date || '';
+                    if (dateA !== dateB) return dateA.localeCompare(dateB);
+                    return normalizeTimeStr(a.time).localeCompare(normalizeTimeStr(b.time));
+                  });
+                });
+
+                // Order sections by defined groups order, then remaining
+                const sections: { title: string; matches: TournamentMatch[] }[] = [];
+
+                activeTournament.groups?.forEach(g => {
+                  if (groupMap.has(g.name)) {
+                    sections.push({ title: g.name, matches: groupMap.get(g.name)! });
+                    groupMap.delete(g.name);
+                  }
+                });
+
+                groupMap.forEach((mList, title) => {
+                  sections.push({ title, matches: mList });
+                });
+
+                return (
+                  <div className="space-y-8">
+                    {sections.map(section => (
+                      <div key={section.title} className="space-y-4">
+                        {/* Group Header Banner */}
+                        <div className="flex items-center justify-between bg-slate-900 text-white p-3.5 px-6 rounded-2xl shadow-sm border border-slate-800">
+                          <div className="flex items-center gap-2.5">
+                            <Shield className="w-4 h-4 text-amber-400 fill-amber-400" />
+                            <h4 className="text-sm font-black uppercase italic tracking-tight text-amber-400">
+                              {section.title}
+                            </h4>
+                          </div>
+                          <span className="text-[10px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 px-3 py-1 rounded-full border border-amber-400/30">
+                            {section.matches.length} {section.matches.length === 1 ? 'Jogo' : 'Jogos'}
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex-1 text-center">
-                            <p className="text-sm font-black text-slate-900 uppercase italic">{teamA?.name || 'Time A'}</p>
-                            <p className="text-2xl font-black text-primary-blue mt-1">{match.scoreA ?? '-'}</p>
-                          </div>
+                        {/* Grid of Matches in ascending order of time */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {section.matches.map(match => {
+                            const teamA = activeTournament.teams.find(t => t.id === match.teamAId);
+                            const teamB = activeTournament.teams.find(t => t.id === match.teamBId);
+                            return (
+                              <div key={match.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-3">
+                                <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-primary-blue bg-blue-50 px-2.5 py-1 rounded-md flex items-center gap-1">
+                                    <Clock className="w-3 h-3 text-primary-blue" />
+                                    {match.time || 'A definir'}
+                                  </span>
+                                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+                                    match.status === 'finished' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                                  }`}>
+                                    {match.status === 'finished' ? 'Finalizada' : 'Agendada'}
+                                  </span>
+                                </div>
 
-                          <span className="text-xs font-black text-gray-300 italic">X</span>
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex-1 text-center">
+                                    <p className="text-sm font-black text-slate-900 uppercase italic">{teamA?.name || 'Time A'}</p>
+                                    <p className="text-2xl font-black text-primary-blue mt-1">{match.scoreA ?? '-'}</p>
+                                  </div>
 
-                          <div className="flex-1 text-center">
-                            <p className="text-sm font-black text-slate-900 uppercase italic">{teamB?.name || 'Time B'}</p>
-                            <p className="text-2xl font-black text-primary-blue mt-1">{match.scoreB ?? '-'}</p>
-                          </div>
-                        </div>
+                                  <span className="text-xs font-black text-gray-300 italic">X</span>
 
-                        <div className="flex items-center justify-between border-t border-gray-100 pt-2">
-                          <span className="text-[10px] text-gray-400 font-bold">{match.date} às {match.time}</span>
-                          <button
-                            onClick={() => handleOpenMatchEditor(match)}
-                            className="bg-primary-blue text-white text-[10px] font-black uppercase tracking-wider px-3.5 py-1.5 rounded-xl hover:bg-blue-800 transition-all"
-                          >
-                            {match.status === 'finished' ? 'Editar Resultado' : 'Lançar Placar'}
-                          </button>
+                                  <div className="flex-1 text-center">
+                                    <p className="text-sm font-black text-slate-900 uppercase italic">{teamB?.name || 'Time B'}</p>
+                                    <p className="text-2xl font-black text-primary-blue mt-1">{match.scoreB ?? '-'}</p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center justify-between border-t border-gray-100 pt-2">
+                                  <span className="text-[10px] text-gray-400 font-bold flex items-center gap-1">
+                                    <Calendar className="w-3 h-3 text-gray-400" />
+                                    {match.date ? `${match.date} às ` : ''}{match.time || 'A definir'}
+                                  </span>
+                                  <button
+                                    onClick={() => handleOpenMatchEditor(match)}
+                                    className="bg-primary-blue text-white text-[10px] font-black uppercase tracking-wider px-3.5 py-1.5 rounded-xl hover:bg-blue-800 transition-all"
+                                  >
+                                    {match.status === 'finished' ? 'Editar Resultado' : 'Lançar Placar'}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
-                    );
-                  })
-                )}
-              </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           )}
 

@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../App';
+import { cleanUndefinedFields } from '../utils/firestoreUtils';
 
 interface PublicTournamentProps {
   adminData?: AdminData | null;
@@ -130,7 +131,7 @@ export default function PublicTournament({ adminData }: PublicTournamentProps) {
 
     const winnerTeamId = scoreA > scoreB ? editingMatch.teamAId : scoreB > scoreA ? editingMatch.teamBId : undefined;
 
-    const updatedMatch: TournamentMatch = {
+    const updatedMatch: TournamentMatch = cleanUndefinedFields({
       ...editingMatch,
       scoreA,
       scoreB,
@@ -139,14 +140,14 @@ export default function PublicTournament({ adminData }: PublicTournamentProps) {
       time: matchTime,
       mvpId: matchMvpId || undefined,
       winnerTeamId,
-      events: matchEvents
-    };
+      events: matchEvents || []
+    });
 
     const updatedMatches = activeTournament.matches.map(m => m.id === editingMatch.id ? updatedMatch : m);
 
     try {
       await updateDoc(doc(db, 'tournaments', activeTournament.id), {
-        matches: updatedMatches
+        matches: cleanUndefinedFields(updatedMatches)
       });
 
       setEditingMatch(null);
@@ -566,7 +567,16 @@ export default function PublicTournament({ adminData }: PublicTournamentProps) {
                     </p>
                   </div>
                 ) : (
-                  activeTournament.matches.filter(m => m.stage === 'playoff').map(match => {
+                  [...activeTournament.matches.filter(m => m.stage === 'playoff')]
+                    .sort((a, b) => {
+                      const dateA = a.date || '';
+                      const dateB = b.date || '';
+                      if (dateA !== dateB) return dateA.localeCompare(dateB);
+                      const timeA = (a.time || '99:99').trim().padStart(5, '0');
+                      const timeB = (b.time || '99:99').trim().padStart(5, '0');
+                      return timeA.localeCompare(timeB);
+                    })
+                    .map(match => {
                     const teamA = activeTournament.teams.find(t => t.id === match.teamAId);
                     const teamB = activeTournament.teams.find(t => t.id === match.teamBId);
                     const mvpPlayer = match.mvpId ? getPlayer(match.mvpId) : null;
@@ -659,87 +669,188 @@ export default function PublicTournament({ adminData }: PublicTournamentProps) {
                 </div>
               </div>
 
-              {/* Matches List */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {activeTournament.matches
-                  .filter(m => matchFilterStatus === 'all' || m.status === matchFilterStatus)
-                  .map(match => {
-                    const teamA = activeTournament.teams.find(t => t.id === match.teamAId);
-                    const teamB = activeTournament.teams.find(t => t.id === match.teamBId);
-                    const mvpPlayer = match.mvpId ? getPlayer(match.mvpId) : null;
+              {/* Grouped & Time-Sorted Matches List */}
+              {(() => {
+                const normalizeTimeStr = (t?: string) => {
+                  if (!t) return '99:99';
+                  const trimmed = t.trim();
+                  const parts = trimmed.split(':');
+                  if (parts.length === 2) {
+                    return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+                  }
+                  return trimmed;
+                };
 
-                    return (
-                      <div key={match.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all space-y-4">
-                        <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                          <span className="text-[10px] font-black uppercase tracking-widest text-primary-blue bg-blue-50 px-2.5 py-1 rounded-md">
-                            {match.groupName || match.roundName || 'Fase de Grupos'}
-                          </span>
-                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
-                            match.status === 'finished' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                          }`}>
-                            {match.status === 'finished' ? 'Finalizada' : match.status === 'live' ? 'Em Andamento' : 'Agendada'}
+                const filteredMatches = activeTournament.matches.filter(
+                  m => matchFilterStatus === 'all' || m.status === matchFilterStatus
+                );
+
+                if (filteredMatches.length === 0) {
+                  return (
+                    <div className="bg-white p-12 text-center rounded-3xl border border-gray-100 shadow-sm">
+                      <p className="text-gray-400 text-xs font-black uppercase italic">
+                        Nenhuma partida encontrada para os filtros selecionados.
+                      </p>
+                    </div>
+                  );
+                }
+
+                // Group matches
+                const groupMap = new Map<string, TournamentMatch[]>();
+
+                filteredMatches.forEach(match => {
+                  let groupTitle = 'Fase de Grupos';
+
+                  if (match.groupName) {
+                    groupTitle = match.groupName;
+                  } else if (match.groupId) {
+                    const g = activeTournament.groups?.find(x => x.id === match.groupId);
+                    groupTitle = g ? g.name : `Grupo ${match.groupId}`;
+                  } else if (match.stage === 'playoff') {
+                    groupTitle = match.roundName || 'Mata-Mata / Playoffs';
+                  } else {
+                    const teamA = activeTournament.teams?.find(t => t.id === match.teamAId);
+                    const g = teamA?.groupId ? activeTournament.groups?.find(x => x.id === teamA.groupId) : null;
+                    if (g) {
+                      groupTitle = g.name;
+                    }
+                  }
+
+                  if (!groupMap.has(groupTitle)) {
+                    groupMap.set(groupTitle, []);
+                  }
+                  groupMap.get(groupTitle)!.push(match);
+                });
+
+                // Sort matches in each group chronologically (ascending date & time)
+                groupMap.forEach((mList) => {
+                  mList.sort((a, b) => {
+                    const dateA = a.date || '';
+                    const dateB = b.date || '';
+                    if (dateA !== dateB) return dateA.localeCompare(dateB);
+                    return normalizeTimeStr(a.time).localeCompare(normalizeTimeStr(b.time));
+                  });
+                });
+
+                // Order sections by defined groups order, then remaining
+                const sections: { title: string; matches: TournamentMatch[] }[] = [];
+
+                activeTournament.groups?.forEach(g => {
+                  if (groupMap.has(g.name)) {
+                    sections.push({ title: g.name, matches: groupMap.get(g.name)! });
+                    groupMap.delete(g.name);
+                  }
+                });
+
+                groupMap.forEach((mList, title) => {
+                  sections.push({ title, matches: mList });
+                });
+
+                return (
+                  <div className="space-y-8">
+                    {sections.map(section => (
+                      <div key={section.title} className="space-y-4">
+                        {/* Group Title Banner */}
+                        <div className="flex items-center justify-between bg-slate-900 text-white p-3.5 px-6 rounded-2xl shadow-sm border border-slate-800">
+                          <div className="flex items-center gap-2.5">
+                            <Shield className="w-4 h-4 text-amber-400 fill-amber-400" />
+                            <h4 className="text-sm font-black uppercase italic tracking-tight text-amber-400">
+                              {section.title}
+                            </h4>
+                          </div>
+                          <span className="text-[10px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 px-3 py-1 rounded-full border border-amber-400/30">
+                            {section.matches.length} {section.matches.length === 1 ? 'Partida' : 'Partidas'}
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex-1 text-center">
-                            <p className="text-sm font-black text-slate-900 uppercase italic">{teamA?.name || 'Time A'}</p>
-                            <p className="text-2xl font-black text-primary-blue mt-1">{match.scoreA ?? '-'}</p>
-                          </div>
+                        {/* Matches List sorted by ascending time */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {section.matches.map(match => {
+                            const teamA = activeTournament.teams.find(t => t.id === match.teamAId);
+                            const teamB = activeTournament.teams.find(t => t.id === match.teamBId);
+                            const mvpPlayer = match.mvpId ? getPlayer(match.mvpId) : null;
 
-                          <span className="text-xs font-black text-gray-300 italic">X</span>
+                            return (
+                              <div key={match.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all space-y-4">
+                                <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-primary-blue bg-blue-50 px-2.5 py-1 rounded-md flex items-center gap-1">
+                                    <Clock className="w-3 h-3 text-primary-blue" />
+                                    {match.time || 'A definir'}
+                                  </span>
+                                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+                                    match.status === 'finished' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                                  }`}>
+                                    {match.status === 'finished' ? 'Finalizada' : match.status === 'live' ? 'Em Andamento' : 'Agendada'}
+                                  </span>
+                                </div>
 
-                          <div className="flex-1 text-center">
-                            <p className="text-sm font-black text-slate-900 uppercase italic">{teamB?.name || 'Time B'}</p>
-                            <p className="text-2xl font-black text-primary-blue mt-1">{match.scoreB ?? '-'}</p>
-                          </div>
-                        </div>
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex-1 text-center">
+                                    <p className="text-sm font-black text-slate-900 uppercase italic">{teamA?.name || 'Time A'}</p>
+                                    <p className="text-2xl font-black text-primary-blue mt-1">{match.scoreA ?? '-'}</p>
+                                  </div>
 
-                        {/* Match MVP & Scorers if finished */}
-                        {match.status === 'finished' && (
-                          <div className="pt-2 border-t border-gray-100 space-y-2 text-xs">
-                            {mvpPlayer && (
-                              <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl font-bold">
-                                <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                                <span>Craque do Jogo: <strong className="text-slate-900">{mvpPlayer.nickname || mvpPlayer.name}</strong></span>
-                              </div>
-                            )}
+                                  <span className="text-xs font-black text-gray-300 italic">X</span>
 
-                            {/* Goals */}
-                            {match.events && match.events.filter(e => e.type === 'goal').length > 0 && (
-                              <div className="bg-gray-50 p-2.5 rounded-xl space-y-1">
-                                <span className="text-[9px] font-black uppercase text-gray-400 block tracking-wider">Gols da Partida:</span>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {match.events.filter(e => e.type === 'goal').map((evt, idx) => {
-                                    const p = getPlayer(evt.playerId);
-                                    return (
-                                      <span key={idx} className="bg-white border border-gray-200 px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-800">
-                                        ⚽ {p ? (p.nickname || p.name) : 'Atleta'}
-                                      </span>
-                                    );
-                                  })}
+                                  <div className="flex-1 text-center">
+                                    <p className="text-sm font-black text-slate-900 uppercase italic">{teamB?.name || 'Time B'}</p>
+                                    <p className="text-2xl font-black text-primary-blue mt-1">{match.scoreB ?? '-'}</p>
+                                  </div>
+                                </div>
+
+                                {/* Match MVP & Scorers if finished */}
+                                {match.status === 'finished' && (
+                                  <div className="pt-2 border-t border-gray-100 space-y-2 text-xs">
+                                    {mvpPlayer && (
+                                      <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl font-bold">
+                                        <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                                        <span>Craque do Jogo: <strong className="text-slate-900">{mvpPlayer.nickname || mvpPlayer.name}</strong></span>
+                                      </div>
+                                    )}
+
+                                    {/* Goals */}
+                                    {match.events && match.events.filter(e => e.type === 'goal').length > 0 && (
+                                      <div className="bg-gray-50 p-2.5 rounded-xl space-y-1">
+                                        <span className="text-[9px] font-black uppercase text-gray-400 block tracking-wider">Gols da Partida:</span>
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {match.events.filter(e => e.type === 'goal').map((evt, idx) => {
+                                            const p = getPlayer(evt.playerId);
+                                            return (
+                                              <span key={idx} className="bg-white border border-gray-200 px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-800">
+                                                ⚽ {p ? (p.nickname || p.name) : 'Atleta'}
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                <div className="flex items-center justify-between text-[10px] text-gray-400 font-bold pt-1 border-t border-gray-50">
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="w-3 h-3 text-gray-400" />
+                                    {match.date ? `${match.date} às ` : ''}{match.time || 'A definir'}
+                                  </span>
+
+                                  {canEditMatch && (
+                                    <button
+                                      onClick={() => handleOpenEditMatchModal(match)}
+                                      className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-xl transition-all flex items-center gap-1 shadow-sm"
+                                    >
+                                      <Edit2 className="w-3 h-3" /> Editar Partida
+                                    </button>
+                                  )}
                                 </div>
                               </div>
-                            )}
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-between text-[10px] text-gray-400 font-bold pt-1 border-t border-gray-50">
-                          <span>{match.date} às {match.time}</span>
-
-                          {canEditMatch && (
-                            <button
-                              onClick={() => handleOpenEditMatchModal(match)}
-                              className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-xl transition-all flex items-center gap-1 shadow-sm"
-                            >
-                              <Edit2 className="w-3 h-3" /> Editar Partida
-                            </button>
-                          )}
+                            );
+                          })}
                         </div>
                       </div>
-                    );
-                  })}
-              </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           )}
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { collection, addDoc, onSnapshot, doc, updateDoc, writeBatch, deleteDoc, query, orderBy, getDoc, getDocs, where, limit } from 'firebase/firestore';
 import { Player, Match, Location, Team, ScoringRules, AdminData } from '../types';
 import { format } from 'date-fns';
@@ -322,8 +322,18 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
   const handleDeleteMatch = async () => {
     if (!adminData) return;
     if (!matchToDelete) return;
+
+    const wasFinished = matchToDelete.status === 'finished';
+    const currentUserEmail = (auth.currentUser?.email || adminData?.email || '').toLowerCase().trim();
+    const isMasterAllan = currentUserEmail === 'allanjonesms@gmail.com';
+
+    if (wasFinished && !isMasterAllan) {
+      alert('Apenas o admin master allanjonesms@gmail.com tem permissão para excluir partidas finalizadas.');
+      setMatchToDelete(null);
+      return;
+    }
+
     try {
-      const wasFinished = matchToDelete.status === 'finished';
       await deleteDoc(doc(db, 'matches', matchToDelete.id));
       if (wasFinished) {
         await recalculateAllStats();
@@ -1360,9 +1370,19 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
                       <Pencil className="w-4 h-4 md:w-5 md:h-5" />
                     </button>
                     <button 
-                      onClick={() => setMatchToDelete(match)}
+                      onClick={() => {
+                        const isFinished = match.status === 'finished';
+                        const currentUserEmail = (auth.currentUser?.email || adminData?.email || '').toLowerCase().trim();
+                        const isMasterAllan = currentUserEmail === 'allanjonesms@gmail.com';
+
+                        if (isFinished && !isMasterAllan) {
+                          alert('Apenas o admin master allanjonesms@gmail.com tem permissão para excluir partidas finalizadas.');
+                          return;
+                        }
+                        setMatchToDelete(match);
+                      }}
                       className="p-3 md:p-4 bg-red-50/50 hover:bg-red-100 text-red-500 rounded-xl md:rounded-2xl border border-red-100/50 shadow-sm transition-all"
-                      title="Excluir Partida"
+                      title={match.status === 'finished' ? "Excluir Partida Finalizada (Exclusivo Master)" : "Excluir Partida"}
                     >
                       <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
                     </button>

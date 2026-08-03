@@ -4,13 +4,14 @@ import { collection, query, where, getDocs, limit, orderBy, getCountFromServer }
 import { Player, Match, AdminData, Admin } from '../types';
 import { getPositionAbbr, getPositionColor } from '../utils/playerUtils';
 import { calculateGrade } from '../utils/gradeUtils';
-import { Trophy, Users, Calendar, TrendingUp, ShieldCheck, User, ChevronRight, Plus, Settings, Loader2 } from 'lucide-react';
+import { Trophy, Users, Calendar, TrendingUp, ShieldCheck, User, ChevronRight, Plus, Settings, Loader2, Link2, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import { SoccerBall } from '../components/Icons';
 import { handleFirestoreError, OperationType } from '../App';
 import Diagnostic from './Diagnostic';
+import { OrphanedPlayerInfo } from '../utils/maintenanceUtils';
 
 interface AdminPanelProps {
   adminData?: AdminData | null;
@@ -31,6 +32,82 @@ export default function AdminPanel({ adminData }: AdminPanelProps) {
   const [showRecalcConfirm, setShowRecalcConfirm] = useState(false);
   const [recalcResult, setRecalcResult] = useState<{ matches: number; players: number } | null>(null);
   const [isRecalculating, setIsRecalculating] = useState(false);
+
+  // Reassociate Orphaned Matches state
+  const [showReassociateModal, setShowReassociateModal] = useState(false);
+  const [orphanedList, setOrphanedList] = useState<OrphanedPlayerInfo[]>([]);
+  const [selectedOrphanId, setSelectedOrphanId] = useState<string>('');
+  const [useCustomOldId, setUseCustomOldId] = useState(false);
+  const [customOldIdInput, setCustomOldIdInput] = useState<string>('');
+  const [allPlayersList, setAllPlayersList] = useState<Player[]>([]);
+  const [selectedTargetPlayerId, setSelectedTargetPlayerId] = useState<string>('');
+  const [isReassociating, setIsReassociating] = useState(false);
+  const [reassociateSuccess, setReassociateSuccess] = useState<string | null>(null);
+  const [reassociateError, setReassociateError] = useState<string | null>(null);
+
+  const handleOpenReassociateModal = async () => {
+    setIsReassociating(true);
+    setShowReassociateModal(true);
+    setReassociateSuccess(null);
+    setReassociateError(null);
+    try {
+      const { getOrphanedPlayerIds } = await import('../utils/maintenanceUtils');
+      const orphans = await getOrphanedPlayerIds();
+      setOrphanedList(orphans);
+      if (orphans.length > 0) {
+        setSelectedOrphanId(orphans[0].id);
+      }
+      const pSnap = await getDocs(collection(db, 'players'));
+      const pList = pSnap.docs.map(d => ({ id: d.id, ...d.data() } as Player));
+      setAllPlayersList(pList.sort((a, b) => a.name.localeCompare(b.name)));
+      if (pList.length > 0) {
+        setSelectedTargetPlayerId(pList[0].id);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar dados para reassociação:", err);
+      setReassociateError("Erro ao carregar lista de atletas órfãos.");
+    } finally {
+      setIsReassociating(false);
+    }
+  };
+
+  const handleConfirmReassociate = async () => {
+    const effectiveOldId = useCustomOldId ? customOldIdInput.trim() : selectedOrphanId;
+    if (!effectiveOldId || !selectedTargetPlayerId) {
+      setReassociateError("Por favor, selecione ou digite o ID antigo e o novo atleta cadastrado.");
+      return;
+    }
+    setIsReassociating(true);
+    setReassociateSuccess(null);
+    setReassociateError(null);
+    try {
+      const { reassociatePlayerIdInMatches } = await import('../utils/maintenanceUtils');
+      const res = await reassociatePlayerIdInMatches(effectiveOldId, selectedTargetPlayerId);
+      const targetP = allPlayersList.find(p => p.id === selectedTargetPlayerId);
+      const targetName = targetP ? (targetP.nickname || targetP.name) : 'Atleta';
+      
+      if (res.updatedMatches === 0 && (res.updatedTournaments || 0) === 0) {
+        setReassociateError(`Nenhuma partida encontrada contendo o ID antigo "${effectiveOldId}". Verifique se o ID informado está correto.`);
+      } else {
+        setReassociateSuccess(`Histórico reassociado com sucesso para ${targetName}! ${res.updatedMatches} partida(s) atualizada(s) e estatísticas recalculadas.`);
+      }
+
+      // Refresh orphans list
+      const { getOrphanedPlayerIds } = await import('../utils/maintenanceUtils');
+      const orphans = await getOrphanedPlayerIds();
+      setOrphanedList(orphans);
+      if (orphans.length > 0) {
+        setSelectedOrphanId(orphans[0].id);
+      } else {
+        setSelectedOrphanId('');
+      }
+    } catch (err) {
+      console.error("Erro ao reassociar:", err);
+      setReassociateError("Erro ao reassociar: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsReassociating(false);
+    }
+  };
 
   useEffect(() => {
     const fetchAdminStats = async () => {
@@ -281,12 +358,21 @@ export default function AdminPanel({ adminData }: AdminPanelProps) {
               
               <div className="flex flex-col sm:flex-row gap-4 justify-center relative z-10">
                 {(!isRecalculating && !recalcResult && !showRecalcConfirm) && (
-                  <button 
-                    onClick={() => setShowRecalcConfirm(true)}
-                    className="flex items-center justify-center gap-2 bg-red-50 text-red-600 border border-red-100 py-3 px-8 rounded-2xl font-black uppercase tracking-widest hover:bg-red-100 transition-all shadow-sm"
-                  >
-                    Recalcular Tudo
-                  </button>
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    <button 
+                      onClick={() => setShowRecalcConfirm(true)}
+                      className="flex items-center justify-center gap-2 bg-red-50 text-red-600 border border-red-100 py-3 px-8 rounded-2xl font-black uppercase tracking-widest hover:bg-red-100 transition-all shadow-sm text-xs"
+                    >
+                      Recalcular Tudo
+                    </button>
+                    <button 
+                      onClick={handleOpenReassociateModal}
+                      className="flex items-center justify-center gap-2 bg-amber-50 text-amber-700 border border-amber-200 py-3 px-6 rounded-2xl font-black uppercase tracking-widest hover:bg-amber-100 transition-all shadow-sm text-xs"
+                    >
+                      <Link2 className="w-4 h-4 text-amber-600" />
+                      Reassociar Atleta Excluído
+                    </button>
+                  </div>
                 )}
 
                 {showRecalcConfirm && (
@@ -364,6 +450,136 @@ export default function AdminPanel({ adminData }: AdminPanelProps) {
         </>
       ) : (
         <Diagnostic />
+      )}
+
+      {/* Reassociate Modal */}
+      {showReassociateModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-gray-100 space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Link2 className="w-5 h-5 text-primary-blue" />
+                <h3 className="text-base font-black uppercase italic text-slate-900 tracking-tight">
+                  Reassociar Partidas de Atleta Excluído
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowReassociateModal(false)}
+                className="text-gray-400 hover:text-slate-900 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-500 font-medium leading-relaxed">
+              Quando um atleta (como <strong>LUCAS da ACS</strong>) é excluído acidentalmente e você cadastra um novo perfil para ele, selecione abaixo o <strong>ID antigo órfão</strong> e o <strong>novo perfil cadastrado</strong> para transferir todo o histórico de partidas, gols e estatísticas, recalculando os pontos automaticamente.
+            </p>
+
+            {reassociateSuccess && (
+              <div className="p-3.5 bg-green-50 border border-green-200 text-green-800 rounded-2xl text-xs font-bold leading-relaxed">
+                {reassociateSuccess}
+              </div>
+            )}
+
+            {reassociateError && (
+              <div className="p-3.5 bg-red-50 border border-red-200 text-red-800 rounded-2xl text-xs font-bold leading-relaxed">
+                {reassociateError}
+              </div>
+            )}
+
+            {isReassociating ? (
+              <div className="flex flex-col items-center justify-center py-8 space-y-3">
+                <Loader2 className="w-8 h-8 text-primary-blue animate-spin" />
+                <p className="text-xs font-black uppercase text-gray-400">Varrendo partidas e vinculando dados...</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400">
+                      {useCustomOldId ? "Digitar ID Antigo Manualmente:" : "ID Antigo Órfão Encontrado no Histórico:"}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setUseCustomOldId(!useCustomOldId)}
+                      className="text-[10px] font-black uppercase text-primary-blue hover:underline"
+                    >
+                      {useCustomOldId ? "Ver Lista Órfã" : "Digitar ID Manualmente"}
+                    </button>
+                  </div>
+
+                  {useCustomOldId ? (
+                    <input
+                      type="text"
+                      placeholder="Cole ou digite o ID antigo do jogador (ex: player_12345)"
+                      value={customOldIdInput}
+                      onChange={e => setCustomOldIdInput(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 text-slate-900 rounded-2xl p-3 text-xs font-bold focus:outline-none focus:border-primary-blue"
+                    />
+                  ) : orphanedList.length === 0 ? (
+                    <div className="bg-gray-50 border border-gray-200 p-3 rounded-2xl space-y-2">
+                      <p className="text-xs font-bold text-gray-500 italic">
+                        Nenhum ID órfão detectado automaticamente.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setUseCustomOldId(true)}
+                        className="text-xs font-bold text-primary-blue underline"
+                      >
+                        Clique aqui para digitar o ID / identificador antigo manualmente
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedOrphanId}
+                      onChange={e => setSelectedOrphanId(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 text-slate-900 rounded-2xl p-3 text-xs font-bold focus:outline-none focus:border-primary-blue"
+                    >
+                      {orphanedList.map(o => (
+                        <option key={o.id} value={o.id}>
+                          ID: {o.id} ({o.matchCount} partidas, {o.eventCount} gols/eventos) {o.sampleMatchDates.length > 0 ? `[${o.sampleMatchDates.join(', ')}]` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">
+                    Novo Perfil Cadastrado (Para onde transferir o histórico):
+                  </label>
+                  <select
+                    value={selectedTargetPlayerId}
+                    onChange={e => setSelectedTargetPlayerId(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 text-slate-900 rounded-2xl p-3 text-xs font-bold focus:outline-none focus:border-primary-blue"
+                  >
+                    {allPlayersList.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {p.nickname ? `("${p.nickname}")` : ''} - {p.position}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-3">
+                  <button
+                    onClick={() => setShowReassociateModal(false)}
+                    className="px-4 py-2 text-xs font-black uppercase text-gray-400 hover:text-slate-900 font-bold"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    onClick={handleConfirmReassociate}
+                    disabled={!(useCustomOldId ? customOldIdInput.trim() : selectedOrphanId) || !selectedTargetPlayerId}
+                    className="bg-primary-blue text-white font-black text-xs uppercase tracking-wider px-6 py-2.5 rounded-2xl hover:bg-blue-800 disabled:opacity-50 transition-all shadow-md shadow-blue-200"
+                  >
+                    Vincular Partidas & Recalcular
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

@@ -370,3 +370,234 @@ export const clearAllPlayerPhotos = async () => {
   console.log(`Global photo deletion complete. ${updatedCount} players updated.`);
   return { updatedCount };
 };
+
+import { cleanUndefinedFields } from './firestoreUtils';
+
+export interface OrphanedPlayerInfo {
+  id: string;
+  matchCount: number;
+  eventCount: number;
+  sampleMatchDates: string[];
+}
+
+export const getOrphanedPlayerIds = async (): Promise<OrphanedPlayerInfo[]> => {
+  const playersSnap = await getDocs(collection(db, 'players'));
+  const validIds = new Set(playersSnap.docs.map(d => d.id));
+
+  const matchesSnap = await getDocs(collection(db, 'matches'));
+  const orphanedMap = new Map<string, { matchCount: number; eventCount: number; dates: Set<string> }>();
+
+  matchesSnap.docs.forEach(docSnap => {
+    const data = docSnap.data() as Match;
+    const dateStr = data.date || '';
+
+    const allInvolved = [
+      ...(data.teamA || []),
+      ...(data.teamB || []),
+      ...(data.substitutesA || []),
+      ...(data.substitutesB || []),
+      ...(data.confirmedPlayers || [])
+    ];
+    if (data.goalkeeperAId) allInvolved.push(data.goalkeeperAId);
+    if (data.goalkeeperBId) allInvolved.push(data.goalkeeperBId);
+    if (data.mvpId) allInvolved.push(data.mvpId);
+
+    const matchOrphans = new Set(allInvolved.filter(id => id && !validIds.has(id)));
+    matchOrphans.forEach(id => {
+      if (!orphanedMap.has(id)) {
+        orphanedMap.set(id, { matchCount: 0, eventCount: 0, dates: new Set() });
+      }
+      const entry = orphanedMap.get(id)!;
+      entry.matchCount++;
+      if (dateStr) entry.dates.add(dateStr);
+    });
+
+    (data.events || []).forEach(evt => {
+      if (evt.playerId && !validIds.has(evt.playerId)) {
+        if (!orphanedMap.has(evt.playerId)) {
+          orphanedMap.set(evt.playerId, { matchCount: 0, eventCount: 0, dates: new Set() });
+        }
+        const entry = orphanedMap.get(evt.playerId)!;
+        entry.eventCount++;
+        if (dateStr) entry.dates.add(dateStr);
+      }
+    });
+  });
+
+  // Also scan tournaments
+  const tournamentsSnap = await getDocs(collection(db, 'tournaments'));
+  tournamentsSnap.docs.forEach(docSnap => {
+    const tour = docSnap.data();
+    (tour.teams || []).forEach((t: any) => {
+      (t.playerIds || []).forEach((pid: string) => {
+        if (pid && !validIds.has(pid)) {
+          if (!orphanedMap.has(pid)) {
+            orphanedMap.set(pid, { matchCount: 0, eventCount: 0, dates: new Set() });
+          }
+        }
+      });
+    });
+    (tour.matches || []).forEach((m: any) => {
+      if (m.mvpId && !validIds.has(m.mvpId)) {
+        if (!orphanedMap.has(m.mvpId)) {
+          orphanedMap.set(m.mvpId, { matchCount: 0, eventCount: 0, dates: new Set() });
+        }
+      }
+      (m.events || []).forEach((evt: any) => {
+        if (evt.playerId && !validIds.has(evt.playerId)) {
+          if (!orphanedMap.has(evt.playerId)) {
+            orphanedMap.set(evt.playerId, { matchCount: 0, eventCount: 0, dates: new Set() });
+          }
+          orphanedMap.get(evt.playerId)!.eventCount++;
+        }
+      });
+    });
+  });
+
+  const result: OrphanedPlayerInfo[] = [];
+  orphanedMap.forEach((val, id) => {
+    result.push({
+      id,
+      matchCount: val.matchCount,
+      eventCount: val.eventCount,
+      sampleMatchDates: Array.from(val.dates).slice(0, 3)
+    });
+  });
+
+  return result.sort((a, b) => (b.matchCount + b.eventCount) - (a.matchCount + a.eventCount));
+};
+
+export const reassociatePlayerIdInMatches = async (oldPlayerId: string, newPlayerId: string) => {
+  const targetOldId = oldPlayerId ? oldPlayerId.trim() : '';
+  const targetNewId = newPlayerId ? newPlayerId.trim() : '';
+  if (!targetOldId || !targetNewId || targetOldId === targetNewId) return { updatedMatches: 0, updatedTournaments: 0 };
+
+  const matchesSnap = await getDocs(collection(db, 'matches'));
+  let updatedMatches = 0;
+
+  let batch = writeBatch(db);
+  let batchOpCount = 0;
+
+  const commitIfNeeded = async (force = false) => {
+    if (batchOpCount > 0 && (force || batchOpCount >= 400)) {
+      await batch.commit();
+      batch = writeBatch(db);
+      batchOpCount = 0;
+    }
+  };
+
+  for (const docSnap of matchesSnap.docs) {
+    const match = docSnap.data() as Match;
+    let modified = false;
+
+    const replaceIdInArr = (arr?: string[]) => {
+      if (!arr || !Array.isArray(arr)) return undefined;
+      if (arr.some(id => id === targetOldId)) {
+        modified = true;
+        return arr.map(id => id === targetOldId ? targetNewId : id);
+      }
+      return arr;
+    };
+
+    const newTeamA = replaceIdInArr(match.teamA);
+    const newTeamB = replaceIdInArr(match.teamB);
+    const newSubA = replaceIdInArr(match.substitutesA);
+    const newSubB = replaceIdInArr(match.substitutesB);
+    const newConf = replaceIdInArr(match.confirmedPlayers);
+
+    let newGkA = match.goalkeeperAId;
+    if (match.goalkeeperAId === targetOldId) {
+      newGkA = targetNewId;
+      modified = true;
+    }
+
+    let newGkB = match.goalkeeperBId;
+    if (match.goalkeeperBId === targetOldId) {
+      newGkB = targetNewId;
+      modified = true;
+    }
+
+    let newMvpId = match.mvpId;
+    if (match.mvpId === targetOldId) {
+      newMvpId = targetNewId;
+      modified = true;
+    }
+
+    let newEvents = match.events;
+    if (match.events && match.events.some(e => e.playerId === targetOldId)) {
+      modified = true;
+      newEvents = match.events.map(e => e.playerId === targetOldId ? { ...e, playerId: targetNewId } : e);
+    }
+
+    if (modified) {
+      updatedMatches++;
+      const payload: any = {};
+      if (newTeamA !== undefined) payload.teamA = newTeamA;
+      if (newTeamB !== undefined) payload.teamB = newTeamB;
+      if (newSubA !== undefined) payload.substitutesA = newSubA;
+      if (newSubB !== undefined) payload.substitutesB = newSubB;
+      if (newConf !== undefined) payload.confirmedPlayers = newConf;
+      if (newGkA !== undefined) payload.goalkeeperAId = newGkA;
+      if (newGkB !== undefined) payload.goalkeeperBId = newGkB;
+      if (newMvpId !== undefined) payload.mvpId = newMvpId;
+      if (newEvents !== undefined) payload.events = newEvents;
+
+      batch.update(doc(db, 'matches', docSnap.id), cleanUndefinedFields(payload));
+      batchOpCount++;
+      await commitIfNeeded();
+    }
+  }
+
+  // Also update Tournaments if any
+  let updatedTournaments = 0;
+  const tournamentsSnap = await getDocs(collection(db, 'tournaments'));
+  for (const docSnap of tournamentsSnap.docs) {
+    const tour = docSnap.data();
+    let tourModified = false;
+
+    const updatedTeams = (tour.teams || []).map((t: any) => {
+      if (t.playerIds && t.playerIds.includes(targetOldId)) {
+        tourModified = true;
+        return {
+          ...t,
+          playerIds: t.playerIds.map((id: string) => id === targetOldId ? targetNewId : id)
+        };
+      }
+      return t;
+    });
+
+    const updatedTournamentMatches = (tour.matches || []).map((m: any) => {
+      let mMod = false;
+      let mvpId = m.mvpId;
+      if (mvpId === targetOldId) {
+        mvpId = targetNewId;
+        mMod = true;
+      }
+      let events = m.events;
+      if (events && events.some((e: any) => e.playerId === targetOldId)) {
+        events = events.map((e: any) => e.playerId === targetOldId ? { ...e, playerId: targetNewId } : e);
+        mMod = true;
+      }
+      if (mMod) tourModified = true;
+      return mMod ? { ...m, mvpId, events } : m;
+    });
+
+    if (tourModified) {
+      updatedTournaments++;
+      batch.update(doc(db, 'tournaments', docSnap.id), cleanUndefinedFields({
+        teams: updatedTeams,
+        matches: updatedTournamentMatches
+      }));
+      batchOpCount++;
+      await commitIfNeeded();
+    }
+  }
+
+  await commitIfNeeded(true);
+
+  // Automatically recalculate stats for all players
+  await recalculateAllPlayerStats();
+
+  return { updatedMatches, updatedTournaments };
+};
+
