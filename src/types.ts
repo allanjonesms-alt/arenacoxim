@@ -154,6 +154,7 @@ export interface OddsEngineConfig {
   };
   societyGoalFrequencyMultiplier: number;
   societyAssistFrequencyMultiplier: number;
+  oneGoalMultiplier?: number;
   margins: {
     almostCertain: number;
     probable: number;

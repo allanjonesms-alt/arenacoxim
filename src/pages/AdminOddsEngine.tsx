@@ -19,6 +19,7 @@ const DEFAULT_CONFIG: OddsEngineConfig = {
   },
   societyGoalFrequencyMultiplier: 2.00,
   societyAssistFrequencyMultiplier: 1.80,
+  oneGoalMultiplier: 0.88,
   margins: {
     almostCertain: 1.30,
     probable: 1.50,
@@ -274,6 +275,18 @@ export default function AdminOddsEngine() {
                 onChange={e => handleFlatChange('societyAssistFrequencyMultiplier', e.target.value)}
                 className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-primary-blue outline-none transition-all"
               />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-black uppercase text-gray-500 tracking-wide mb-1">Multiplicador 1 Gol Marcado (+0.5 Gols)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={config.oneGoalMultiplier ?? 0.88}
+                onChange={e => handleFlatChange('oneGoalMultiplier', e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-primary-blue outline-none transition-all"
+              />
+              <p className="text-[10px] text-gray-400 mt-1">Aplica uma redução leve no multiplicador/odd de 1 gol marcado para marcadores.</p>
             </div>
             
             <div className="pt-4 border-t border-gray-100">

@@ -634,14 +634,14 @@ export default function SimuladorConfrontos({ adminData }: Props) {
         return oddsConfig?.margins.veryImprobable ?? 4.00;
     };
     
-    const getOdd = (p: number) => {
+    const getOdd = (p: number, factor = 1.0) => {
         const margin = getDynamicMargin(p);
         const rawOdd = 1 / (p * margin);
         
         // Ponderação para calibrar as odds de gols/assistências individuais:
         // Eleva odds de alta probabilidade (para não ficarem extremamente baixas, ex: 1.10 -> 1.33)
         // Reduz odds de baixa probabilidade (para não ficarem extremamente distantes, ex: 12.00 -> 7.33)
-        const weightedOdd = Math.pow(rawOdd, 0.70) * 1.25;
+        const weightedOdd = Math.pow(rawOdd, 0.70) * 1.25 * factor;
         
         // Limites estritos para futebol amador
         const maxOdd = oddsConfig?.maxOdd ?? 12.00;
@@ -650,8 +650,10 @@ export default function SimuladorConfrontos({ adminData }: Props) {
         return weightedOdd.toFixed(2);
     };
     
+    const oneGoalFactor = oddsConfig?.oneGoalMultiplier ?? 0.88;
+
     return {
-        g1: getOdd(probG1),
+        g1: getOdd(probG1, oneGoalFactor),
         g2: getOdd(probG2),
         g3: getOdd(probG3),
         a1: getOdd(probA1),
