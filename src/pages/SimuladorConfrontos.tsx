@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, getDocs, doc, getDoc, addDoc, updateDoc, setDoc, deleteDoc, serverTimestamp, query, orderBy, limit, where, runTransaction } from 'firebase/firestore';
 import { Player, Location, Match, Card, OddsEngineConfig, AdminData, OddsSimulationHistory, ScoringRules, BoostedBet, BoostedBetSubItem } from '../types';
-import { MapPin, Swords, ArrowRightLeft, Target, Trophy, Percent, Shield, Zap, CalendarDays, Settings2, Activity, ArrowUp, ArrowDown, Save, History, Wallet, ArrowUpRight, Search, TrendingUp, Trash2, CheckCircle2, XCircle, FileText, X, Plus } from 'lucide-react';
+import { MapPin, Swords, ArrowRightLeft, Target, Trophy, Percent, Shield, Zap, CalendarDays, Settings2, Activity, ArrowUp, ArrowDown, Save, History, Wallet, ArrowUpRight, Search, TrendingUp, Trash2, CheckCircle2, XCircle, FileText, X, Plus, Clock } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getPositionAbbr, getPositionColor, getPlayerFinalOverall } from '../utils/playerUtils';
@@ -1739,8 +1739,9 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                   className="snap-start flex-shrink-0 flex flex-col items-start gap-2 bg-slate-50 border border-slate-200 p-4 rounded-2xl hover:border-primary-blue hover:shadow-md transition-all text-left min-w-[200px]"
                 >
                   <div className="flex items-center justify-between w-full">
-                    <span className="text-xs font-black uppercase text-gray-400 bg-gray-200 px-2 py-0.5 rounded-md">
-                      {dateStr}
+                    <span className="text-xs font-black uppercase text-slate-950 bg-amber-400 px-2.5 py-0.5 rounded-md flex items-center gap-1 shadow-xs">
+                      <Clock className="w-3 h-3 text-slate-950" />
+                      {dateStr} {match.time ? `às ${match.time}` : ''}
                     </span>
                     <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
                       match.status === 'finished' ? 'bg-emerald-100 text-emerald-700' :

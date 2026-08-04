@@ -1171,8 +1171,8 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
             </h2>
 
             <div className="flex items-center gap-3 text-xs font-bold text-white/90">
-              <span className="flex items-center gap-1.5 bg-black/30 px-3 py-1.5 rounded-xl border border-white/10">
-                <CalendarDays className="w-4 h-4 text-amber-300" />
+              <span className="flex items-center gap-1.5 bg-amber-400 text-slate-950 px-3 py-1.5 rounded-xl font-black shadow-xs">
+                <CalendarDays className="w-4 h-4 text-slate-950" />
                 {selectedMatch.date} às {selectedMatch.time}
               </span>
             </div>
@@ -1629,9 +1629,9 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                       </div>
 
                       {/* Time & Markets Badge */}
-                      <div className="flex items-center gap-2 pt-1 text-xs font-bold text-white/80">
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5 text-white/70" />
+                      <div className="flex items-center gap-2 pt-1 text-xs font-bold">
+                        <span className="flex items-center gap-1 bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-md shadow-xs text-xs">
+                          <Clock className="w-3.5 h-3.5 text-slate-950" />
                           {match.time}
                         </span>
                         {marketCount > 0 && (

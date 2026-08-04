@@ -5,7 +5,7 @@ import { Player, Match, Location, Team, AdminData, ScoringRules, Card, MonthlyAw
 import { getPositionAbbr, getPositionColor, getPlayerFinalOverall } from '../utils/playerUtils';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Trophy, Star, MapPin, Calendar as CalendarIcon, ChevronRight, TrendingUp, User, X, Goal, Plus, Trash2, CheckCircle2 } from 'lucide-react';
+import { Trophy, Star, MapPin, Calendar as CalendarIcon, ChevronRight, TrendingUp, User, X, Goal, Plus, Trash2, CheckCircle2, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SoccerJersey } from '../components/SoccerJersey';
 import { SoccerBall, SoccerCleat } from '../components/Icons';
@@ -804,6 +804,12 @@ export default function PublicDashboard({
                             <span className="flex items-center gap-1 flex-shrink-0">
                               <CalendarIcon className={isCompact ? `w-2 h-2 ${match.status === 'scheduled' ? 'text-white' : 'text-primary-blue'}` : `w-2.5 h-2.5 md:w-3 md:h-3 ${match.status === 'scheduled' ? 'text-white' : 'text-primary-blue'}`} /> {format(new Date(match.date + 'T00:00:00'), 'dd MMM yyyy', { locale: ptBR })}
                             </span>
+                            {match.time && (
+                              <span className="flex items-center gap-1 flex-shrink-0 font-black bg-amber-400 text-slate-950 px-2 py-0.5 rounded-md shadow-xs text-[9px] md:text-[10px]">
+                                <Clock className="w-2.5 h-2.5 md:w-3 md:h-3 text-slate-950" />
+                                {match.time}
+                              </span>
+                            )}
                           </div>
                           <span className={`px-1.5 py-0.5 rounded text-[8px] flex-shrink-0 ${
                             match.status === 'finished' ? 'bg-gray-200 text-gray-600' : 

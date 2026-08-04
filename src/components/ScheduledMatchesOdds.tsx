@@ -3,7 +3,7 @@ import { db } from '../firebase';
 import { collection, query, where, orderBy, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { Player, Match, Card, OddsEngineConfig, Team } from '../types';
 import { getPlayerFinalOverall } from '../utils/playerUtils';
-import { Activity, Shield } from 'lucide-react';
+import { Activity, Shield, Clock } from 'lucide-react';
 import { SoccerJersey } from './SoccerJersey';
 import { handleFirestoreError, OperationType } from '../App';
 
@@ -191,11 +191,12 @@ export function ScheduledMatchesOdds({ teams, players: playersProp, cards: cards
 
           return (
             <div key={match.id} className="bg-green-600/70 text-white rounded-2xl p-4 border border-green-600/50 shadow-sm flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                 <span className="text-xs font-black uppercase text-white bg-black/20 px-2 py-0.5 rounded-md">
-                   {dateStr}
+              <div className="flex items-center justify-between gap-2">
+                 <span className="text-xs font-black uppercase text-slate-950 bg-amber-400 px-2.5 py-1 rounded-md flex items-center gap-1.5 shadow-xs">
+                   <Clock className="w-3.5 h-3.5 text-slate-950" />
+                   {dateStr} {match.time ? `às ${match.time}` : ''}
                  </span>
-                 <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-white/20 text-white">
+                 <span className="text-[10px] font-black uppercase px-2 py-1 rounded-md bg-white/20 text-white">
                    Agendado
                  </span>
               </div>

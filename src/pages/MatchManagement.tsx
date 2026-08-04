@@ -1292,8 +1292,8 @@ export default function MatchManagement({ adminData, sharedLocations, sharedTeam
                       </div>
                     </div>
 
-                    <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-[9px] md:text-[10px] text-gray-400 mt-3 font-black uppercase tracking-widest">
-                      <span className="flex items-center gap-1.5"><Clock className="w-3 h-3 md:w-3.5 md:h-3.5 text-primary-yellow" /> {match.time}</span>
+                    <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-[9px] md:text-[10px] text-gray-500 mt-3 font-black uppercase tracking-widest">
+                      <span className="flex items-center gap-1.5 bg-amber-400 text-slate-950 font-black px-2.5 py-1 rounded-md shadow-xs text-xs"><Clock className="w-3.5 h-3.5 text-slate-950" /> {match.time || 'A definir'}</span>
                       <span className="hidden xs:block w-1 h-1 bg-gray-200 rounded-full" />
                       {match.confirmedPlayers && match.confirmedPlayers.length > (match.teamA.length + match.teamB.length) ? (
                         <>

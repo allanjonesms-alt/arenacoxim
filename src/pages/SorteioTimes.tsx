@@ -80,7 +80,6 @@ const CUSTOM_POTS: DefinedPot[] = [
   { id: 'meio_1', name: 'Meio-Campistas 1', shortLabel: 'MEI 1', badgeBg: 'bg-emerald-100', badgeText: 'text-emerald-800', defaultPos: 'meio-campo' },
   { id: 'meio_2', name: 'Meio-Campistas 2', shortLabel: 'MEI 2', badgeBg: 'bg-teal-100', badgeText: 'text-teal-800', defaultPos: 'meio-campo' },
   { id: 'atacante', name: 'Atacantes', shortLabel: 'ATA', badgeBg: 'bg-red-100', badgeText: 'text-red-800', defaultPos: 'centroavante' },
-  { id: 'reserva', name: 'Reservas', shortLabel: 'RES', badgeBg: 'bg-gray-200', badgeText: 'text-gray-800' },
 ];
 
 const LOCAL_STORAGE_KEY = 'arena_sorteio_pots_ids';
@@ -92,8 +91,7 @@ const EMPTY_POTS_STRUCTURE: Record<string, Player[]> = {
   zagueiro: [],
   meio_1: [],
   meio_2: [],
-  atacante: [],
-  reserva: []
+  atacante: []
 };
 
 export default function SorteioTimes({ adminData, sharedLocations = [] }: Props) {
@@ -306,8 +304,7 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
           zagueiro: [],
           meio_1: [],
           meio_2: [],
-          atacante: [],
-          reserva: []
+          atacante: []
         };
 
         for (const [potId, ids] of Object.entries(loadedIdsMap)) {
@@ -351,8 +348,7 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
       zagueiro: [],
       meio_1: [],
       meio_2: [],
-      atacante: [],
-      reserva: []
+      atacante: []
     };
     setPotsData(emptyPots);
     try {
@@ -403,8 +399,7 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
       zagueiro: [],
       meio_1: [],
       meio_2: [],
-      atacante: [],
-      reserva: []
+      atacante: []
     };
 
     locationPlayers.forEach(p => {
@@ -421,15 +416,13 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
         } else {
           nextPots.lateral_2.push(p);
         }
-      } else if (p.position === 'meio-campo') {
-        // Distribute evenly between Meio 1 and Meio 2
+      } else {
+        // meio-campo or default
         if (nextPots.meio_1.length <= nextPots.meio_2.length) {
           nextPots.meio_1.push(p);
         } else {
           nextPots.meio_2.push(p);
         }
-      } else {
-        nextPots.reserva.push(p);
       }
     });
 
@@ -740,7 +733,7 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
               Sorteio de Times por Potes
             </h1>
             <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">
-              Preenchimento manual de potes (Lateral 2, Meio 2, Reserva) e sorteio de 1 por pote
+              Preenchimento de potes por posições e sorteio de 1 atleta por pote
             </p>
           </div>
         </div>

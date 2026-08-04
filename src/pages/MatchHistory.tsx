@@ -4,7 +4,7 @@ import { collection, query, orderBy, onSnapshot, where, limit, getDoc, doc, getD
 import { Player, Match, Location, Team, AdminData, ScoringRules } from '../types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { MapPin, Calendar as CalendarIcon, ChevronRight, TrendingUp, User, ArrowLeft } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, ChevronRight, TrendingUp, User, ArrowLeft, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SoccerJersey } from '../components/SoccerJersey';
 import { handleFirestoreError, OperationType } from '../App';
@@ -196,6 +196,12 @@ export default function MatchHistory({ adminData, sharedLocations, sharedTeams, 
                       <CalendarIcon className="w-3 h-3 text-primary-blue" /> 
                       {format(new Date(match.date + 'T00:00:00'), 'dd MMM yyyy', { locale: ptBR })}
                     </span>
+                    {match.time && (
+                      <span className="flex items-center gap-1 flex-shrink-0 font-black bg-amber-400 text-slate-950 px-2 py-0.5 rounded-md shadow-xs text-[9px]">
+                        <Clock className="w-2.5 h-2.5 text-slate-950" />
+                        {match.time}
+                      </span>
+                    )}
                   </div>
                   <span className={`px-2 py-0.5 rounded-full text-[9px] ${
                     match.status === 'finished' ? 'bg-gray-200 text-gray-600' : 

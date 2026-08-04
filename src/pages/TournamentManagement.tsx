@@ -1172,8 +1172,8 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
                             return (
                               <div key={match.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-3">
                                 <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                                  <span className="text-[10px] font-black uppercase tracking-widest text-primary-blue bg-blue-50 px-2.5 py-1 rounded-md flex items-center gap-1">
-                                    <Clock className="w-3 h-3 text-primary-blue" />
+                                  <span className="text-xs font-black uppercase tracking-widest text-slate-950 bg-amber-400 px-2.5 py-1 rounded-md shadow-xs flex items-center gap-1">
+                                    <Clock className="w-3.5 h-3.5 text-slate-950" />
                                     {match.time || 'A definir'}
                                   </span>
                                   <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
@@ -1198,8 +1198,8 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
                                 </div>
 
                                 <div className="flex items-center justify-between border-t border-gray-100 pt-2">
-                                  <span className="text-[10px] text-gray-400 font-bold flex items-center gap-1">
-                                    <Calendar className="w-3 h-3 text-gray-400" />
+                                  <span className="text-xs text-slate-900 font-black flex items-center gap-1">
+                                    <Calendar className="w-3.5 h-3.5 text-primary-blue" />
                                     {match.date ? `${match.date} às ` : ''}{match.time || 'A definir'}
                                   </span>
                                   <button

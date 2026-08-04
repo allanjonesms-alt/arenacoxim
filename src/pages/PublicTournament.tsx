@@ -587,8 +587,8 @@ export default function PublicTournament({ adminData }: PublicTournamentProps) {
                           <span className="text-[10px] font-black uppercase tracking-widest text-amber-600 bg-amber-50 px-3 py-1 rounded-lg">
                             {match.roundName || 'Playoff'}
                           </span>
-                          <span className="text-[10px] font-bold text-gray-400 flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> {match.date} às {match.time}
+                          <span className="text-xs font-black text-slate-950 bg-amber-400 px-2.5 py-1 rounded-md shadow-xs flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-slate-950" /> {match.date} às {match.time}
                           </span>
                         </div>
 
@@ -773,8 +773,8 @@ export default function PublicTournament({ adminData }: PublicTournamentProps) {
                             return (
                               <div key={match.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all space-y-4">
                                 <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                                  <span className="text-[10px] font-black uppercase tracking-widest text-primary-blue bg-blue-50 px-2.5 py-1 rounded-md flex items-center gap-1">
-                                    <Clock className="w-3 h-3 text-primary-blue" />
+                                  <span className="text-xs font-black uppercase tracking-widest text-slate-950 bg-amber-400 px-2.5 py-1 rounded-md shadow-xs flex items-center gap-1">
+                                    <Clock className="w-3.5 h-3.5 text-slate-950" />
                                     {match.time || 'A definir'}
                                   </span>
                                   <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
