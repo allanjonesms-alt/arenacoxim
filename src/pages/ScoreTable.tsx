@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, onSnapshot } from 'firebase/firestore';
 import { Player, AdminData, Location, ScoringRules, Match } from '../types';
 import { getPositionAbbr, getPositionColor } from '../utils/playerUtils';
 import { Trophy, Users, Search, MapPin, Award, Loader2, ArrowUpDown, PlaySquare, Calendar, Star, Shield, Info } from 'lucide-react';
@@ -80,153 +80,97 @@ export default function ScoreTable({ adminData, sharedLocations, sharedScoringRu
   }, [selectedLocationId]);
 
   useEffect(() => {
-    const fetchPlayers = async () => {
-      setLoading(true);
+    let q = query(collection(db, 'players'));
+    if (selectedLocationId !== 'all') {
+      q = query(collection(db, 'players'), where('locationId', '==', selectedLocationId));
+    }
+
+    const unsubPlayers = onSnapshot(q, (snapshot) => {
+      const playersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
+      setPlayers(playersList);
+      setLoading(false);
+    }, async () => {
       try {
-        let q = query(collection(db, 'players'), orderBy('stats.points', 'desc'));
-        
-        // If filtering by specific location
+        const snap = await getDocs(collection(db, 'players'));
+        let list = snap.docs.map(d => ({ id: d.id, ...d.data() } as Player));
         if (selectedLocationId !== 'all') {
-          q = query(
-            collection(db, 'players'), 
-            where('locationId', '==', selectedLocationId)
-          );
+          list = list.filter(p => p.locationId === selectedLocationId);
         }
-
-        const [querySnapshot, matchesSnapshot] = await Promise.all([
-          getDocs(q),
-          getDocs(query(collection(db, 'matches'), where('status', '==', 'finished')))
-        ]);
-
-        const playersList = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as Player));
-
-        const matchesList = matchesSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as Match));
-
-        setAllMatches(matchesList);
-
-        // Calculate team stats (GP, GC, SG) for each player
-        const statsMap: Record<string, { gp: number; gc: number; sg: number }> = {};
-        playersList.forEach(p => {
-          statsMap[p.id] = { gp: 0, gc: 0, sg: 0 };
-        });
-
-        const activeLocationMatches = selectedLocationId === 'all'
-          ? matchesList
-          : matchesList.filter(m => m.locationId === selectedLocationId);
-
-        activeLocationMatches.forEach(match => {
-          const scoreA = match.scoreA ?? 0;
-          const scoreB = match.scoreB ?? 0;
-
-          (match.teamA || []).forEach(pid => {
-            if (!statsMap[pid]) {
-              statsMap[pid] = { gp: 0, gc: 0, sg: 0 };
-            }
-            statsMap[pid].gp += scoreA;
-            statsMap[pid].gc += scoreB;
-          });
-
-          (match.teamB || []).forEach(pid => {
-            if (!statsMap[pid]) {
-              statsMap[pid] = { gp: 0, gc: 0, sg: 0 };
-            }
-            statsMap[pid].gp += scoreB;
-            statsMap[pid].gc += scoreA;
-          });
-        });
-
-        Object.keys(statsMap).forEach(pid => {
-          statsMap[pid].sg = statsMap[pid].gp - statsMap[pid].gc;
-        });
-
-        // Set available months
-        const months = Array.from(
-          new Set(
-            activeLocationMatches
-              .filter(m => m.date)
-              .map(m => m.date.substring(0, 7))
-          )
-        ).sort((a, b) => b.localeCompare(a));
-
-        setAvailableMonths(months);
-        setPlayerTeamStats(statsMap);
-        setPlayers(playersList);
-      } catch (error) {
-        console.error("Erro ao buscar jogadores para tabela geral:", error);
-        // Fallback search
-        try {
-          const [snapshot, matchesSnapshot] = await Promise.all([
-            getDocs(collection(db, 'players')),
-            getDocs(query(collection(db, 'matches'), where('status', '==', 'finished')))
-          ]);
-
-          let list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Player));
-          let matchesList = matchesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match));
-
-          if (selectedLocationId !== 'all') {
-            list = list.filter(p => p.locationId === selectedLocationId);
-            matchesList = matchesList.filter(m => m.locationId === selectedLocationId);
-          }
-
-          setAllMatches(matchesList);
-
-          const statsMap: Record<string, { gp: number; gc: number; sg: number }> = {};
-          list.forEach(p => {
-            statsMap[p.id] = { gp: 0, gc: 0, sg: 0 };
-          });
-
-          matchesList.forEach(match => {
-            const scoreA = match.scoreA ?? 0;
-            const scoreB = match.scoreB ?? 0;
-
-            (match.teamA || []).forEach(pid => {
-              if (!statsMap[pid]) {
-                statsMap[pid] = { gp: 0, gc: 0, sg: 0 };
-              }
-              statsMap[pid].gp += scoreA;
-              statsMap[pid].gc += scoreB;
-            });
-
-            (match.teamB || []).forEach(pid => {
-              if (!statsMap[pid]) {
-                statsMap[pid] = { gp: 0, gc: 0, sg: 0 };
-              }
-              statsMap[pid].gp += scoreB;
-              statsMap[pid].gc += scoreA;
-            });
-          });
-
-          Object.keys(statsMap).forEach(pid => {
-            statsMap[pid].sg = statsMap[pid].gp - statsMap[pid].gc;
-          });
-
-          const months = Array.from(
-            new Set(
-              matchesList
-                .filter(m => m.date)
-                .map(m => m.date.substring(0, 7))
-            )
-          ).sort((a, b) => b.localeCompare(a));
-
-          setAvailableMonths(months);
-          setPlayerTeamStats(statsMap);
-          setPlayers(list);
-        } catch (fallbackError) {
-          handleFirestoreError(fallbackError, OperationType.LIST, 'players-score-table');
-        }
+        setPlayers(list);
+      } catch (e) {
+        console.warn("Fallback players fetch error:", e);
       } finally {
         setLoading(false);
       }
-    };
+    });
 
-    fetchPlayers();
+    const qMatches = query(collection(db, 'matches'), where('status', '==', 'finished'));
+    const unsubMatches = onSnapshot(qMatches, (snapshot) => {
+      const matchesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match));
+      setAllMatches(matchesList);
+    }, async () => {
+      try {
+        const snap = await getDocs(collection(db, 'matches'));
+        const matchesList = snap.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as Match))
+          .filter(m => m.status === 'finished');
+        setAllMatches(matchesList);
+      } catch (e) {
+        console.warn("Fallback matches fetch error:", e);
+      }
+    });
+
+    return () => {
+      unsubPlayers();
+      unsubMatches();
+    };
   }, [selectedLocationId]);
+
+  // Recalculate team stats and available months dynamically when players or matches change
+  useEffect(() => {
+    if (!players.length && !allMatches.length) return;
+
+    const statsMap: Record<string, { gp: number; gc: number; sg: number }> = {};
+    players.forEach(p => {
+      statsMap[p.id] = { gp: 0, gc: 0, sg: 0 };
+    });
+
+    const activeLocationMatches = selectedLocationId === 'all'
+      ? allMatches
+      : allMatches.filter(m => m.locationId === selectedLocationId);
+
+    activeLocationMatches.forEach(match => {
+      const scoreA = match.scoreA ?? 0;
+      const scoreB = match.scoreB ?? 0;
+
+      (match.teamA || []).forEach(pid => {
+        if (!statsMap[pid]) statsMap[pid] = { gp: 0, gc: 0, sg: 0 };
+        statsMap[pid].gp += scoreA;
+        statsMap[pid].gc += scoreB;
+      });
+
+      (match.teamB || []).forEach(pid => {
+        if (!statsMap[pid]) statsMap[pid] = { gp: 0, gc: 0, sg: 0 };
+        statsMap[pid].gp += scoreB;
+        statsMap[pid].gc += scoreA;
+      });
+    });
+
+    Object.keys(statsMap).forEach(pid => {
+      statsMap[pid].sg = statsMap[pid].gp - statsMap[pid].gc;
+    });
+
+    const months = Array.from(
+      new Set(
+        activeLocationMatches
+          .filter(m => m.date)
+          .map(m => m.date.substring(0, 7))
+      )
+    ).sort((a, b) => b.localeCompare(a));
+
+    setAvailableMonths(months);
+    setPlayerTeamStats(statsMap);
+  }, [players, allMatches, selectedLocationId]);
 
   // Compute processed players' stats dynamically for month filtering
   const processedPlayers = useMemo(() => {

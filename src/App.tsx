@@ -290,138 +290,97 @@ export default function App() {
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       console.log("Current user:", currentUser?.email, currentUser?.uid);
-      if (currentUser) {
-        try {
-          // Sync logged-in user profile to 'users' collection
-          try {
-            const userDocRef = doc(db, 'users', currentUser.uid);
-            await setDoc(userDocRef, {
-              displayName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Usuário',
-              email: currentUser.email || '',
-              photoURL: currentUser.photoURL || '',
-              lastLogin: new Date().toISOString()
-            }, { merge: true });
-          } catch (e) {
-            console.warn("Could not sync user profile to 'users' collection:", e);
-          }
-
-          const isMaster = currentUser.email?.toLowerCase() === MASTER_EMAIL;
-          console.log("Is master:", isMaster);
-          
-          // Check if user is admin in Firestore by UID
-          const adminRef = doc(db, 'admins', currentUser.uid);
-          let adminDoc = await getDoc(adminRef);
-          let adminDataFromDoc = adminDoc.exists() ? adminDoc.data() as AdminData : null;
-          console.log("Admin doc by UID exists:", adminDoc.exists(), adminDataFromDoc);
-
-          // If not found by UID, check by email (for admins added via AdminManagement)
-          if (!adminDataFromDoc && currentUser.email) {
-            const normalizedEmail = currentUser.email.toLowerCase().trim();
-            console.log("Admin detection: Checking Firestore for email:", normalizedEmail);
-            
-            const adminsQuery = query(
-              collection(db, 'admins'),
-              where('email', '==', normalizedEmail)
-            );
-            
-            const querySnapshot = await getDocs(adminsQuery);
-            let matchedDoc = !querySnapshot.empty ? querySnapshot.docs[0] : null;
-            
-            if (!matchedDoc) {
-              // Fallback: search all admins if the exact match fails (case sensitivity issues in DB, or matching doc ID)
-              console.log("Admin detection: No exact match, trying case-insensitive search and doc-ID match...");
-              const allAdminsSnap = await getDocs(collection(db, 'admins'));
-              const fuzzyMatch = allAdminsSnap.docs.find(d => 
-                d.data().email?.toLowerCase().trim() === normalizedEmail ||
-                d.id.toLowerCase().trim() === normalizedEmail
-              );
-              if (fuzzyMatch) {
-                matchedDoc = fuzzyMatch;
-                console.log("Admin detection: Found admin via fuzzy match:", fuzzyMatch.data());
-              }
-            }
-            
-            if (matchedDoc) {
-              const docData = matchedDoc.data() as AdminData;
-              // Normalize the email to lowercase inside the document when migrating
-              const updatedData = {
-                ...docData,
-                email: normalizedEmail,
-                updatedAt: Date.now()
-              };
-              
-              adminDataFromDoc = updatedData;
-              
-              // CRITICAL: Migrate to UID-based document for faster lookups and better security
-              try {
-                const oldDocId = matchedDoc.id;
-                console.log("Admin detection: Migrating admin from doc", oldDocId, "to UID doc", currentUser.uid);
-                
-                await setDoc(adminRef, updatedData);
-                console.log("Admin detection: UID-based document created/updated.");
-                
-                if (oldDocId !== currentUser.uid) {
-                  await deleteDoc(doc(db, 'admins', oldDocId));
-                  console.log("Admin detection: Legacy record deleted.");
-                }
-              } catch (migrateError) {
-                console.error("Admin detection: Migration failed (continuing anyway):", migrateError);
-              }
-            } else {
-              console.warn("Admin detection: User not found in 'admins' collection.");
-            }
-          }
-          
-          if (isMaster) {
-            setIsAdmin(true);
-            
-            // Always force master role and 'all' locations for MASTER_EMAIL to prevent lockout/filtering issues
-            const masterData = {
-              ...(adminDataFromDoc || {}),
-              name: adminDataFromDoc?.name || currentUser.displayName || 'Master Admin',
-              email: currentUser.email || MASTER_EMAIL,
-              role: 'master' as const,
-              locationId: 'all',
-              createdAt: adminDataFromDoc?.createdAt || Date.now()
-            };
-            
-            setAdminData(masterData as AdminData);
-            
-            // Bootstrap or update master admin if not matching
-            if (!adminDataFromDoc || adminDataFromDoc.role !== 'master' || adminDataFromDoc.locationId !== 'all') {
-              try {
-                await setDoc(adminRef, masterData);
-                console.log("Admin detection: Master admin record bootstrapped/verified in Firestore.");
-              } catch (e) {
-                console.error("Failed to bootstrap master admin:", e);
-              }
-            }
-          } else if (adminDataFromDoc) {
-            console.log("Setting isAdmin to true for:", currentUser.email);
-            setIsAdmin(true);
-            setAdminData(adminDataFromDoc);
-          } else {
-            console.log("User is not an admin:", currentUser.email);
-            setIsAdmin(false);
-            setAdminData(null);
-          }
-        } catch (error: any) {
-          console.warn("Admin check notice (using local fallback if offline):", error?.message || error);
-          const isMaster = currentUser.email?.toLowerCase() === MASTER_EMAIL;
-          setIsAdmin(isMaster);
-          setAdminData(isMaster ? {
-            name: currentUser.displayName || 'Master Admin',
-            email: currentUser.email || MASTER_EMAIL,
-            role: 'master',
-            locationId: 'all',
-            createdAt: Date.now()
-          } as AdminData : null);
-        }
-      } else {
+      
+      if (!currentUser) {
         setIsAdmin(false);
         setAdminData(null);
+        setLoading(false);
+        return;
       }
-      setLoading(false);
+
+      // Background non-blocking sync for logged-in user profile
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      setDoc(userDocRef, {
+        displayName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Usuário',
+        email: currentUser.email || '',
+        photoURL: currentUser.photoURL || '',
+        lastLogin: new Date().toISOString()
+      }, { merge: true }).catch(e => console.warn("Background user sync warning:", e));
+
+      const isMaster = currentUser.email?.toLowerCase() === MASTER_EMAIL;
+      
+      if (isMaster) {
+        // Fast path for master admin: unblock loading immediately
+        const masterData: AdminData = {
+          name: currentUser.displayName || 'Master Admin',
+          email: currentUser.email || MASTER_EMAIL,
+          role: 'master',
+          locationId: 'all',
+          createdAt: Date.now()
+        };
+        setIsAdmin(true);
+        setAdminData(masterData);
+        setLoading(false);
+
+        // Background update master document in admins collection
+        const adminRef = doc(db, 'admins', currentUser.uid);
+        getDoc(adminRef).then(snap => {
+          if (!snap.exists() || snap.data()?.role !== 'master') {
+            setDoc(adminRef, masterData, { merge: true }).catch(console.error);
+          }
+        }).catch(console.warn);
+        return;
+      }
+
+      // Check admin status for standard users
+      try {
+        const adminRef = doc(db, 'admins', currentUser.uid);
+        const adminDoc = await getDoc(adminRef);
+        
+        if (adminDoc.exists()) {
+          const data = adminDoc.data() as AdminData;
+          setIsAdmin(true);
+          setAdminData(data);
+          setLoading(false);
+          return;
+        }
+
+        // If not found by UID, check by email in background/fast fallback
+        if (currentUser.email) {
+          const normalizedEmail = currentUser.email.toLowerCase().trim();
+          const adminsQuery = query(
+            collection(db, 'admins'),
+            where('email', '==', normalizedEmail)
+          );
+          const querySnapshot = await getDocs(adminsQuery);
+          
+          if (!querySnapshot.empty) {
+            const matchedDoc = querySnapshot.docs[0];
+            const docData = matchedDoc.data() as AdminData;
+            const updatedData = { ...docData, email: normalizedEmail, updatedAt: Date.now() };
+            setIsAdmin(true);
+            setAdminData(updatedData);
+            setLoading(false);
+
+            // Migrate to UID doc in background
+            setDoc(adminRef, updatedData).then(() => {
+              if (matchedDoc.id !== currentUser.uid) {
+                deleteDoc(doc(db, 'admins', matchedDoc.id)).catch(console.error);
+              }
+            }).catch(console.error);
+            return;
+          }
+        }
+
+        setIsAdmin(false);
+        setAdminData(null);
+      } catch (error) {
+        console.warn("Admin check fallback:", error);
+        setIsAdmin(false);
+        setAdminData(null);
+      } finally {
+        setLoading(false);
+      }
     });
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       if (event.reason && (

@@ -1,15 +1,33 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { initializeFirestore, memoryLocalCache, getDoc, getDocFromCache, DocumentReference, DocumentData, DocumentSnapshot } from 'firebase/firestore';
+import { 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager, 
+  memoryLocalCache, 
+  getDoc, 
+  getDocFromCache, 
+  DocumentReference, 
+  DocumentData, 
+  DocumentSnapshot 
+} from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
-// Use initializeFirestore with memoryLocalCache
+// Use persistentLocalCache for instant load times and offline responsiveness
+let firestoreCache;
+try {
+  firestoreCache = persistentLocalCache({ tabManager: persistentMultipleTabManager() });
+} catch (e) {
+  console.warn("Persistent cache not supported in this environment, falling back to memoryLocalCache", e);
+  firestoreCache = memoryLocalCache();
+}
+
 export const db = initializeFirestore(app, {
-  localCache: memoryLocalCache(),
+  localCache: firestoreCache,
 }, firebaseConfig.firestoreDatabaseId);
 
 export const storage = getStorage(app);

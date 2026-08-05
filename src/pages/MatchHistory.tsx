@@ -70,15 +70,18 @@ export default function MatchHistory({ adminData, sharedLocations, sharedTeams, 
 
       if (involvedPlayerIds.size > 0) {
         const playerIdsArray = Array.from(involvedPlayerIds);
-        const playersData: Player[] = [];
+        const chunks = [];
         
         // Firestore 'in' query supports max 30 items
         for (let i = 0; i < playerIdsArray.length; i += 30) {
-          const chunk = playerIdsArray.slice(i, i + 30);
-          const q = query(collection(db, 'players'), where('__name__', 'in', chunk));
-          const snap = await getDocs(q);
-          playersData.push(...snap.docs.map(d => ({ id: d.id, ...d.data() } as Player)));
+          chunks.push(playerIdsArray.slice(i, i + 30));
         }
+
+        const snaps = await Promise.all(
+          chunks.map(chunk => getDocs(query(collection(db, 'players'), where('__name__', 'in', chunk))))
+        );
+
+        const playersData = snaps.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() } as Player)));
         setPlayers(playersData);
       }
       setLoading(false);
