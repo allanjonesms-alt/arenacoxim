@@ -29,6 +29,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../App';
 import { cleanUndefinedFields } from '../utils/firestoreUtils';
+import { TeamSquadModal } from '../components/TeamSquadModal';
 
 interface PublicTournamentProps {
   adminData?: AdminData | null;
@@ -44,6 +45,7 @@ export default function PublicTournament({ adminData }: PublicTournamentProps) {
   
   const [activeTab, setActiveTab] = useState<'standings' | 'playoffs' | 'matches' | 'teams' | 'scorers'>('standings');
   const [matchFilterStatus, setMatchFilterStatus] = useState<'all' | 'scheduled' | 'finished'>('all');
+  const [squadModalTeam, setSquadModalTeam] = useState<TournamentTeam | null>(null);
 
   // Match Editing Modal State (For Admin/Master)
   const [editingMatch, setEditingMatch] = useState<TournamentMatch | null>(null);
@@ -436,8 +438,8 @@ export default function PublicTournament({ adminData }: PublicTournamentProps) {
                         <table className="w-full text-left text-xs font-bold">
                           <thead className="bg-gray-50 text-gray-400 text-[10px] uppercase tracking-widest border-b border-gray-100">
                             <tr>
-                              <th className="py-3.5 px-4">#</th>
-                              <th className="py-3.5 px-4">Time</th>
+                              <th className="py-3.5 pl-3 pr-0.5 text-center w-8">#</th>
+                              <th className="py-3.5 pl-0.5 pr-4">Time</th>
                               <th className="py-3.5 px-3 text-center text-primary-blue font-black">P</th>
                               <th className="py-3.5 px-3 text-center">J</th>
                               <th className="py-3.5 px-3 text-center">V</th>
@@ -456,15 +458,26 @@ export default function PublicTournament({ adminData }: PublicTournamentProps) {
                                   key={st.team.id} 
                                   className={`transition-colors ${isQualifying ? 'bg-amber-400/5 hover:bg-amber-400/10' : 'hover:bg-gray-50'}`}
                                 >
-                                  <td className="py-4 px-4 font-black">
+                                  <td className="py-3 pl-3 pr-0.5 font-black text-center w-8">
                                     <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-black ${
                                       isQualifying ? 'bg-amber-400 text-slate-950 shadow-sm' : 'bg-gray-100 text-gray-500'
                                     }`}>
                                       {idx + 1}
                                     </span>
                                   </td>
-                                  <td className="py-4 px-4 font-black text-slate-900 text-sm italic uppercase flex items-center gap-2">
-                                    {st.team.name}
+                                  <td 
+                                    onClick={() => setSquadModalTeam(st.team)}
+                                    className="py-3 pl-0.5 pr-4 font-black text-slate-900 text-sm italic uppercase flex items-center gap-2.5 cursor-pointer hover:text-primary-blue transition-colors group/teamname"
+                                    title="Clique para ver elenco e posição tática"
+                                  >
+                                    <div className="w-12 h-12 flex items-center justify-center shrink-0">
+                                      {st.team.logoUrl ? (
+                                        <img src={st.team.logoUrl} alt={st.team.name} className="w-full h-full object-contain filter drop-shadow-sm transition-transform group-hover/teamname:scale-110" />
+                                      ) : (
+                                        <Shield className="w-8 h-8 text-slate-400 group-hover/teamname:text-primary-blue transition-colors" />
+                                      )}
+                                    </div>
+                                    <span className="underline-offset-2 group-hover/teamname:underline">{st.team.name}</span>
                                     {isQualifying && (
                                       <span className="text-[9px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md uppercase">
                                         Zona de Classificação
@@ -785,15 +798,29 @@ export default function PublicTournament({ adminData }: PublicTournamentProps) {
                                 </div>
 
                                 <div className="flex items-center justify-between gap-3">
-                                  <div className="flex-1 text-center">
-                                    <p className="text-sm font-black text-slate-900 uppercase italic">{teamA?.name || 'Time A'}</p>
+                                  <div className="flex-1 text-center flex flex-col items-center">
+                                    <div className="w-20 h-20 mb-1 flex items-center justify-center shrink-0">
+                                      {teamA?.logoUrl ? (
+                                        <img src={teamA.logoUrl} alt={teamA.name} className="w-full h-full object-contain filter drop-shadow-md" />
+                                      ) : (
+                                        <Shield className="w-12 h-12 text-slate-300" />
+                                      )}
+                                    </div>
+                                    <p className="text-sm font-black text-slate-900 uppercase italic line-clamp-1">{teamA?.name || 'Time A'}</p>
                                     <p className="text-2xl font-black text-primary-blue mt-1">{match.scoreA ?? '-'}</p>
                                   </div>
 
                                   <span className="text-xs font-black text-gray-300 italic">X</span>
 
-                                  <div className="flex-1 text-center">
-                                    <p className="text-sm font-black text-slate-900 uppercase italic">{teamB?.name || 'Time B'}</p>
+                                  <div className="flex-1 text-center flex flex-col items-center">
+                                    <div className="w-20 h-20 mb-1 flex items-center justify-center shrink-0">
+                                      {teamB?.logoUrl ? (
+                                        <img src={teamB.logoUrl} alt={teamB.name} className="w-full h-full object-contain filter drop-shadow-md" />
+                                      ) : (
+                                        <Shield className="w-12 h-12 text-slate-300" />
+                                      )}
+                                    </div>
+                                    <p className="text-sm font-black text-slate-900 uppercase italic line-clamp-1">{teamB?.name || 'Time B'}</p>
                                     <p className="text-2xl font-black text-primary-blue mt-1">{match.scoreB ?? '-'}</p>
                                   </div>
                                 </div>
@@ -991,14 +1018,27 @@ export default function PublicTournament({ adminData }: PublicTournamentProps) {
           {activeTab === 'teams' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {activeTournament.teams.map(team => (
-                <div key={team.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                    <h4 className="text-lg font-black uppercase italic text-slate-900">{team.name}</h4>
-                    {team.groupId && (
-                      <span className="text-[10px] font-black uppercase bg-amber-400 text-slate-950 px-2.5 py-1 rounded-md">
-                        Grupo {team.groupId}
-                      </span>
-                    )}
+                <div 
+                  key={team.id} 
+                  onClick={() => setSquadModalTeam(team)}
+                  className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4 hover:border-primary-blue/30 hover:shadow-md cursor-pointer transition-all group/teamcard"
+                >
+                  <div className="flex items-center gap-3.5 border-b border-gray-100 pb-3">
+                    <div className="w-24 h-24 flex items-center justify-center shrink-0">
+                      {team.logoUrl ? (
+                        <img src={team.logoUrl} alt={team.name} className="w-full h-full object-contain filter drop-shadow-md group-hover/teamcard:scale-105 transition-transform" />
+                      ) : (
+                        <Shield className="w-14 h-14 text-slate-300 group-hover/teamcard:text-primary-blue transition-colors" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0 flex items-center justify-between gap-1">
+                      <h4 className="text-lg font-black uppercase italic text-slate-900 truncate group-hover/teamcard:text-primary-blue transition-colors">{team.name}</h4>
+                      {team.groupId && (
+                        <span className="text-[10px] font-black uppercase bg-amber-400 text-slate-950 px-2.5 py-1 rounded-md shrink-0">
+                          Grupo {team.groupId}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -1242,6 +1282,13 @@ export default function PublicTournament({ adminData }: PublicTournamentProps) {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Team Squad Tactical Pitch Modal */}
+      <TeamSquadModal
+        team={squadModalTeam}
+        players={players}
+        onClose={() => setSquadModalTeam(null)}
+      />
     </div>
   );
 }

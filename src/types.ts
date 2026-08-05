@@ -95,6 +95,7 @@ export interface Team {
   locationId: string; // Associated location
   color: string;
   playerCount?: number; // Number of players for this team in a match
+  logoUrl?: string; // Crest / Escudo base64 or URL
 }
 
 export interface Location {
@@ -250,6 +251,7 @@ export interface TournamentTeam {
   name: string;
   groupId?: string; // e.g., "A", "B"
   playerIds: string[]; // List of player IDs registered at this location
+  logoUrl?: string; // Crest / Escudo base64 or URL
 }
 
 export interface TournamentMatchEvent {

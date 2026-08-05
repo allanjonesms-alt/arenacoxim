@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, query, where, getDocs } from 'firebase/firestore';
 import { Team, Location, AdminData } from '../types';
-import { Shield, Plus, Trash2, Edit2, MapPin, X, Search, Palette, Map, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Shield, Plus, Trash2, Edit2, MapPin, X, Search, Palette, Map, AlertTriangle, CheckCircle2, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SoccerJersey } from '../components/SoccerJersey';
 import { handleFirestoreError, OperationType } from '../App';
 import { Link } from 'react-router-dom';
+import { compressFileToDataUrl } from '../utils/imageUtils';
 
 const JERSEY_COLORS = [
   { name: 'Vermelho', hex: '#ef4444' },
@@ -37,6 +38,7 @@ export default function TeamManagement({ adminData, sharedLocations }: TeamManag
   const [locationId, setLocationId] = useState('');
   const [color, setColor] = useState(JERSEY_COLORS[0].hex);
   const [playerCount, setPlayerCount] = useState<number>(5);
+  const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     let locationsList = sharedLocations;
@@ -83,12 +85,17 @@ export default function TeamManagement({ adminData, sharedLocations }: TeamManag
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const teamData = {
+    const teamData: Partial<Team> = {
       name,
       locationId,
       color,
-      playerCount
+      playerCount,
     };
+    if (logoUrl) {
+      teamData.logoUrl = logoUrl;
+    } else {
+      teamData.logoUrl = '';
+    }
 
     try {
       if (editingTeam) {
@@ -107,6 +114,7 @@ export default function TeamManagement({ adminData, sharedLocations }: TeamManag
     setLocationId(adminData && adminData.role !== 'master' && adminData.locationId ? adminData.locationId : '');
     setColor(JERSEY_COLORS[0].hex);
     setPlayerCount(5);
+    setLogoUrl(undefined);
     setEditingTeam(null);
     setIsModalOpen(false);
   };
@@ -128,6 +136,7 @@ export default function TeamManagement({ adminData, sharedLocations }: TeamManag
     setLocationId(resolvedLocId);
     setColor(team.color || JERSEY_COLORS[0].hex);
     setPlayerCount(team.playerCount || 5);
+    setLogoUrl(team.logoUrl);
     setIsModalOpen(true);
   };
 
@@ -262,9 +271,15 @@ export default function TeamManagement({ adminData, sharedLocations }: TeamManag
                 <div className="flex flex-col items-center text-center mb-8">
                   <div className="relative group-hover:scale-110 transition-transform duration-500 drop-shadow-2xl mb-6">
                     <SoccerJersey color={team.color} size={100} />
-                    <div className="absolute -bottom-2 -right-2 bg-white p-2 rounded-xl shadow-xl border border-gray-100">
-                      <Palette size={14} className="text-primary-blue" style={{ color: team.color }} />
-                    </div>
+                    {team.logoUrl ? (
+                      <div className="absolute -bottom-2 -left-2 w-18 h-18 flex items-center justify-center shrink-0">
+                        <img src={team.logoUrl} alt={team.name} className="w-full h-full object-contain filter drop-shadow-lg" />
+                      </div>
+                    ) : (
+                      <div className="absolute -bottom-2 -right-2 bg-white p-2 rounded-xl shadow-xl border border-gray-100">
+                        <Palette size={14} className="text-primary-blue" style={{ color: team.color }} />
+                      </div>
+                    )}
                   </div>
                   <div className="w-full px-2">
                     <h3 className="text-2xl font-black italic uppercase text-primary-gray truncate leading-tight transition-colors group-hover:text-primary-blue">{team.name}</h3>
@@ -327,6 +342,62 @@ export default function TeamManagement({ adminData, sharedLocations }: TeamManag
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Escudo Upload / Edit / Delete */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest pl-1">
+                      Escudo / Emblema da Equipe
+                    </label>
+                    <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                      <div className="relative w-28 h-28 flex items-center justify-center shrink-0">
+                        {logoUrl ? (
+                          <img src={logoUrl} alt="Escudo" className="w-full h-full object-contain filter drop-shadow-md" />
+                        ) : (
+                          <Shield className="w-16 h-16 text-gray-300" />
+                        )}
+                      </div>
+
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <label className="cursor-pointer bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black uppercase px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-md active:scale-95">
+                            <Upload className="w-3.5 h-3.5 text-amber-400" />
+                            {logoUrl ? 'Alterar Escudo' : 'Carregar Escudo'}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  try {
+                                    const compressed = await compressFileToDataUrl(file, 200, 60);
+                                    setLogoUrl(compressed);
+                                  } catch (err) {
+                                    alert("Erro ao processar imagem do escudo.");
+                                  }
+                                }
+                              }}
+                            />
+                          </label>
+
+                          {logoUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setLogoUrl(undefined)}
+                              className="bg-red-50 hover:bg-red-100 text-red-600 text-[10px] font-black uppercase px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all"
+                              title="Excluir Escudo"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Excluir
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">
+                          Imagem otimizada e comprimida automaticamente.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest pl-1">Identificação da Equipe</label>
                     <input 

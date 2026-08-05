@@ -55,44 +55,28 @@ export async function compressBase64Image(
         let compressedUrl = '';
 
         if (isPng) {
-          // Check for alpha channel transparent pixels
-          const imgData = ctx.getImageData(0, 0, width, height);
-          const data = imgData.data;
-          let hasAlpha = false;
-          for (let i = 3; i < data.length; i += 4) {
-            if (data[i] < 255) {
-              hasAlpha = true;
+          // Always keep PNG or WebP format for transparency support
+          compressedUrl = canvas.toDataURL('image/png');
+          
+          // Downscale canvas further if still above maxKb
+          let curW = width;
+          let curH = height;
+          while ((compressedUrl.length * 3) / 4 / 1024 > maxKb && curW > 80) {
+            curW = Math.round(curW * 0.8);
+            curH = Math.round(curH * 0.8);
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = curW;
+            tempCanvas.height = curH;
+            const tempCtx = tempCanvas.getContext('2d');
+            if (tempCtx) {
+              tempCtx.drawImage(canvas, 0, 0, curW, curH);
+              compressedUrl = tempCanvas.toDataURL('image/png');
+            } else {
               break;
             }
           }
-
-          if (hasAlpha) {
-            // Keep PNG for transparency
-            compressedUrl = canvas.toDataURL('image/png');
-            
-            // Downscale canvas further if still above maxKb
-            let curW = width;
-            let curH = height;
-            while ((compressedUrl.length * 3) / 4 / 1024 > maxKb && curW > 80) {
-              curW = Math.round(curW * 0.8);
-              curH = Math.round(curH * 0.8);
-              const tempCanvas = document.createElement('canvas');
-              tempCanvas.width = curW;
-              tempCanvas.height = curH;
-              const tempCtx = tempCanvas.getContext('2d');
-              if (tempCtx) {
-                tempCtx.drawImage(canvas, 0, 0, curW, curH);
-                compressedUrl = tempCanvas.toDataURL('image/png');
-              } else {
-                break;
-              }
-            }
-          } else {
-            // No transparency, convert PNG to JPEG for superior compression
-            compressedUrl = canvas.toDataURL('image/jpeg', 0.8);
-          }
         } else {
-          // Standard JPEG compression
+          // Standard JPEG compression for non-PNG images
           compressedUrl = canvas.toDataURL('image/jpeg', 0.8);
         }
 
@@ -115,5 +99,30 @@ export async function compressBase64Image(
     };
 
     img.src = dataUrl;
+  });
+}
+
+export async function compressFileToDataUrl(
+  file: File,
+  maxDimension = 256,
+  maxKb = 80
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const result = e.target?.result as string;
+      if (!result) {
+        reject(new Error("Falha ao ler o arquivo."));
+        return;
+      }
+      try {
+        const compressed = await compressBase64Image(result, maxDimension, maxKb);
+        resolve(compressed);
+      } catch (err) {
+        resolve(result);
+      }
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
   });
 }

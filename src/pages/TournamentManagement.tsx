@@ -45,13 +45,17 @@ import {
   RotateCcw,
   Star,
   Check,
-  UserPlus
+  UserPlus,
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../App';
 import { cleanUndefinedFields } from '../utils/firestoreUtils';
 import { SoccerBall, SoccerCleat } from '../components/Icons';
 import { calculateMatchPoints } from '../utils/scoringEngine';
+import { compressFileToDataUrl } from '../utils/imageUtils';
+import { TeamSquadModal } from '../components/TeamSquadModal';
 
 const DEFAULT_RULES: ScoringRules = {
   id: 'scoring',
@@ -82,6 +86,7 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [activeTournament, setActiveTournament] = useState<Tournament | null>(null);
   const [activeTab, setActiveTab] = useState<'info' | 'teams' | 'matches' | 'standings' | 'playoffs'>('standings');
+  const [squadModalTeam, setSquadModalTeam] = useState<TournamentTeam | null>(null);
 
   // Form State for New/Edit Tournament
   const [editingTournamentId, setEditingTournamentId] = useState<string | null>(null);
@@ -920,8 +925,8 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
                         <table className="w-full text-left text-xs font-bold">
                           <thead className="bg-gray-50 text-gray-400 text-[10px] uppercase tracking-widest border-b border-gray-100">
                             <tr>
-                              <th className="py-3 px-4">#</th>
-                              <th className="py-3 px-4">Time</th>
+                              <th className="py-3 pl-3 pr-0.5 text-center w-8">#</th>
+                              <th className="py-3 pl-0.5 pr-4">Time</th>
                               <th className="py-3 px-3 text-center text-primary-blue">P</th>
                               <th className="py-3 px-3 text-center">J</th>
                               <th className="py-3 px-3 text-center">V</th>
@@ -937,8 +942,8 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
                               const isQualifying = idx < (activeTournament.qualifiersPerGroup || 2);
                               return (
                                 <tr key={st.team.id} className={isQualifying ? 'bg-amber-400/5' : ''}>
-                                  <td className="py-3.5 px-4 font-black">
-                                    <div className="flex items-center gap-2">
+                                  <td className="py-3.5 pl-3 pr-0.5 font-black text-center w-8">
+                                    <div className="flex items-center justify-center">
                                       <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-black ${
                                         isQualifying ? 'bg-amber-400 text-slate-950' : 'bg-gray-100 text-gray-500'
                                       }`}>
@@ -946,8 +951,21 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
                                       </span>
                                     </div>
                                   </td>
-                                  <td className="py-3.5 px-4 font-black text-slate-900 text-sm italic uppercase">
-                                    {st.team.name}
+                                  <td 
+                                    onClick={() => setSquadModalTeam(st.team)}
+                                    className="py-3.5 pl-0.5 pr-4 font-black text-slate-900 text-sm italic uppercase cursor-pointer hover:bg-slate-100/80 transition-colors group/teamname"
+                                    title="Clique para ver elenco e campo tático"
+                                  >
+                                    <div className="flex items-center gap-2.5">
+                                      <div className="w-12 h-12 flex items-center justify-center shrink-0">
+                                        {st.team.logoUrl ? (
+                                          <img src={st.team.logoUrl} alt={st.team.name} className="w-full h-full object-contain filter drop-shadow-sm transition-transform group-hover/teamname:scale-110" />
+                                        ) : (
+                                          <Shield className="w-8 h-8 text-slate-400 group-hover/teamname:text-primary-blue transition-colors" />
+                                        )}
+                                      </div>
+                                      <span className="truncate group-hover/teamname:text-primary-blue transition-colors underline-offset-2 group-hover/teamname:underline">{st.team.name}</span>
+                                    </div>
                                   </td>
                                   <td className="py-3.5 px-3 text-center text-base font-black text-primary-blue">
                                     {st.points}
@@ -1184,15 +1202,29 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
                                 </div>
 
                                 <div className="flex items-center justify-between gap-3">
-                                  <div className="flex-1 text-center">
-                                    <p className="text-sm font-black text-slate-900 uppercase italic">{teamA?.name || 'Time A'}</p>
+                                  <div className="flex-1 text-center flex flex-col items-center">
+                                    <div className="w-20 h-20 mb-1 flex items-center justify-center shrink-0">
+                                      {teamA?.logoUrl ? (
+                                        <img src={teamA.logoUrl} alt={teamA.name} className="w-full h-full object-contain filter drop-shadow-md" />
+                                      ) : (
+                                        <Shield className="w-12 h-12 text-slate-300" />
+                                      )}
+                                    </div>
+                                    <p className="text-sm font-black text-slate-900 uppercase italic line-clamp-1">{teamA?.name || 'Time A'}</p>
                                     <p className="text-2xl font-black text-primary-blue mt-1">{match.scoreA ?? '-'}</p>
                                   </div>
 
                                   <span className="text-xs font-black text-gray-300 italic">X</span>
 
-                                  <div className="flex-1 text-center">
-                                    <p className="text-sm font-black text-slate-900 uppercase italic">{teamB?.name || 'Time B'}</p>
+                                  <div className="flex-1 text-center flex flex-col items-center">
+                                    <div className="w-20 h-20 mb-1 flex items-center justify-center shrink-0">
+                                      {teamB?.logoUrl ? (
+                                        <img src={teamB.logoUrl} alt={teamB.name} className="w-full h-full object-contain filter drop-shadow-md" />
+                                      ) : (
+                                        <Shield className="w-12 h-12 text-slate-300" />
+                                      )}
+                                    </div>
+                                    <p className="text-sm font-black text-slate-900 uppercase italic line-clamp-1">{teamB?.name || 'Time B'}</p>
                                     <p className="text-2xl font-black text-primary-blue mt-1">{match.scoreB ?? '-'}</p>
                                   </div>
                                 </div>
@@ -1226,13 +1258,74 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {activeTournament.teams.map(team => (
                 <div key={team.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                    <h4 className="text-lg font-black uppercase italic text-slate-900">{team.name}</h4>
-                    {team.groupId && (
-                      <span className="text-[10px] font-black uppercase bg-amber-400 text-slate-950 px-2.5 py-1 rounded-md">
-                        Grupo {team.groupId}
-                      </span>
-                    )}
+                  <div className="flex items-center gap-3.5 border-b border-gray-100 pb-3">
+                    <div className="relative w-24 h-24 flex items-center justify-center shrink-0">
+                      {team.logoUrl ? (
+                        <img src={team.logoUrl} alt={team.name} className="w-full h-full object-contain filter drop-shadow-md" />
+                      ) : (
+                        <Shield className="w-14 h-14 text-slate-300" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <h4 className="text-lg font-black uppercase italic text-slate-900 truncate">{team.name}</h4>
+                        {team.groupId && (
+                          <span className="text-[10px] font-black uppercase bg-amber-400 text-slate-950 px-2 py-0.5 rounded-md shrink-0">
+                            Grupo {team.groupId}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Escudo actions */}
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <label className="cursor-pointer bg-slate-900 hover:bg-slate-800 text-white text-[9px] font-black uppercase px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all shadow-xs">
+                          <Upload className="w-3 h-3 text-amber-400" />
+                          {team.logoUrl ? 'Alterar' : 'Carregar Escudo'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file && activeTournament) {
+                                try {
+                                  const compressed = await compressFileToDataUrl(file, 200, 60);
+                                  const updatedTeams = activeTournament.teams.map(t => 
+                                    t.id === team.id ? { ...t, logoUrl: compressed } : t
+                                  );
+                                  await updateDoc(doc(db, 'tournaments', activeTournament.id), { teams: updatedTeams });
+                                } catch (err) {
+                                  alert("Erro ao processar imagem do escudo.");
+                                }
+                              }
+                            }}
+                          />
+                        </label>
+
+                        {team.logoUrl && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (confirm(`Deseja remover o escudo do time ${team.name}?`)) {
+                                const updatedTeams = activeTournament.teams.map(t => {
+                                  if (t.id === team.id) {
+                                    const { logoUrl, ...rest } = t;
+                                    return rest;
+                                  }
+                                  return t;
+                                });
+                                await updateDoc(doc(db, 'tournaments', activeTournament.id), { teams: updatedTeams });
+                              }
+                            }}
+                            className="bg-red-50 hover:bg-red-100 text-red-600 text-[9px] font-black uppercase px-2 py-1 rounded-lg flex items-center gap-1 transition-all"
+                            title="Excluir Escudo"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Excluir
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -1517,7 +1610,7 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
                                 updated[idx].groupId = e.target.value;
                                 setFormTeams(updated);
                               }}
-                              className="bg-amber-400 text-slate-950 font-black text-xs uppercase px-2 py-1.5 rounded-xl"
+                              className="bg-amber-400 text-slate-950 font-black text-xs uppercase px-2 py-1.5 rounded-xl shrink-0"
                             >
                               {Array.from({ length: groupsCount }).map((_, gIdx) => {
                                 const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -1530,6 +1623,63 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
                               })}
                             </select>
                           )}
+                        </div>
+
+                        {/* Escudo Management Block */}
+                        <div className="flex items-center gap-3 bg-white p-3 rounded-2xl border border-gray-200">
+                          <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
+                            {team.logoUrl ? (
+                              <img src={team.logoUrl} alt={team.name} className="w-full h-full object-contain filter drop-shadow-sm" />
+                            ) : (
+                              <Shield className="w-12 h-12 text-slate-300" />
+                            )}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block">
+                              Escudo do Time
+                            </span>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <label className="cursor-pointer bg-slate-900 hover:bg-slate-800 text-white text-[9px] font-black uppercase px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all shadow-xs">
+                                <Upload className="w-3 h-3 text-amber-400" />
+                                {team.logoUrl ? 'Alterar' : 'Carregar'}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      try {
+                                        const compressed = await compressFileToDataUrl(file, 200, 60);
+                                        const updated = [...formTeams];
+                                        updated[idx].logoUrl = compressed;
+                                        setFormTeams(updated);
+                                      } catch (err) {
+                                        alert("Erro ao processar imagem do escudo.");
+                                      }
+                                    }
+                                  }}
+                                />
+                              </label>
+
+                              {team.logoUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = [...formTeams];
+                                    updated[idx].logoUrl = undefined;
+                                    setFormTeams(updated);
+                                  }}
+                                  className="bg-red-50 hover:bg-red-100 text-red-600 text-[9px] font-black uppercase px-2 py-1 rounded-lg flex items-center gap-1 transition-all"
+                                  title="Excluir Escudo"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  Excluir
+                                </button>
+                              )}
+                            </div>
+                          </div>
                         </div>
 
                         {/* Player Selection button for team */}
@@ -1771,6 +1921,13 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
           </div>
         )}
       </AnimatePresence>
+
+      {/* Team Squad Tactical Pitch Modal */}
+      <TeamSquadModal
+        team={squadModalTeam}
+        players={locationPlayers}
+        onClose={() => setSquadModalTeam(null)}
+      />
     </div>
   );
 }
