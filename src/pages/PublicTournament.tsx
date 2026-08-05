@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../App';
+import { sortPlayersByPosition, getPositionLabel } from '../utils/playerUtils';
 import { cleanUndefinedFields } from '../utils/firestoreUtils';
 import { TeamSquadModal } from '../components/TeamSquadModal';
 
@@ -1050,22 +1051,27 @@ export default function PublicTournament({ adminData }: PublicTournamentProps) {
                       <p className="text-xs text-gray-400 italic py-2">Nenhum atleta atribuído a este elenco.</p>
                     ) : (
                       <ul className="space-y-1.5">
-                        {team.playerIds.map(pId => {
-                          const pl = getPlayer(pId);
-                          return (
-                            <li key={pId} className="text-xs font-bold text-slate-800 flex items-center justify-between bg-gray-50 px-3 py-2 rounded-xl">
+                        {(() => {
+                          const rawList: Player[] = team.playerIds
+                            .map(pId => getPlayer(pId) || { id: pId, name: pId, nickname: pId, position: '' as any, locationId: '', stats: { wins: 0, goals: 0, assists: 0, matches: 0, points: 0 } })
+                            .filter(Boolean);
+                          const sortedList = sortPlayersByPosition(rawList);
+                          return sortedList.map(pl => (
+                            <li key={pl.id} className="text-xs font-bold text-slate-800 flex items-center justify-between bg-gray-50 px-3 py-2 rounded-xl">
                               <div className="flex items-center gap-2">
-                                {pl?.photoUrl ? (
+                                {pl.photoUrl ? (
                                   <img src={pl.photoUrl} alt="" className="w-5 h-5 rounded-full object-cover" />
                                 ) : (
                                   <div className="w-2 h-2 rounded-full bg-primary-blue" />
                                 )}
-                                <span>{pl ? (pl.nickname || pl.name) : pId}</span>
+                                <span>{pl.nickname || pl.name}</span>
                               </div>
-                              <span className="text-[9px] uppercase font-bold text-gray-400">{pl?.position || 'Atleta'}</span>
+                              <span className="text-[9px] uppercase font-bold text-gray-500 bg-gray-200/60 px-2 py-0.5 rounded">
+                                {getPositionLabel(pl.position)}
+                              </span>
                             </li>
-                          );
-                        })}
+                          ));
+                        })()}
                       </ul>
                     )}
                   </div>

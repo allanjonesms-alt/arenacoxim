@@ -56,6 +56,7 @@ import { SoccerBall, SoccerCleat } from '../components/Icons';
 import { calculateMatchPoints } from '../utils/scoringEngine';
 import { compressFileToDataUrl } from '../utils/imageUtils';
 import { TeamSquadModal } from '../components/TeamSquadModal';
+import { sortPlayersByPosition, getPositionLabel } from '../utils/playerUtils';
 
 const DEFAULT_RULES: ScoringRules = {
   id: 'scoring',
@@ -1334,15 +1335,23 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
                       <p className="text-xs text-gray-400 italic">Nenhum atleta atribuído a este time.</p>
                     ) : (
                       <ul className="space-y-1">
-                        {team.playerIds.map(pId => {
-                          const pl = locationPlayers.find(p => p.id === pId);
-                          return (
-                            <li key={pId} className="text-xs font-bold text-slate-800 flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-xl">
-                              <span className="w-2 h-2 rounded-full bg-primary-blue" />
-                              {pl?.name || pId}
+                        {(() => {
+                          const rawList: Player[] = team.playerIds
+                            .map(pId => locationPlayers.find(p => p.id === pId) || { id: pId, name: pId, nickname: pId, position: '' as any, locationId: '', stats: { wins: 0, goals: 0, assists: 0, matches: 0, points: 0 } })
+                            .filter(Boolean);
+                          const sortedList = sortPlayersByPosition(rawList);
+                          return sortedList.map(pl => (
+                            <li key={pl.id} className="text-xs font-bold text-slate-800 flex items-center justify-between bg-gray-50 px-3 py-1.5 rounded-xl">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-primary-blue" />
+                                <span>{pl.nickname || pl.name}</span>
+                              </div>
+                              <span className="text-[9px] uppercase font-bold text-gray-500 bg-gray-200/60 px-2 py-0.5 rounded">
+                                {getPositionLabel(pl.position)}
+                              </span>
                             </li>
-                          );
-                        })}
+                          ));
+                        })()}
                       </ul>
                     )}
                   </div>
@@ -1872,39 +1881,44 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
                 />
 
                 <div className="space-y-1">
-                  {locationPlayers
-                    .filter(p => p.name.toLowerCase().includes(playerSearchTerm.toLowerCase()))
-                    .map(player => {
-                      const currentTeam = formTeams.find(t => t.id === selectingPlayersForTeamId);
-                      const isSelected = currentTeam?.playerIds.includes(player.id);
+                  {sortPlayersByPosition(
+                    locationPlayers.filter(p => p.name.toLowerCase().includes(playerSearchTerm.toLowerCase()) || p.nickname?.toLowerCase().includes(playerSearchTerm.toLowerCase()))
+                  ).map(player => {
+                    const currentTeam = formTeams.find(t => t.id === selectingPlayersForTeamId);
+                    const isSelected = currentTeam?.playerIds.includes(player.id);
 
-                      return (
-                        <div
-                          key={player.id}
-                          onClick={() => {
-                            if (!currentTeam) return;
-                            const updated = [...formTeams];
-                            const tIdx = updated.findIndex(t => t.id === selectingPlayersForTeamId);
-                            if (tIdx !== -1) {
-                              if (isSelected) {
-                                updated[tIdx].playerIds = updated[tIdx].playerIds.filter(id => id !== player.id);
-                              } else {
-                                updated[tIdx].playerIds.push(player.id);
-                              }
-                              setFormTeams(updated);
+                    return (
+                      <div
+                        key={player.id}
+                        onClick={() => {
+                          if (!currentTeam) return;
+                          const updated = [...formTeams];
+                          const tIdx = updated.findIndex(t => t.id === selectingPlayersForTeamId);
+                          if (tIdx !== -1) {
+                            if (isSelected) {
+                              updated[tIdx].playerIds = updated[tIdx].playerIds.filter(id => id !== player.id);
+                            } else {
+                              updated[tIdx].playerIds.push(player.id);
                             }
-                          }}
-                          className={`p-3 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
-                            isSelected
-                              ? 'bg-amber-400/10 border-amber-400 text-slate-900 font-black'
-                              : 'bg-white border-gray-100 hover:bg-gray-50 text-gray-700'
-                          }`}
-                        >
-                          <span className="text-xs font-bold uppercase">{player.name} ({player.position})</span>
-                          {isSelected && <Check className="w-4 h-4 text-amber-500 stroke-[3]" />}
+                            setFormTeams(updated);
+                          }
+                        }}
+                        className={`p-3 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-amber-400/10 border-amber-400 text-slate-900 font-black'
+                            : 'bg-white border-gray-100 hover:bg-gray-50 text-gray-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold uppercase">{player.nickname || player.name}</span>
+                          <span className="text-[9px] uppercase font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                            {getPositionLabel(player.position)}
+                          </span>
                         </div>
-                      );
-                    })}
+                        {isSelected && <Check className="w-4 h-4 text-amber-500 stroke-[3]" />}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

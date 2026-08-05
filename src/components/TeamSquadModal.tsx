@@ -5,6 +5,7 @@ import { SoccerJersey } from './SoccerJersey';
 import { db } from '../firebase';
 import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
+import { sortPlayersByPosition } from '../utils/playerUtils';
 
 interface TeamSquadModalProps {
   team: TournamentTeam | null;
@@ -50,9 +51,11 @@ export const TeamSquadModal: React.FC<TeamSquadModalProps> = ({
   fetchedPlayers.forEach(p => allPlayersMap.set(p.id, p));
 
   // Match team players from playerIds
-  const teamPlayers = team.playerIds
+  const rawTeamPlayers = team.playerIds
     .map(id => allPlayersMap.get(id))
     .filter(Boolean) as Player[];
+
+  const teamPlayers = sortPlayersByPosition(rawTeamPlayers);
 
   // Card resolution logic
   const resolvePlayerCard = (player: Player) => {

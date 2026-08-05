@@ -1,5 +1,41 @@
 import { Position, Player, Card } from '../types';
 
+export const getPositionLabel = (pos: Position | string) => {
+  switch (pos?.toLowerCase()) {
+    case 'goleiro': return 'Goleiro';
+    case 'zagueiro': return 'Zagueiro';
+    case 'lateral': return 'Lateral';
+    case 'meio-campo':
+    case 'meia': return 'Meia';
+    case 'centroavante':
+    case 'atacante': return 'Atacante';
+    default: return pos || 'Atleta';
+  }
+};
+
+export const POSITION_ORDER: Record<string, number> = {
+  'goleiro': 1,
+  'zagueiro': 2,
+  'lateral': 3,
+  'meio-campo': 4,
+  'meia': 4,
+  'centroavante': 5,
+  'atacante': 5
+};
+
+export const sortPlayersByPosition = <T extends { position?: string; name?: string; nickname?: string }>(players: T[]): T[] => {
+  return [...players].sort((a, b) => {
+    const posA = (a.position || '').toLowerCase().trim();
+    const posB = (b.position || '').toLowerCase().trim();
+    const orderA = POSITION_ORDER[posA] ?? 99;
+    const orderB = POSITION_ORDER[posB] ?? 99;
+    if (orderA !== orderB) return orderA - orderB;
+    const nameA = a.nickname || a.name || '';
+    const nameB = b.nickname || b.name || '';
+    return nameA.localeCompare(nameB, 'pt-BR');
+  });
+};
+
 export const getPositionAbbr = (pos: Position) => {
   switch (pos) {
     case 'goleiro': return 'GK';
