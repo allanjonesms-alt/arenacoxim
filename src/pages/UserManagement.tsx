@@ -35,6 +35,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { isDepositTransaction } from '../utils/bettingUtils';
 
 interface UserManagementProps {
   adminData?: AdminData | null;
@@ -727,9 +728,8 @@ export default function UserManagement({ adminData }: UserManagementProps) {
                       ) : (
                         <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                           {userTransactions.map((tx) => {
-                            const isDeposit = tx.type === 'deposit';
-                            const isAdjustment = tx.type === 'adjustment';
-                            const isAdd = isDeposit || (isAdjustment && tx.adjustType === 'add');
+                            const isDeposit = isDepositTransaction(tx);
+                            const isAdd = isDeposit;
 
                             return (
                               <div key={tx.id} className="bg-gray-50/80 p-3 rounded-2xl border border-gray-100 flex items-center justify-between text-xs">
@@ -741,7 +741,7 @@ export default function UserManagement({ adminData }: UserManagementProps) {
                                   </div>
                                   <div>
                                     <span className="font-black text-gray-800 block uppercase">
-                                      {isDeposit ? 'Depósito PIX' : tx.type === 'withdrawal' ? 'Saque PIX' : 'Ajuste Manual'}
+                                      {tx.isManual ? 'Ajuste Manual' : isDeposit ? 'Depósito PIX' : 'Saque PIX'}
                                     </span>
                                     <span className="text-[10px] font-bold text-gray-400">
                                       {tx.createdAt ? new Date(tx.createdAt).toLocaleString('pt-BR') : 'Data não informada'}
@@ -751,7 +751,7 @@ export default function UserManagement({ adminData }: UserManagementProps) {
 
                                 <div className="text-right">
                                   <span className={`font-black ${isAdd ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                    {isAdd ? '+' : '-'} R$ {(Number(tx.amount) || 0).toFixed(2)}
+                                    {isAdd ? '+' : '-'} R$ {(Math.abs(Number(tx.amount)) || 0).toFixed(2)}
                                   </span>
                                   <span className="block text-[9px] font-black uppercase text-gray-400">
                                     {tx.status === 'approved' ? 'Aprovado' : tx.status === 'pending' ? 'Pendente' : 'Rejeitado'}

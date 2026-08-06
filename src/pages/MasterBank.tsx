@@ -5,7 +5,7 @@ import { AdminData } from '../types';
 import { motion } from 'framer-motion';
 import { Wallet, CheckCircle2, XCircle, Clock, Search, ArrowLeft, History, Plus, Minus, UserCheck, X, AlertTriangle, Coins, Users, QrCode, Copy, Check } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { processPendingPaymentBets } from '../utils/bettingUtils';
+import { processPendingPaymentBets, isDepositTransaction } from '../utils/bettingUtils';
 
 interface MasterBankProps {
   adminData?: AdminData | null;
@@ -30,6 +30,12 @@ export default function MasterBank({ adminData }: MasterBankProps) {
   const [selectedWithdrawTx, setSelectedWithdrawTx] = useState<any | null>(null);
   const [isApprovingWithdraw, setIsApprovingWithdraw] = useState(false);
   const [copiedPix, setCopiedPix] = useState(false);
+
+  // Deposit approval & rejection modal states
+  const [approvingDepositTx, setApprovingDepositTx] = useState<any | null>(null);
+  const [isApprovingDeposit, setIsApprovingDeposit] = useState(false);
+  const [rejectingTx, setRejectingTx] = useState<any | null>(null);
+  const [isRejecting, setIsRejecting] = useState(false);
 
   const isMaster = adminData?.role === 'master';
 
@@ -71,42 +77,6 @@ export default function MasterBank({ adminData }: MasterBankProps) {
       unsubscribeUsers();
     };
   }, [isMaster, navigate]);
-
-  // Auto-correct mislabeled transactions for jquevedobosa@gmail.com
-  useEffect(() => {
-    if (transactions.length > 0) {
-      transactions.forEach((tx) => {
-        const emailMatch = (tx.userEmail || '').toLowerCase().trim() === 'jquevedobosa@gmail.com';
-        const nameMatch = (tx.userName || '').toLowerCase().includes('quevedo');
-        if ((emailMatch || nameMatch) && (tx.type === 'withdraw' || tx.type === 'withdrawal')) {
-          console.log("Auto-correcting transaction type for João Vitor (jquevedobosa@gmail.com) from withdrawal to deposit...");
-          updateDoc(doc(db, 'transactions', tx.id), {
-            type: 'deposit',
-            amount: Math.abs(Number(tx.amount) || 20)
-          }).catch(err => console.error("Error auto-correcting transaction type:", err));
-        }
-      });
-    }
-  }, [transactions]);
-
-  const handleToggleTxType = async (tx: any) => {
-    const isCurrentlyDeposit = tx.type === 'deposit';
-    const newType = isCurrentlyDeposit ? 'withdrawal' : 'deposit';
-    const newTypeLabel = isCurrentlyDeposit ? 'Saque' : 'Depósito PIX';
-
-    if (window.confirm(`Deseja alterar o tipo da transação de R$ ${tx.amount.toFixed(2)} (${tx.userName}) para "${newTypeLabel}"?`)) {
-      try {
-        await updateDoc(doc(db, 'transactions', tx.id), {
-          type: newType,
-          amount: Math.abs(Number(tx.amount) || 0)
-        });
-        alert(`Tipo da transação alterado para "${newTypeLabel}" com sucesso!`);
-      } catch (err: any) {
-        console.error("Erro ao alterar tipo:", err);
-        alert("Erro ao alterar tipo da transação.");
-      }
-    }
-  };
 
   const handleCopyPixKey = (key: string) => {
     if (!key) return;
@@ -154,69 +124,76 @@ export default function MasterBank({ adminData }: MasterBankProps) {
     }
   };
 
-  const handleApprove = async (transaction: any) => {
-    const isWithdraw = transaction.type === 'withdraw' || transaction.type === 'withdrawal';
-    if (isWithdraw) {
-      setSelectedWithdrawTx(transaction);
-      setCopiedPix(false);
-      return;
-    }
-
-    const isDeposit = transaction.type === 'deposit';
-    const actionLabel = isDeposit ? 'depósito' : 'transação';
-    if (window.confirm(`Aprovar ${actionLabel} de R$ ${transaction.amount.toFixed(2)} para ${transaction.userName}?`)) {
-      try {
-        await runTransaction(db, async (t) => {
-          const userRef = doc(db, 'users', transaction.userId);
-          const userSnap = await t.get(userRef);
-          
-          if (!userSnap.exists()) {
-            throw new Error("Usuário não encontrado!");
-          }
-          
-          const currentBalance = userSnap.data().balance || 0;
-          const newBalance = isDeposit 
-            ? currentBalance + transaction.amount 
-            : currentBalance - transaction.amount;
-          
-          t.update(userRef, { balance: newBalance });
-          
-          const txRef = doc(db, 'transactions', transaction.id);
-          t.update(txRef, { 
-            status: 'approved',
-            approvedAt: new Date().toISOString(),
-            approvedBy: adminData?.email
-          });
-        });
-
-        if (isDeposit) {
-          await processPendingPaymentBets(db, transaction.userId);
+  const executeDepositApproval = async (transaction: any) => {
+    if (!transaction) return;
+    setIsApprovingDeposit(true);
+    try {
+      await runTransaction(db, async (t) => {
+        const userRef = doc(db, 'users', transaction.userId);
+        const userSnap = await t.get(userRef);
+        
+        if (!userSnap.exists()) {
+          throw new Error("Usuário não encontrado!");
         }
+        
+        const currentBalance = userSnap.data().balance || 0;
+        const depositAmt = Math.abs(Number(transaction.amount)) || 0;
+        const newBalance = currentBalance + depositAmt;
+        
+        t.update(userRef, { balance: newBalance });
+        
+        const txRef = doc(db, 'transactions', transaction.id);
+        t.update(txRef, { 
+          status: 'approved',
+          approvedAt: new Date().toISOString(),
+          approvedBy: adminData?.email || 'Admin Master'
+        });
+      });
 
-        alert(`${isDeposit ? 'Depósito' : 'Transação'} aprovado e saldo atualizado!`);
-      } catch (error: any) {
-        console.error("Erro ao aprovar:", error);
-        alert(`Erro ao aprovar transação: ${error.message || 'Tente novamente.'}`);
-      }
+      await processPendingPaymentBets(db, transaction.userId);
+
+      alert(`Depósito de R$ ${(Math.abs(Number(transaction.amount)) || 0).toFixed(2)} aprovado e saldo creditado!`);
+      setApprovingDepositTx(null);
+    } catch (error: any) {
+      console.error("Erro ao aprovar depósito:", error);
+      alert(`Erro ao aprovar depósito: ${error.message || 'Tente novamente.'}`);
+    } finally {
+      setIsApprovingDeposit(false);
     }
   };
 
-  const handleReject = async (transaction: any) => {
-    const isDeposit = transaction.type === 'deposit';
-    const actionLabel = isDeposit ? 'depósito' : 'saque';
-    if (window.confirm(`Rejeitar este ${actionLabel}?`)) {
-      try {
-        await updateDoc(doc(db, 'transactions', transaction.id), {
-          status: 'rejected',
-          rejectedAt: new Date().toISOString(),
-          rejectedBy: adminData?.email
-        });
-        alert(`${isDeposit ? 'Depósito' : 'Saque'} rejeitado com sucesso!`);
-      } catch (error) {
-        console.error("Erro ao rejeitar:", error);
-        alert('Erro ao rejeitar transação. Tente novamente.');
-      }
+  const handleApprove = (transaction: any) => {
+    const isDeposit = isDepositTransaction(transaction);
+    if (!isDeposit) {
+      setSelectedWithdrawTx(transaction);
+      setCopiedPix(false);
+    } else {
+      setApprovingDepositTx(transaction);
     }
+  };
+
+  const executeReject = async (transaction: any) => {
+    if (!transaction) return;
+    setIsRejecting(true);
+    try {
+      await updateDoc(doc(db, 'transactions', transaction.id), {
+        status: 'rejected',
+        rejectedAt: new Date().toISOString(),
+        rejectedBy: adminData?.email || 'Admin Master'
+      });
+      const isDeposit = isDepositTransaction(transaction);
+      alert(`${isDeposit ? 'Depósito' : 'Saque'} rejeitado com sucesso!`);
+      setRejectingTx(null);
+    } catch (error: any) {
+      console.error("Erro ao rejeitar:", error);
+      alert(`Erro ao rejeitar transação: ${error.message || 'Tente novamente.'}`);
+    } finally {
+      setIsRejecting(false);
+    }
+  };
+
+  const handleReject = (transaction: any) => {
+    setRejectingTx(transaction);
   };
 
   const handleManualAdjustment = async (e: React.FormEvent) => {
@@ -559,68 +536,62 @@ export default function MasterBank({ adminData }: MasterBankProps) {
               </div>
             ) : (
               <div className="space-y-4 max-h-[650px] overflow-y-auto pr-1 text-slate-700">
-                {transactions.map((tx) => (
-                  <div key={tx.id} className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-100 hover:border-blue-200 transition-colors">
-                    <div className="flex items-center gap-4 w-full sm:w-auto">
-                      <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm flex-shrink-0">
-                        {tx.isManual ? (
-                          <Coins className="w-6 h-6 text-primary-yellow" />
-                        ) : tx.type === 'deposit' ? (
-                          <Wallet className="w-6 h-6 text-primary-blue" />
-                        ) : (
-                          <Wallet className="w-6 h-6 text-rose-500" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h4 className="font-black text-gray-800 uppercase text-xs sm:text-sm truncate">{tx.userName}</h4>
-                        <p className="text-[10px] sm:text-xs text-gray-400 font-bold truncate">{tx.userEmail}</p>
-                        
-                        {/* Transaction label/description */}
-                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                          <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                            tx.isManual 
-                              ? tx.type === 'deposit' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                              : tx.type === 'deposit' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
-                          }`}>
-                            {tx.isManual ? 'Ajuste Manual' : tx.type === 'deposit' ? 'Depósito PIX' : 'Saque'}
-                          </span>
-                          <span className="text-[10px] font-bold text-gray-400">
-                            {new Date(tx.createdAt).toLocaleString('pt-BR')}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleTxType(tx)}
-                            className="text-[9px] font-bold text-slate-400 hover:text-primary-blue underline cursor-pointer ml-1"
-                            title="Clique para corrigir o tipo entre Depósito e Saque"
-                          >
-                            Mudar p/ {tx.type === 'deposit' ? 'Saque' : 'Depósito'}
-                          </button>
+                {transactions.map((tx) => {
+                  const isDeposit = isDepositTransaction(tx);
+                  return (
+                    <div key={tx.id} className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-100 hover:border-blue-200 transition-colors">
+                      <div className="flex items-center gap-4 w-full sm:w-auto">
+                        <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm flex-shrink-0">
+                          {tx.isManual ? (
+                            <Coins className="w-6 h-6 text-primary-yellow" />
+                          ) : isDeposit ? (
+                            <Wallet className="w-6 h-6 text-primary-blue" />
+                          ) : (
+                            <Wallet className="w-6 h-6 text-rose-500" />
+                          )}
                         </div>
-
-                        {tx.note && (
-                          <p className="text-[11px] text-slate-500 font-semibold mt-1 bg-white/60 border border-slate-100 px-2 py-1 rounded-lg">
-                            {tx.note}
-                          </p>
-                        )}
-
-                        {(tx.type === 'withdraw' || tx.type === 'withdrawal') && tx.pixKey && (
-                          <div className="mt-1.5 text-xs font-medium text-slate-700 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-xl flex items-center justify-between gap-2 max-w-md">
-                            <span className="truncate">
-                              <span className="text-[9px] uppercase font-black tracking-wider text-amber-800 mr-1.5">PIX ({tx.pixKeyType || 'Chave'}):</span>
-                              <strong className="font-mono text-gray-900 select-all">{tx.pixKey}</strong>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-black text-gray-800 uppercase text-xs sm:text-sm truncate">{tx.userName}</h4>
+                          <p className="text-[10px] sm:text-xs text-gray-400 font-bold truncate">{tx.userEmail}</p>
+                          
+                          {/* Transaction label/description */}
+                          <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                              tx.isManual 
+                                ? isDeposit ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                                : isDeposit ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
+                            }`}>
+                              {tx.isManual ? 'Ajuste Manual' : isDeposit ? 'Depósito PIX' : 'Saque'}
+                            </span>
+                            <span className="text-[10px] font-bold text-gray-400">
+                              {new Date(tx.createdAt).toLocaleString('pt-BR')}
                             </span>
                           </div>
-                        )}
-                      </div>
-                    </div>
 
-                    <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-gray-250">
-                      <div className="text-left sm:text-right">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-0.5">Valor</p>
-                        <p className={`font-black text-base ${tx.type === 'deposit' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {tx.type === 'deposit' ? '+' : '-'} R$ {tx.amount.toFixed(2)}
-                        </p>
+                          {tx.note && (
+                            <p className="text-[11px] text-slate-500 font-semibold mt-1 bg-white/60 border border-slate-100 px-2 py-1 rounded-lg">
+                              {tx.note}
+                            </p>
+                          )}
+
+                          {!isDeposit && tx.pixKey && (
+                            <div className="mt-1.5 text-xs font-medium text-slate-700 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-xl flex items-center justify-between gap-2 max-w-md">
+                              <span className="truncate">
+                                <span className="text-[9px] uppercase font-black tracking-wider text-amber-800 mr-1.5">PIX ({tx.pixKeyType || 'Chave'}):</span>
+                                <strong className="font-mono text-gray-900 select-all">{tx.pixKey}</strong>
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
+
+                      <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-gray-250">
+                        <div className="text-left sm:text-right">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-0.5">Valor</p>
+                          <p className={`font-black text-base ${isDeposit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {isDeposit ? '+' : '-'} R$ {Math.abs(Number(tx.amount) || 0).toFixed(2)}
+                          </p>
+                        </div>
 
                       {tx.status === 'pending' ? (
                         <div className="flex gap-2">
@@ -647,8 +618,9 @@ export default function MasterBank({ adminData }: MasterBankProps) {
                         </div>
                       )}
                     </div>
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -784,6 +756,150 @@ export default function MasterBank({ adminData }: MasterBankProps) {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Aprovação de Depósito PIX */}
+      {approvingDepositTx && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-100 flex flex-col gap-5 relative overflow-hidden text-slate-800">
+            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-emerald-500 to-teal-500" />
+
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 shadow-xs">
+                  <Wallet className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black uppercase italic tracking-tight text-gray-900">
+                    Aprovar Depósito
+                  </h3>
+                  <p className="text-xs text-gray-500 font-bold">
+                    Confirme o crédito no saldo do usuário
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setApprovingDepositTx(null)}
+                className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-emerald-50/80 p-4 rounded-2xl border border-emerald-100 space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-black uppercase text-emerald-800">Solicitante:</span>
+                <span className="text-xs font-bold text-gray-900 truncate max-w-[200px]">{approvingDepositTx.userName || approvingDepositTx.userEmail}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-black uppercase text-emerald-800">Valor a Creditar:</span>
+                <span className="text-base font-black text-emerald-700">R$ {(Math.abs(Number(approvingDepositTx.amount)) || 0).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <p className="text-xs font-semibold text-gray-600 leading-relaxed">
+              Ao confirmar, o valor de <strong>R$ {(Math.abs(Number(approvingDepositTx.amount)) || 0).toFixed(2)}</strong> será adicionado instantaneamente ao saldo do usuário e apostas pendentes serão liberadas se aplicável.
+            </p>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setApprovingDepositTx(null)}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isApprovingDeposit}
+                onClick={() => executeDepositApproval(approvingDepositTx)}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black py-3 rounded-2xl text-xs uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isApprovingDeposit ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Confirmar e Creditar</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Rejeição de Transação */}
+      {rejectingTx && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-100 flex flex-col gap-5 relative overflow-hidden text-slate-800">
+            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-rose-500 to-red-600" />
+
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shadow-xs">
+                  <XCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black uppercase italic tracking-tight text-gray-900">
+                    Rejeitar Transação
+                  </h3>
+                  <p className="text-xs text-gray-500 font-bold">
+                    {isDepositTransaction(rejectingTx) ? 'Depósito PIX' : 'Saque PIX'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRejectingTx(null)}
+                className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-rose-50/80 p-4 rounded-2xl border border-rose-100 space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-black uppercase text-rose-800">Solicitante:</span>
+                <span className="text-xs font-bold text-gray-900 truncate max-w-[200px]">{rejectingTx.userName || rejectingTx.userEmail}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-black uppercase text-rose-800">Valor:</span>
+                <span className="text-base font-black text-rose-700">R$ {(Math.abs(Number(rejectingTx.amount)) || 0).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <p className="text-xs font-semibold text-gray-600 leading-relaxed">
+              Tem certeza que deseja <strong>REJEITAR</strong> esta solicitação de {isDepositTransaction(rejectingTx) ? 'depósito' : 'saque'}? Esta ação não pode ser desfeita.
+            </p>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setRejectingTx(null)}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isRejecting}
+                onClick={() => executeReject(rejectingTx)}
+                className="flex-1 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-black py-3 rounded-2xl text-xs uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isRejecting ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                ) : (
+                  <>
+                    <XCircle className="w-4 h-4" />
+                    <span>Confirmar Rejeição</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

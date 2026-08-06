@@ -1,6 +1,43 @@
 import { collection, query, where, getDocs, doc, runTransaction, writeBatch } from 'firebase/firestore';
 
 /**
+ * Intelligently determines if a transaction is a DEPOSIT / Credit
+ * based on explicit type, note/reason text, or manual adjustment parameters.
+ */
+export function isDepositTransaction(tx: any): boolean {
+  if (!tx) return false;
+
+  const rawType = (tx.type || '').toString().toLowerCase().trim();
+
+  // 1. Explicit deposit types
+  if (['deposit', 'deposito', 'credit', 'credito', 'add'].includes(rawType)) {
+    return true;
+  }
+
+  // 2. Check note / reason / description text for explicit deposit/credit keywords
+  const textContent = `${tx.note || ''} ${tx.reason || ''} ${tx.description || ''}`.toLowerCase();
+  
+  if (
+    textContent.includes('crédito') ||
+    textContent.includes('credito') ||
+    textContent.includes('depósito') ||
+    textContent.includes('deposito') ||
+    textContent.includes('bônus') ||
+    textContent.includes('bonus') ||
+    textContent.includes('adicionar')
+  ) {
+    return true;
+  }
+
+  // 3. For manual adjustments, if amount is positive and text does not indicate debit/saque
+  if (tx.isManual && Number(tx.amount) > 0 && !textContent.includes('débito') && !textContent.includes('debito') && !textContent.includes('saque')) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Checks if a user has bets in status 'pending_payment'.
  * If the user has sufficient balance now, it deducts the bet amounts
  * in chronological order and converts their status to 'pending' (approved & active).

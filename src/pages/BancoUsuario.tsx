@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { doc, getDoc, setDoc, collection, query, where, onSnapshot, addDoc } from 'firebase/firestore';
-import { processPendingPaymentBets } from '../utils/bettingUtils';
+import { processPendingPaymentBets, isDepositTransaction } from '../utils/bettingUtils';
 import { db } from '../firebase';
 import { PublicBettingMarkets } from '../components/PublicBettingMarkets';
 
@@ -491,42 +491,45 @@ export default function BancoUsuario({ user }: BancoUsuarioProps) {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {transactions.map((tx) => (
-                        <div key={tx.id} className="flex items-center justify-between border border-gray-50 rounded-2xl p-4 hover:bg-slate-50 transition-all bg-slate-50/30">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm">
-                              {tx.type === 'deposit' ? (
-                                <PlusCircle className="w-5 h-5 text-primary-blue" />
-                              ) : (
-                                <ArrowUpRight className="w-5 h-5 text-rose-500" />
-                              )}
+                      {transactions.map((tx) => {
+                        const isDeposit = isDepositTransaction(tx);
+                        return (
+                          <div key={tx.id} className="flex items-center justify-between border border-gray-50 rounded-2xl p-4 hover:bg-slate-50 transition-all bg-slate-50/30">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm">
+                                {isDeposit ? (
+                                  <PlusCircle className="w-5 h-5 text-primary-blue" />
+                                ) : (
+                                  <ArrowUpRight className="w-5 h-5 text-rose-500" />
+                                )}
+                              </div>
+                              <div>
+                                <span className="block text-xs font-black text-gray-800 uppercase tracking-tight">
+                                  {tx.note ? tx.note : (isDeposit ? 'Depósito PIX' : 'Saque Bancário')}
+                                </span>
+                                <span className="block text-[10px] text-gray-400 font-bold">
+                                  {new Date(tx.createdAt).toLocaleString('pt-BR')}
+                                </span>
+                              </div>
                             </div>
-                            <div>
-                              <span className="block text-xs font-black text-gray-800 uppercase tracking-tight">
-                                {tx.note ? tx.note : (tx.type === 'deposit' ? 'Depósito PIX' : 'Saque Bancário')}
-                              </span>
-                              <span className="block text-[10px] text-gray-400 font-bold">
-                                {new Date(tx.createdAt).toLocaleString('pt-BR')}
-                              </span>
-                            </div>
-                          </div>
 
-                          <div className="flex items-center gap-4">
-                            <div className="text-right">
-                              <span className="block text-xs font-black text-gray-800">
-                                {tx.type === 'deposit' ? '+' : '-'} R$ {tx.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </span>
-                              <span className={`inline-block text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md mt-1 ${
-                                tx.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                                tx.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
-                                'bg-rose-100 text-rose-700'
-                              }`}>
-                                {tx.status === 'pending' ? 'Pendente' : tx.status === 'approved' ? 'Aprovado' : 'Rejeitado'}
-                              </span>
+                            <div className="flex items-center gap-4">
+                              <div className="text-right">
+                                <span className={`block text-xs font-black ${isDeposit ? 'text-emerald-600' : 'text-gray-800'}`}>
+                                  {isDeposit ? '+' : '-'} R$ {Math.abs(Number(tx.amount) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </span>
+                                <span className={`inline-block text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md mt-1 ${
+                                  tx.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                  tx.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                                  'bg-rose-100 text-rose-700'
+                                }`}>
+                                  {tx.status === 'pending' ? 'Pendente' : tx.status === 'approved' ? 'Aprovado' : 'Rejeitado'}
+                                </span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
