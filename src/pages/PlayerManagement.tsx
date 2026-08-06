@@ -1203,10 +1203,10 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
                 </div>
 
                 {/* Stats aligned perfectly in its bottom slot */}
-                <div className="absolute left-0 right-0 bottom-[8%] h-[14%] z-10 flex justify-center items-center gap-[4px] px-1.5" style={{ color: fontColor }}>
-                  <div className="flex flex-col items-center justify-center flex-1">
-                    <span className="text-[5px] xs:text-[6px] sm:text-[7.5px] font-bold opacity-60 uppercase tracking-tight leading-none animate-none">JOGOS</span>
-                    <span className="text-[9.5px] xs:text-[10.5px] sm:text-[12px] font-black mt-1 leading-none">{player.stats.matches}</span>
+                <div className="absolute left-[10%] right-[10%] w-[80%] bottom-[8%] h-[14%] z-10 flex justify-center items-center gap-[2px] px-0.5" style={{ color: fontColor }}>
+                  <div className="flex flex-col items-center justify-center flex-1 min-w-0">
+                    <span className="text-[5px] xs:text-[6px] sm:text-[7px] font-bold opacity-60 uppercase tracking-tight leading-none animate-none">JOGOS</span>
+                    <span className="text-[9px] xs:text-[10px] sm:text-[11.5px] font-black mt-1 leading-none">{player.stats.matches}</span>
                   </div>
                   <div 
                     onClick={(e) => {
@@ -1214,22 +1214,22 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
                         startEditingSgtNunes(e, player);
                       }
                     }}
-                    className={`flex flex-col items-center justify-center flex-1 transition-all ${
+                    className={`flex flex-col items-center justify-center flex-1 min-w-0 transition-all ${
                       adminData?.role === 'master' || isSgtNunes(player) 
                         ? 'cursor-pointer hover:bg-amber-950/15 rounded p-0.5 outline outline-1 outline-dashed outline-amber-950/40' 
                         : ''
                     }`}
                     title={adminData?.role === 'master' || isSgtNunes(player) ? "Clique para editar Gols e Assistências" : undefined}
                   >
-                    <span className="text-[5px] xs:text-[6px] sm:text-[7.5px] font-bold opacity-60 uppercase tracking-tight leading-none animate-none flex items-center gap-0.5">
+                    <span className="text-[5px] xs:text-[6px] sm:text-[7px] font-bold opacity-60 uppercase tracking-tight leading-none animate-none flex items-center gap-0.5">
                       GOLS/AST
                       {(adminData?.role === 'master' || isSgtNunes(player)) && <span className="text-[6px]">✏️</span>}
                     </span>
-                    <span className="text-[9.5px] xs:text-[10.5px] sm:text-[12px] font-black mt-1 leading-none whitespace-nowrap">{player.stats.goals} / {player.stats.assists}</span>
+                    <span className="text-[9px] xs:text-[10px] sm:text-[11.5px] font-black mt-1 leading-none whitespace-nowrap">{player.stats.goals} / {player.stats.assists}</span>
                   </div>
-                  <div className="flex flex-col items-center justify-center flex-1">
-                    <span className="text-[5px] xs:text-[6px] sm:text-[7.5px] font-bold opacity-60 uppercase tracking-tight leading-none animate-none">MÉDIA</span>
-                    <div className="flex items-center gap-0.5 text-[9.5px] xs:text-[10.5px] sm:text-[12px] font-black mt-1 leading-none justify-center">
+                  <div className="flex flex-col items-center justify-center flex-1 min-w-0">
+                    <span className="text-[5px] xs:text-[6px] sm:text-[7px] font-bold opacity-60 uppercase tracking-tight leading-none animate-none">MÉDIA</span>
+                    <div className="flex items-center gap-0.5 text-[9px] xs:text-[10px] sm:text-[11.5px] font-black mt-1 leading-none justify-center">
                       <Star className="w-2.5 h-2.5 fill-current" />
                       <span>{((player.stats.points || 0) / (player.stats.matches || 1)).toFixed(1)}</span>
                     </div>

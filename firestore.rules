@@ -235,5 +235,9 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
+    match /saved_draws/{drawId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

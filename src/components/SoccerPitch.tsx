@@ -6,6 +6,7 @@ import { ptBR } from 'date-fns/locale';
 import { Share2, Loader2, User } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
+import robotMascotImg from '../assets/images/robot_mascot_1786030792868.jpg';
 
 interface SoccerPitchProps {
   teamA: string[];
@@ -41,6 +42,46 @@ export const SoccerPitch: React.FC<SoccerPitchProps> = ({
   const [isSharing, setIsSharing] = React.useState(false);
   const [localCards, setLocalCards] = React.useState<Card[]>([]);
   const [shareImageUrl, setShareImageUrl] = React.useState<string | null>(null);
+  const [transparentRobotUrl, setTransparentRobotUrl] = React.useState<string>('');
+
+  React.useEffect(() => {
+    // Process robot mascot image to remove white/light background
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = robotMascotImg;
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0);
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+
+          if (r > 215 && g > 215 && b > 215) {
+            const avg = (r + g + b) / 3;
+            if (avg > 240) {
+              data[i + 3] = 0;
+            } else {
+              const alpha = Math.max(0, 255 - (avg - 215) * 10);
+              data[i + 3] = Math.min(data[i + 3], alpha);
+            }
+          }
+        }
+        ctx.putImageData(imgData, 0, 0);
+        setTransparentRobotUrl(canvas.toDataURL('image/png'));
+      } catch (err) {
+        console.warn("Could not process transparent robot background:", err);
+      }
+    };
+  }, []);
 
   React.useEffect(() => {
     const qCards = query(collection(db, 'cards'), orderBy('createdAt', 'desc'));
@@ -218,95 +259,69 @@ export const SoccerPitch: React.FC<SoccerPitchProps> = ({
     if (!pitchRef.current) return;
     setIsSharing(true);
 
-    let originalCssRulesGetter: (() => CSSRuleList) | undefined = undefined;
-
     try {
-      // Temporary patch to prevent html2canvas from crashing on Tailwind CSS oklch/oklab color values
-      originalCssRulesGetter = Object.getOwnPropertyDescriptor(CSSStyleSheet.prototype, 'cssRules')?.get;
-      
-      if (originalCssRulesGetter) {
-        const proxyRule = (rule: any): any => {
-          const handler: ProxyHandler<any> = {
-            get(target, prop) {
-              if (prop === 'cssText') {
-                let text = target.cssText;
-                if (text && (text.includes('oklch') || text.includes('oklab'))) {
-                  text = text
-                    .replace(/oklch\([^)]+\)/gi, 'rgb(120, 120, 120)')
-                    .replace(/oklab\([^)]+\)/gi, 'rgb(120, 120, 120)');
-                }
-                return text;
-              }
-              if (prop === 'cssRules') {
-                try {
-                  const rules = target.cssRules;
-                  if (!rules) return rules;
-                  const proxiedRules = [];
-                  for (let i = 0; i < rules.length; i++) {
-                    proxiedRules.push(proxyRule(rules[i]));
-                  }
-                  return {
-                    length: proxiedRules.length,
-                    item: (index: number) => proxiedRules[index] || null,
-                    ...proxiedRules
-                  };
-                } catch {
-                  return [];
-                }
-              }
-              const val = target[prop];
-              if (typeof val === 'function') {
-                return val.bind(target);
-              }
-              return val;
-            }
-          };
-          return new Proxy(rule, handler);
-        };
+      let dataUrl = '';
 
-        Object.defineProperty(CSSStyleSheet.prototype, 'cssRules', {
-          get() {
-            try {
-              const rules = originalCssRulesGetter!.call(this);
-              const proxiedRules = [];
-              for (let i = 0; i < rules.length; i++) {
-                proxiedRules.push(proxyRule(rules[i]));
-              }
-              return {
-                length: proxiedRules.length,
-                item: (index: number) => proxiedRules[index] || null,
-                ...proxiedRules
-              } as unknown as CSSRuleList;
-            } catch (err) {
-              return [] as unknown as CSSRuleList;
+      try {
+        const { toJpeg } = await import('html-to-image');
+        
+        // First pass or direct generation with html-to-image
+        dataUrl = await toJpeg(pitchRef.current, {
+          quality: 0.95,
+          backgroundColor: '#1d4ed8',
+          pixelRatio: 2,
+          filter: (node) => {
+            if (node instanceof HTMLElement && (
+              node.getAttribute('data-html2canvas-ignore') === 'true' ||
+              node.getAttribute('data-ignore') === 'true'
+            )) {
+              return false;
             }
-          },
-          configurable: true
+            return true;
+          }
         });
+      } catch (primaryErr) {
+        console.warn("Primary html-to-image failed, attempting fallback:", primaryErr);
+
+        const html2canvas = (await import('html2canvas')).default;
+        const canvas = await html2canvas(pitchRef.current, {
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#1d4ed8',
+          scale: 2,
+          onclone: (clonedDoc) => {
+            // Remove or replace oklch / oklab in inline style attributes in cloned tree
+            const allElements = clonedDoc.querySelectorAll('*');
+            allElements.forEach((el) => {
+              const htmlEl = el as HTMLElement;
+              if (htmlEl.style && htmlEl.style.cssText) {
+                if (htmlEl.style.cssText.includes('oklch') || htmlEl.style.cssText.includes('oklab')) {
+                  htmlEl.style.cssText = htmlEl.style.cssText
+                    .replace(/oklch\([^)]+\)/gi, '#787878')
+                    .replace(/oklab\([^)]+\)/gi, '#787878');
+                }
+              }
+            });
+
+            // Remove or replace oklab / oklch in <style> tags
+            const styleTags = clonedDoc.querySelectorAll('style');
+            styleTags.forEach((styleTag) => {
+              if (styleTag.textContent && (styleTag.textContent.includes('oklch') || styleTag.textContent.includes('oklab'))) {
+                styleTag.textContent = styleTag.textContent
+                  .replace(/oklch\([^)]+\)/gi, '#787878')
+                  .replace(/oklab\([^)]+\)/gi, '#787878');
+              }
+            });
+          }
+        });
+        dataUrl = canvas.toDataURL('image/jpeg', 0.95);
       }
 
-      const html2canvas = (await import('html2canvas')).default;
-      
-      const canvas = await html2canvas(pitchRef.current, {
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#2e7d32', // green field color
-        scale: 2, // High resolution Quality
-      });
-
-      // Restore styleSheet rules parse behavior right away
-      if (originalCssRulesGetter) {
-        Object.defineProperty(CSSStyleSheet.prototype, 'cssRules', {
-          get: originalCssRulesGetter,
-          configurable: true
-        });
-        originalCssRulesGetter = undefined; // prevent restoring again in finally block
+      if (!dataUrl) {
+        throw new Error("Não foi possível gerar a URL da imagem.");
       }
 
-      // Retrieve JPEG DataURL
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-      
-      // Save block to trigger our beautiful fallback preview/download Modal
+      // Save block to trigger fallback preview/download Modal
       setShareImageUrl(dataUrl);
 
       // Check if mobile device
@@ -346,12 +361,6 @@ export const SoccerPitch: React.FC<SoccerPitchProps> = ({
       alert("Não foi possível gerar a imagem no momento.");
     } finally {
       setIsSharing(false);
-      if (originalCssRulesGetter) {
-        Object.defineProperty(CSSStyleSheet.prototype, 'cssRules', {
-          get: originalCssRulesGetter,
-          configurable: true
-        });
-      }
     }
   };
 
@@ -359,7 +368,10 @@ export const SoccerPitch: React.FC<SoccerPitchProps> = ({
     <>
       <div 
         ref={pitchRef}
-        className="relative aspect-[16/11] w-full bg-[#2e7d32] rounded-2xl md:rounded-3xl border-4 md:border-8 border-white/30 overflow-hidden shadow-2xl"
+        className="relative aspect-[16/11] w-full rounded-2xl md:rounded-3xl border-4 md:border-8 border-amber-400/90 overflow-hidden shadow-2xl"
+        style={{
+          background: 'linear-gradient(90deg, #1e3a8a 0%, #1d4ed8 50%, #eab308 50%, #ca8a04 100%)'
+        }}
       >
         {/* Share Button in the Top-Right Corner */}
         <button
@@ -377,11 +389,23 @@ export const SoccerPitch: React.FC<SoccerPitchProps> = ({
           <span className="hidden md:inline text-[10px] font-black uppercase tracking-wider text-white">Compartilhar</span>
         </button>
 
-        {/* Grass Pattern (Horizontal Stripes) */}
+        {/* Robot Mascot at Top Middle of the Field (Transparent cutout, +50% size) */}
+        <div className="absolute top-0.5 sm:top-1 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center">
+          <div className="relative w-14 h-18 sm:w-20 sm:h-26 md:w-28 md:h-36 flex items-center justify-center filter drop-shadow-[0_8px_16px_rgba(0,0,0,0.7)]">
+            <img 
+              src={transparentRobotUrl || robotMascotImg} 
+              alt="Mascote Robô ACS" 
+              className="w-full h-full object-contain"
+              crossOrigin="anonymous"
+            />
+          </div>
+        </div>
+
+        {/* Grass / Stripe Pattern Overlay */}
         <div 
-          className="absolute inset-0 opacity-10 pointer-events-none rounded-2xl md:rounded-3xl" 
+          className="absolute inset-0 opacity-15 pointer-events-none rounded-2xl md:rounded-3xl" 
           style={{
-            backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 30px, rgba(255,255,255,0.05) 30px, rgba(255,255,255,0.05) 60px)'
+            backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 30px, rgba(255,255,255,0.08) 30px, rgba(255,255,255,0.08) 60px)'
           }} 
         />
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../firebase';
-import { collection, onSnapshot, doc, setDoc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, getDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
 import { Player, Location, Position, AdminData, Card } from '../types';
 import { getPositionAbbr, getPositionColor } from '../utils/playerUtils';
 import { 
@@ -32,7 +32,9 @@ import {
   FastForward,
   Zap,
   Copy,
-  CheckCircle2
+  CheckCircle2,
+  History,
+  Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Link } from 'react-router-dom';
@@ -49,6 +51,17 @@ interface DraftTeam {
   players: Player[];
   totalOverall: number;
   avgOverall: number;
+}
+
+interface SavedDrawRecord {
+  id: string;
+  createdAt: string;
+  locationId: string;
+  locationName: string;
+  numTeams: number;
+  totalPlayers: number;
+  draftedTeams: DraftTeam[];
+  title?: string;
 }
 
 interface DefinedPot {
@@ -139,6 +152,119 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
 
   // Manual Swap state in results
   const [selectedForSwap, setSelectedForSwap] = useState<{ teamIdx: number; player: Player } | null>(null);
+
+  // Saved Draws History State
+  const [savedDrawsHistory, setSavedDrawsHistory] = useState<SavedDrawRecord[]>([]);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isSavingDraw, setIsSavingDraw] = useState(false);
+  const [drawSaveSuccess, setDrawSaveSuccess] = useState(false);
+  const [copiedDrawId, setCopiedDrawId] = useState<string | null>(null);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+
+  // Subscribe to Saved Draws History in Firestore
+  useEffect(() => {
+    const qDraws = query(collection(db, 'saved_draws'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(qDraws, (snap) => {
+      const list: SavedDrawRecord[] = snap.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      } as SavedDrawRecord));
+      setSavedDrawsHistory(list);
+    }, (err) => {
+      console.warn("saved_draws query error, falling back to unordered fetch:", err);
+      onSnapshot(collection(db, 'saved_draws'), (snap) => {
+        const list: SavedDrawRecord[] = snap.docs.map(docSnap => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        } as SavedDrawRecord)).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setSavedDrawsHistory(list);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.GET, 'saved_draws');
+      });
+    });
+    return () => unsub();
+  }, []);
+
+  // Save current draw to history in Firestore
+  const handleSaveDrawToHistory = async (teamsToSave?: DraftTeam[]) => {
+    const teams = teamsToSave || draftedTeams;
+    if (!teams || teams.length === 0) return;
+    setIsSavingDraw(true);
+    try {
+      const drawId = `draw_${Date.now()}`;
+      const locName = locations.find(l => l.id === selectedLocationId)?.name || (selectedLocationId === 'all' ? 'Todas as Sedes' : 'Arena Coxim');
+      const totalP = teams.reduce((acc, t) => acc + t.players.length, 0);
+      const newRecord: SavedDrawRecord = {
+        id: drawId,
+        createdAt: new Date().toISOString(),
+        locationId: selectedLocationId || 'all',
+        locationName: locName,
+        numTeams: teams.length,
+        totalPlayers: totalP,
+        draftedTeams: teams,
+        title: `Sorteio ${teams.length} Times (${totalP} Atletas)`
+      };
+      await setDoc(doc(db, 'saved_draws', drawId), newRecord);
+      setDrawSaveSuccess(true);
+      setTimeout(() => setDrawSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error("Erro ao salvar sorteio no histórico:", err);
+      handleFirestoreError(err, OperationType.WRITE, 'saved_draws');
+    } finally {
+      setIsSavingDraw(false);
+    }
+  };
+
+  // Delete saved draw from history
+  const handleDeleteSavedDraw = async (drawId: string) => {
+    if (!confirm('Tem certeza que deseja excluir este sorteio do histórico?')) return;
+    try {
+      await deleteDoc(doc(db, 'saved_draws', drawId));
+    } catch (err) {
+      console.error('Erro ao excluir sorteio do histórico:', err);
+      handleFirestoreError(err, OperationType.DELETE, `saved_draws/${drawId}`);
+    }
+  };
+
+  // Load a saved draw to view / print
+  const handleLoadDrawForPrinting = (record: SavedDrawRecord, autoPrint = false) => {
+    setDraftedTeams(record.draftedTeams);
+    setNumTeams(record.numTeams);
+    setIsDrawDone(true);
+    setIsFinalViewActive(true);
+    setIsAnimatedDrawActive(false);
+    setIsHistoryModalOpen(false);
+    if (record.locationId) {
+      setSelectedLocationId(record.locationId);
+    }
+
+    if (autoPrint) {
+      setTimeout(() => {
+        window.print();
+      }, 350);
+    }
+  };
+
+  // Copy saved draw team list formatted for WhatsApp
+  const handleCopySavedDrawWhatsApp = (record: SavedDrawRecord) => {
+    let text = `⚽ *ARENA COXIM - HISTÓRICO DE SORTEIO*\n`;
+    text += `📍 *Sede:* ${record.locationName}\n`;
+    text += `📅 *Data:* ${new Date(record.createdAt).toLocaleDateString('pt-BR')} às ${new Date(record.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}\n`;
+    text += `👥 *Total:* ${record.draftedTeams.length} Times (${record.totalPlayers} Atletas)\n\n`;
+
+    record.draftedTeams.forEach((t) => {
+      text += `⚽ *${t.name.toUpperCase()}* (${t.players.length} Atletas - Média: ${t.avgOverall})\n`;
+      t.players.forEach((p, idx) => {
+        text += `   ${idx + 1}. ${p.nickname || p.name} (${getPositionAbbr(p.position)})\n`;
+      });
+      text += `\n`;
+    });
+
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedDrawId(record.id);
+      setTimeout(() => setCopiedDrawId(null), 2500);
+    }).catch((e) => console.error(e));
+  };
 
   // Auto-hydrate pots from Firestore once allPlayers are loaded
   const [hasAutoLoadedPots, setHasAutoLoadedPots] = useState(false);
@@ -541,6 +667,9 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
     setIsDrawDone(true);
     setSelectedForSwap(null);
 
+    // Auto save generated draw to history
+    handleSaveDrawToHistory(finalTeams);
+
     // Open animated draw stage in waiting mode
     setCurrentStepIndex(-1);
     setIsAnimatedDrawActive(true);
@@ -583,12 +712,12 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
     const interval = setInterval(() => {
       if (candidates.length > 0) {
         const randomP = candidates[Math.floor(Math.random() * candidates.length)];
-        setShuffleName(randomP.name);
+        setShuffleName(randomP.nickname || randomP.name);
       }
       iterations++;
       if (iterations >= 10) {
         clearInterval(interval);
-        setShuffleName(targetStep.player.name);
+        setShuffleName(targetStep.player.nickname || targetStep.player.name);
         setIsShuffling(false);
       }
     }, 80);
@@ -614,7 +743,7 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
       const prevIdx = currentStepIndex - 1;
       setCurrentStepIndex(prevIdx);
       setIsShuffling(false);
-      setShuffleName(drawSequence[prevIdx].player.name);
+      setShuffleName(drawSequence[prevIdx].player.nickname || drawSequence[prevIdx].player.name);
     } else if (currentStepIndex === 0) {
       setCurrentStepIndex(-1);
       setIsShuffling(false);
@@ -738,20 +867,37 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
           </div>
         </div>
 
-        {/* Location Selector */}
-        <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-2xl border border-gray-100">
-          <MapPin className="w-4 h-4 text-emerald-600 shrink-0 ml-2" />
-          <select
-            value={selectedLocationId}
-            onChange={(e) => setSelectedLocationId(e.target.value)}
-            disabled={adminData?.role !== 'master' && !!adminData?.locationId}
-            className="bg-transparent font-bold text-xs uppercase text-gray-700 outline-none pr-3 py-1 cursor-pointer"
+        {/* Header Actions: History & Location */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setIsHistoryModalOpen(true)}
+            className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white font-black text-xs uppercase px-4 py-3 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 shrink-0"
           >
-            {adminData?.role === 'master' && <option value="all">Todas as Sedes</option>}
-            {locations.map(loc => (
-              <option key={loc.id} value={loc.id}>{loc.name}</option>
-            ))}
-          </select>
+            <History className="w-4 h-4 text-amber-300" />
+            Histórico de Sorteios
+            {savedDrawsHistory.length > 0 && (
+              <span className="bg-amber-400 text-slate-900 font-black text-[10px] px-2 py-0.5 rounded-full ml-0.5">
+                {savedDrawsHistory.length}
+              </span>
+            )}
+          </button>
+
+          {/* Location Selector */}
+          <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-2xl border border-gray-100">
+            <MapPin className="w-4 h-4 text-emerald-600 shrink-0 ml-2" />
+            <select
+              value={selectedLocationId}
+              onChange={(e) => setSelectedLocationId(e.target.value)}
+              disabled={adminData?.role !== 'master' && !!adminData?.locationId}
+              className="bg-transparent font-bold text-xs uppercase text-gray-700 outline-none pr-3 py-1 cursor-pointer"
+            >
+              {adminData?.role === 'master' && <option value="all">Todas as Sedes</option>}
+              {locations.map(loc => (
+                <option key={loc.id} value={loc.id}>{loc.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -924,7 +1070,7 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
                       <div className="flex items-center justify-between gap-2">
                         <div>
                           <p className="text-xs font-black uppercase text-gray-800 leading-tight">
-                            {p.name} {p.nickname ? `(${p.nickname})` : ''}
+                            {p.nickname || p.name}
                           </p>
                           <div className="flex items-center gap-1.5 mt-1">
                             <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${getPositionColor(p.position)}`}>
@@ -1059,7 +1205,7 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
                             key={p.id}
                             className="flex items-center gap-1 text-[10px] font-black uppercase bg-white border border-gray-200 text-gray-800 px-2 py-1 rounded-lg shadow-2xs group"
                           >
-                            <span>{p.name.split(' ')[0]}</span>
+                            <span>{p.nickname || p.name.split(' ')[0]}</span>
                             <button
                               type="button"
                               onClick={() => assignPlayerToPot(p, null)}
@@ -1101,6 +1247,20 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
+                    onClick={() => handleSaveDrawToHistory()}
+                    disabled={isSavingDraw}
+                    className={`px-3.5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition flex items-center gap-1.5 border shadow-2xs ${
+                      drawSaveSuccess
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600'
+                    }`}
+                  >
+                    {isSavingDraw ? <Loader2 className="w-4 h-4 animate-spin" /> : drawSaveSuccess ? <Check className="w-4 h-4 text-emerald-300" /> : <Save className="w-4 h-4" />}
+                    {drawSaveSuccess ? 'Salvo no Histórico!' : 'Salvar no Histórico'}
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setIsAnimatedDrawActive(true)}
                     className="px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-2xl text-xs font-black uppercase tracking-wider transition flex items-center gap-1.5"
                   >
@@ -1112,8 +1272,8 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
                     onClick={handleGeneratePDF}
                     className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white border border-emerald-500/30 rounded-2xl text-xs font-black uppercase tracking-wider transition flex items-center gap-2 shadow-sm active:scale-95"
                   >
-                    <FileText className="w-4 h-4 text-primary-yellow" />
-                    Gerar PDF dos Times
+                    <Printer className="w-4 h-4 text-primary-yellow" />
+                    Imprimir Sorteio (PDF)
                   </button>
 
                   <button
@@ -1129,7 +1289,7 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
               {selectedForSwap && (
                 <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-2xl text-xs font-bold flex items-center justify-between">
                   <span>
-                    Troca manual em andamento: Selecionado <strong>{selectedForSwap.player.name}</strong>. Clique em outro jogador para permutar.
+                    Troca manual em andamento: Selecionado <strong>{selectedForSwap.player.nickname || selectedForSwap.player.name}</strong>. Clique em outro jogador para permutar.
                   </span>
                   <button onClick={() => setSelectedForSwap(null)} className="text-amber-900 font-black underline ml-2">
                     Cancelar
@@ -1185,7 +1345,7 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
                                 </span>
                               )}
                               <span className="truncate">
-                                {p.name} {p.nickname ? `(${p.nickname})` : ''}
+                                {p.nickname || p.name}
                               </span>
                             </div>
                           </div>
@@ -1511,9 +1671,6 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
                                 <div className="font-black uppercase italic tracking-tighter text-sm sm:text-base leading-tight truncate drop-shadow-sm">
                                   {curPlayer.nickname || curPlayer.name}
                                 </div>
-                                <div className="text-[8px] sm:text-[9px] font-extrabold uppercase opacity-80 truncate">
-                                  {curPlayer.name}
-                                </div>
                               </div>
 
                               {/* Pot Tag at bottom */}
@@ -1706,7 +1863,7 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
                                 animate={{ opacity: 1, x: 0 }}
                                 className="flex items-center justify-between p-1.5 bg-slate-800/80 rounded-xl text-[11px] font-bold text-slate-200 border border-slate-700"
                               >
-                                <span className="truncate pr-1">{item.player.name}</span>
+                                <span className="truncate pr-1">{item.player.nickname || item.player.name}</span>
                                 <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded shrink-0 ${item.potBadgeBg} ${item.potBadgeText}`}>
                                   {item.potShort}
                                 </span>
@@ -1727,6 +1884,196 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
               </div>
             )}
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* HISTÓRICO DE SORTEIOS MODAL */}
+      <AnimatePresence>
+        {isHistoryModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-gray-100"
+            >
+              {/* Modal Header */}
+              <div className="bg-gradient-to-r from-slate-900 via-primary-blue to-slate-900 text-white p-6 flex items-center justify-between border-b border-gray-800 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-emerald-500/20 border border-emerald-500/40 rounded-2xl text-emerald-400">
+                    <History className="w-6 h-6 text-amber-300" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black uppercase italic tracking-tight text-white flex items-center gap-2">
+                      Histórico de Sorteios
+                      <span className="text-xs font-bold uppercase bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full not-italic">
+                        {savedDrawsHistory.length} Registros
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-300 font-semibold">
+                      Consulte, reimprima em PDF ou exporte sorteios realizados anteriormente
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsHistoryModalOpen(false)}
+                  className="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white transition-all active:scale-95"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 overflow-y-auto space-y-4 flex-1 bg-slate-50">
+                {savedDrawsHistory.length === 0 ? (
+                  <div className="text-center py-12 space-y-3 bg-white rounded-2xl border border-gray-200 p-8">
+                    <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
+                      <History className="w-8 h-8" />
+                    </div>
+                    <h3 className="font-black text-gray-800 text-base uppercase">Nenhum sorteio registrado no histórico</h3>
+                    <p className="text-xs text-gray-500 max-w-sm mx-auto font-medium">
+                      Assim que você realizar e concluir um sorteio de times, ele ficará automaticamente salvo aqui para reimpressão e consulta a qualquer momento.
+                    </p>
+                  </div>
+                ) : (
+                  savedDrawsHistory.map((item) => {
+                    const isExpanded = expandedHistoryId === item.id;
+                    const dateFormatted = new Date(item.createdAt).toLocaleDateString('pt-BR', {
+                      day: '2-digit', month: '2-digit', year: 'numeric',
+                      hour: '2-digit', minute: '2-digit'
+                    });
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-all overflow-hidden"
+                      >
+                        {/* Header Item */}
+                        <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="bg-emerald-100 text-emerald-800 font-black text-[10px] uppercase px-2.5 py-1 rounded-full flex items-center gap-1">
+                                <MapPin className="w-3 h-3" /> {item.locationName}
+                              </span>
+                              <span className="bg-blue-100 text-blue-800 font-black text-[10px] uppercase px-2.5 py-1 rounded-full flex items-center gap-1">
+                                <Calendar className="w-3 h-3" /> {dateFormatted}
+                              </span>
+                              <span className="bg-purple-100 text-purple-800 font-black text-[10px] uppercase px-2.5 py-1 rounded-full">
+                                {item.numTeams} Times ({item.totalPlayers} Atletas)
+                              </span>
+                            </div>
+                            <h3 className="text-base font-black text-slate-900 uppercase italic tracking-tight pt-1">
+                              {item.title || `Sorteio com ${item.numTeams} Equipes`}
+                            </h3>
+                          </div>
+
+                          {/* Quick Actions */}
+                          <div className="flex items-center gap-2 flex-wrap sm:shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleLoadDrawForPrinting(item, true)}
+                              className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs uppercase rounded-xl transition flex items-center gap-1.5 shadow-sm active:scale-95"
+                              title="Carregar e Abrir Impressão PDF"
+                            >
+                              <Printer className="w-3.5 h-3.5 text-primary-yellow" /> Reimprimir
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleCopySavedDrawWhatsApp(item)}
+                              className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-black text-xs uppercase rounded-xl transition flex items-center gap-1.5"
+                              title="Copiar lista dos times para WhatsApp"
+                            >
+                              {copiedDrawId === item.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                              {copiedDrawId === item.id ? 'Copiado!' : 'WhatsApp'}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setExpandedHistoryId(isExpanded ? null : item.id)}
+                              className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-black text-xs uppercase rounded-xl transition flex items-center gap-1"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> {isExpanded ? 'Ocultar' : 'Ver Times'}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSavedDraw(item.id)}
+                              className="p-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl transition active:scale-95 ml-1"
+                              title="Excluir este sorteio do histórico"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Expanded Teams Details */}
+                        {isExpanded && (
+                          <div className="border-t border-gray-100 bg-slate-50 p-4 sm:p-5 space-y-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {item.draftedTeams.map((team) => (
+                                <div key={team.id} className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs space-y-2">
+                                  <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                                    <span className="font-black text-xs uppercase italic text-slate-900 flex items-center gap-1.5">
+                                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                                      {team.name}
+                                    </span>
+                                    <span className="text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
+                                      {team.players.length} Atletas
+                                    </span>
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    {team.players.map((p, pIdx) => (
+                                      <div key={p.id} className="text-xs font-bold text-slate-700 flex items-center justify-between py-0.5 px-1 rounded hover:bg-slate-50">
+                                        <span className="truncate">
+                                          <span className="text-[10px] text-gray-400 font-semibold mr-1.5">#{pIdx + 1}</span>
+                                          {p.nickname || p.name}
+                                        </span>
+                                        <span className="text-[9px] font-black uppercase text-slate-400 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">
+                                          {getPositionAbbr(p.position)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="flex justify-end pt-2">
+                              <button
+                                type="button"
+                                onClick={() => handleLoadDrawForPrinting(item, false)}
+                                className="px-4 py-2 bg-primary-blue hover:bg-blue-900 text-white font-black text-xs uppercase rounded-xl transition flex items-center gap-2"
+                              >
+                                Carregar na Tela do Painel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="bg-white p-4 border-t border-gray-100 flex items-center justify-between shrink-0">
+                <span className="text-xs text-gray-400 font-bold uppercase">
+                  Arena Coxim • Sistema de Gestão
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsHistoryModalOpen(false)}
+                  className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-black text-xs uppercase rounded-xl transition"
+                >
+                  Fechar
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
@@ -1822,8 +2169,7 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
                           </span>
                         </td>
                         <td className="py-1.5 px-2.5 font-bold">
-                          {p.name}
-                          {p.nickname ? <span className="text-slate-400 text-[10px] ml-1">({p.nickname})</span> : ''}
+                          {p.nickname || p.name}
                         </td>
                       </tr>
                     );
