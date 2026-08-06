@@ -263,10 +263,10 @@ export const SoccerPitch: React.FC<SoccerPitchProps> = ({
       let dataUrl = '';
 
       try {
-        const { toJpeg } = await import('html-to-image');
+        const { toPng } = await import('html-to-image');
         
         // First pass or direct generation with html-to-image
-        dataUrl = await toJpeg(pitchRef.current, {
+        dataUrl = await toPng(pitchRef.current, {
           quality: 0.95,
           backgroundColor: '#1d4ed8',
           pixelRatio: 2,
@@ -314,7 +314,7 @@ export const SoccerPitch: React.FC<SoccerPitchProps> = ({
             });
           }
         });
-        dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        dataUrl = canvas.toDataURL('image/png');
       }
 
       if (!dataUrl) {
@@ -333,7 +333,7 @@ export const SoccerPitch: React.FC<SoccerPitchProps> = ({
         try {
           const response = await fetch(dataUrl);
           const blob = await response.blob();
-          const file = new File([blob], `campo_${matchDate || 'escalacao'}.jpg`, { type: 'image/jpeg' });
+          const file = new File([blob], `campo_${matchDate || 'escalacao'}.png`, { type: 'image/png' });
 
           if (navigator.canShare({ files: [file] })) {
             await navigator.share({
@@ -351,7 +351,7 @@ export const SoccerPitch: React.FC<SoccerPitchProps> = ({
 
       // Desktop Download action or Mobile Fallback
       const link = document.createElement('a');
-      link.download = `campo_${matchDate || 'escalacao'}.jpg`;
+      link.download = `campo_${matchDate || 'escalacao'}.png`;
       link.href = dataUrl;
       document.body.appendChild(link);
       link.click();
@@ -601,10 +601,10 @@ export const SoccerPitch: React.FC<SoccerPitchProps> = ({
             <div className="flex flex-col gap-2 w-full">
               <a 
                 href={shareImageUrl} 
-                download={`campo_${matchDate || 'escalacao'}.jpg`}
+                download={`campo_${matchDate || 'escalacao'}.png`}
                 className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black py-3 px-4 rounded-xl text-center text-xs md:text-sm uppercase tracking-wider transition-all active:scale-95 shadow-sm inline-flex items-center justify-center gap-2 cursor-pointer focus:outline-none"
               >
-                📥 Baixar Imagem (JPG)
+                📥 Baixar Imagem (PNG)
               </a>
 
               <button 

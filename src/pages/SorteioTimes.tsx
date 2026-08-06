@@ -185,24 +185,54 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
     return () => unsub();
   }, []);
 
+  // Helper to sanitize player object for lightweight Firestore history storage
+  const cleanPlayerForHistory = (p: Player): Player => {
+    const isBase64OrHuge = (str?: string) => str && (str.startsWith('data:') || str.length > 1000);
+    return {
+      id: p.id,
+      name: p.name || '',
+      nickname: p.nickname || '',
+      position: p.position || 'meio-campo',
+      locationId: p.locationId || '',
+      photoUrl: isBase64OrHuge(p.photoUrl) ? undefined : p.photoUrl,
+      cardBgUrl: isBase64OrHuge(p.cardBgUrl) ? undefined : p.cardBgUrl,
+      fontColor: p.fontColor,
+      overallValue: p.overallValue || 70,
+      stats: {
+        wins: p.stats?.wins || 0,
+        goals: p.stats?.goals || 0,
+        assists: p.stats?.assists || 0,
+        matches: p.stats?.matches || 0,
+        points: p.stats?.points || 0
+      }
+    };
+  };
+
   // Save current draw to history in Firestore
   const handleSaveDrawToHistory = async (teamsToSave?: DraftTeam[]) => {
-    const teams = teamsToSave || draftedTeams;
-    if (!teams || teams.length === 0) return;
+    const rawTeams = teamsToSave || draftedTeams;
+    if (!rawTeams || rawTeams.length === 0) return;
     setIsSavingDraw(true);
+
     try {
+      // Clean teams to remove massive base64 image strings from player objects
+      const sanitizedTeams: DraftTeam[] = rawTeams.map(t => ({
+        ...t,
+        players: t.players.map(cleanPlayerForHistory)
+      }));
+
       const drawId = `draw_${Date.now()}`;
       const locName = locations.find(l => l.id === selectedLocationId)?.name || (selectedLocationId === 'all' ? 'Todas as Sedes' : 'Arena Coxim');
-      const totalP = teams.reduce((acc, t) => acc + t.players.length, 0);
+      const totalP = sanitizedTeams.reduce((acc, t) => acc + t.players.length, 0);
       const newRecord: SavedDrawRecord = {
         id: drawId,
         createdAt: new Date().toISOString(),
         locationId: selectedLocationId || 'all',
         locationName: locName,
-        numTeams: teams.length,
+        numTeams: sanitizedTeams.length,
         totalPlayers: totalP,
-        draftedTeams: teams,
-        title: `Sorteio ${teams.length} Times (${totalP} Atletas)`
+        draftedTeams: sanitizedTeams,
+        title: `Sorteio ${sanitizedTeams.length} Times (${totalP} Atletas)`
       };
       await setDoc(doc(db, 'saved_draws', drawId), newRecord);
       setDrawSaveSuccess(true);
@@ -228,7 +258,24 @@ export default function SorteioTimes({ adminData, sharedLocations = [] }: Props)
 
   // Load a saved draw to view / print
   const handleLoadDrawForPrinting = (record: SavedDrawRecord, autoPrint = false) => {
-    setDraftedTeams(record.draftedTeams);
+    // Re-hydrate players from allPlayers if possible to restore photos and full attributes
+    const hydratedTeams: DraftTeam[] = record.draftedTeams.map(t => ({
+      ...t,
+      players: t.players.map(p => {
+        const fullPlayer = allPlayers.find(ap => ap.id === p.id);
+        if (fullPlayer) {
+          return {
+            ...fullPlayer,
+            ...p,
+            photoUrl: fullPlayer.photoUrl || p.photoUrl,
+            cardBgUrl: fullPlayer.cardBgUrl || p.cardBgUrl
+          };
+        }
+        return p;
+      })
+    }));
+
+    setDraftedTeams(hydratedTeams);
     setNumTeams(record.numTeams);
     setIsDrawDone(true);
     setIsFinalViewActive(true);
