@@ -9,7 +9,8 @@ export interface PlayerStats {
 }
 
 export interface OverallStats {
-  ratings?: { [adminId: string]: number }; // adminId -> rating (50-100)
+  ratings?: { [adminId: string]: number }; // adminId or monthly_YYYY-MM -> rating (50-100)
+  monthlyEvaluations?: { [month: string]: { score: number; date: string } };
 }
 
 export interface Player {

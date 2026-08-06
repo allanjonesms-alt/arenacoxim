@@ -307,10 +307,13 @@ export default function App() {
         lastLogin: new Date().toISOString()
       }, { merge: true }).catch(e => console.warn("Background user sync warning:", e));
 
+      // Unblock UI loading immediately so home page renders without waiting for network admin queries
+      setLoading(false);
+
       const isMaster = currentUser.email?.toLowerCase() === MASTER_EMAIL;
       
       if (isMaster) {
-        // Fast path for master admin: unblock loading immediately
+        // Fast path for master admin
         const masterData: AdminData = {
           name: currentUser.displayName || 'Master Admin',
           email: currentUser.email || MASTER_EMAIL,
@@ -320,7 +323,6 @@ export default function App() {
         };
         setIsAdmin(true);
         setAdminData(masterData);
-        setLoading(false);
 
         // Background update master document in admins collection
         const adminRef = doc(db, 'admins', currentUser.uid);
@@ -332,7 +334,7 @@ export default function App() {
         return;
       }
 
-      // Check admin status for standard users
+      // Check admin status in background for standard users (non-blocking)
       try {
         const adminRef = doc(db, 'admins', currentUser.uid);
         const adminDoc = await getDoc(adminRef);
@@ -341,11 +343,10 @@ export default function App() {
           const data = adminDoc.data() as AdminData;
           setIsAdmin(true);
           setAdminData(data);
-          setLoading(false);
           return;
         }
 
-        // If not found by UID, check by email in background/fast fallback
+        // If not found by UID, check by email in background
         if (currentUser.email) {
           const normalizedEmail = currentUser.email.toLowerCase().trim();
           const adminsQuery = query(
@@ -360,7 +361,6 @@ export default function App() {
             const updatedData = { ...docData, email: normalizedEmail, updatedAt: Date.now() };
             setIsAdmin(true);
             setAdminData(updatedData);
-            setLoading(false);
 
             // Migrate to UID doc in background
             setDoc(adminRef, updatedData).then(() => {
@@ -378,8 +378,6 @@ export default function App() {
         console.warn("Admin check fallback:", error);
         setIsAdmin(false);
         setAdminData(null);
-      } finally {
-        setLoading(false);
       }
     });
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {

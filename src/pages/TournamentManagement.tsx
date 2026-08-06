@@ -56,7 +56,7 @@ import { SoccerBall, SoccerCleat } from '../components/Icons';
 import { calculateMatchPoints } from '../utils/scoringEngine';
 import { compressFileToDataUrl } from '../utils/imageUtils';
 import { TeamSquadModal } from '../components/TeamSquadModal';
-import { sortPlayersByPosition, getPositionLabel } from '../utils/playerUtils';
+import { sortPlayersByPosition, getPositionLabel, formatDateBR } from '../utils/playerUtils';
 
 const DEFAULT_RULES: ScoringRules = {
   id: 'scoring',
@@ -1042,7 +1042,7 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
                             {match.roundName || 'Playoff'}
                           </span>
                           <span className="text-[10px] font-bold text-gray-400">
-                            {match.date} às {match.time}
+                            {formatDateBR(match.date)} às {match.time}
                           </span>
                         </div>
 
@@ -1233,7 +1233,7 @@ export default function TournamentManagement({ adminData, initialLocationId }: T
                                 <div className="flex items-center justify-between border-t border-gray-100 pt-2">
                                   <span className="text-xs text-slate-900 font-black flex items-center gap-1">
                                     <Calendar className="w-3.5 h-3.5 text-primary-blue" />
-                                    {match.date ? `${match.date} às ` : ''}{match.time || 'A definir'}
+                                    {match.date ? `${formatDateBR(match.date)} às ` : ''}{match.time || 'A definir'}
                                   </span>
                                   <button
                                     onClick={() => handleOpenMatchEditor(match)}

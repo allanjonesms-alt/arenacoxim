@@ -82,7 +82,11 @@ export default function Resenha({ locations }: ResenhaProps) {
   const isSgtNunes = (p: Player) => {
     const nicknameClean = (p.nickname || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     const nameClean = (p.name || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-    return nicknameClean.includes('SGTNUNES') || nameClean.includes('SGTNUNES');
+    return (
+      nicknameClean.includes('SGTNUNES') || nameClean.includes('SGTNUNES') ||
+      nicknameClean.includes('JONES') || nameClean.includes('JONES') ||
+      nicknameClean.includes('ALLAN') || nameClean.includes('ALLAN')
+    );
   };
 
   const topScorers = [...filteredPlayers]

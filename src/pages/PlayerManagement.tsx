@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
-import { collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, query, where, orderBy, limit, getDocs, writeBatch } from 'firebase/firestore';
 import { Player, Position, Location, OverallStats, AdminData, Match, ScoringRules, Card, MonthlyAward } from '../types';
 import { getPositionAbbr, getPositionColor } from '../utils/playerUtils';
-import { Users, UserPlus, Trash2, Edit2, Shield, Sword, ShieldAlert, Search, X, MapPin, Zap, Heart, Dumbbell, Target, Move, Share2, BarChart3, User, Star, ShieldCheck, CheckCircle2, Coins } from 'lucide-react';
+import { Users, UserPlus, Trash2, Edit2, Shield, Sword, ShieldAlert, Search, X, MapPin, Zap, Heart, Dumbbell, Target, Move, Share2, BarChart3, User, Star, ShieldCheck, CheckCircle2, Coins, Calendar, Award, FileText, ChevronRight, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../App';
-import { calculateGrade, calculateAverage, valueToLetter, letterToValue, getGradeColor } from '../utils/gradeUtils';
+import { calculateGrade, calculateAverage, calculateAdminOnlyAverage, valueToLetter, letterToValue, getGradeColor } from '../utils/gradeUtils';
 import { Link } from 'react-router-dom';
 import { calculateMatchPoints } from '../utils/scoringEngine';
 import { format } from 'date-fns';
@@ -50,7 +50,11 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
   const isSgtNunes = (p: { name?: string; nickname?: string }) => {
     const nicknameClean = (p.nickname || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     const nameClean = (p.name || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-    return nicknameClean.includes('SGTNUNES') || nameClean.includes('SGTNUNES');
+    return (
+      nicknameClean.includes('SGTNUNES') || nameClean.includes('SGTNUNES') ||
+      nicknameClean.includes('JONES') || nameClean.includes('JONES') ||
+      nicknameClean.includes('ALLAN') || nameClean.includes('ALLAN')
+    );
   };
 
   const startEditingSgtNunes = (e: React.MouseEvent, p: Player) => {
@@ -63,10 +67,10 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
   const handleSaveSgtNunesStats = async (player: Player) => {
     setIsSavingSgtNunes(true);
     try {
-      const oldGoalPts = (player.stats?.goals || 0) * (scoringRules?.goal ?? 3);
-      const oldAssistPts = (player.stats?.assists || 0) * (scoringRules?.assist ?? 2);
+      const oldGoalPts = (player.stats?.goals || 0) * (scoringRules?.goal ?? 5);
+      const oldAssistPts = (player.stats?.assists || 0) * (scoringRules?.assist ?? 3);
       const otherPoints = Math.max(0, (player.stats?.points || 0) - oldGoalPts - oldAssistPts);
-      const newPoints = otherPoints + (sgtNunesGoals * (scoringRules?.goal ?? 3)) + (sgtNunesAssists * (scoringRules?.assist ?? 2));
+      const newPoints = otherPoints + (sgtNunesGoals * (scoringRules?.goal ?? 5)) + (sgtNunesAssists * (scoringRules?.assist ?? 3));
 
       const avgPoints = newPoints / (player.stats?.matches || 1);
       const { grade } = calculateGrade(player.overallStats || {}, avgPoints);
@@ -80,7 +84,7 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
       });
       setSgtNunesEditingId(null);
     } catch (err) {
-      console.error("Erro ao salvar estatísticas do SGT NUNES:", err);
+      console.error("Erro ao salvar estatísticas do atleta:", err);
       alert("Erro ao salvar as estatísticas.");
     } finally {
       setIsSavingSgtNunes(false);
@@ -109,6 +113,96 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
   const [overallStats, setOverallStats] = useState<OverallStats>({
     ratings: {}
   });
+
+  const [isEvaluateOverallModalOpen, setIsEvaluateOverallModalOpen] = useState(false);
+  const [evaluatingMonth, setEvaluatingMonth] = useState(() => new Date().toISOString().substring(0, 7));
+  const [isEvaluatingBatch, setIsEvaluatingBatch] = useState(false);
+  const [overallModalTab, setOverallModalTab] = useState<'rating' | 'report'>('rating');
+
+  const handleConfirmBatchEvaluateOverall = async () => {
+    if (!evaluatingMonth) {
+      alert("Selecione um mês válido.");
+      return;
+    }
+    setIsEvaluatingBatch(true);
+    try {
+      const targetPlayers = players.filter(p => {
+        if (adminData && adminData.role !== 'master' && adminData.locationId) {
+          return p.locationId === adminData.locationId;
+        }
+        if (selectedLocationId !== 'all') {
+          return p.locationId === selectedLocationId;
+        }
+        return true;
+      });
+
+      if (targetPlayers.length === 0) {
+        alert("Nenhum atleta encontrado no local selecionado para avaliação.");
+        setIsEvaluatingBatch(false);
+        return;
+      }
+
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < targetPlayers.length; i += CHUNK_SIZE) {
+        const batch = writeBatch(db);
+        const chunk = targetPlayers.slice(i, i + CHUNK_SIZE);
+
+        for (const p of chunk) {
+          const avgPts = (p.stats?.points || 0) / (p.stats?.matches || 1);
+          const currentOverallScore = p.overallValue || parseInt(calculateGrade(p.overallStats, avgPts).grade) || 75;
+
+          const updatedRatings = {
+            ...(p.overallStats?.ratings || {}),
+            [`monthly_${evaluatingMonth}`]: currentOverallScore
+          };
+
+          const updatedMonthlyEvaluations = {
+            ...(p.overallStats?.monthlyEvaluations || {}),
+            [evaluatingMonth]: {
+              score: currentOverallScore,
+              date: new Date().toISOString()
+            }
+          };
+
+          const { grade: newGrade } = calculateGrade({ ratings: updatedRatings }, avgPts);
+          let newOverallValue = parseInt(newGrade) || 75;
+
+          let cardUsed = availableCards.find(c => c.imageUrl === p.cardBgUrl) || availableCards.find(c => c.isDefault);
+          if (cardUsed && cardUsed.expirationDate) {
+            const todayStr = new Date().toISOString().split('T')[0];
+            if (cardUsed.expirationDate < todayStr) {
+              cardUsed = availableCards.find(c => c.name.toUpperCase() === 'GERAL') || availableCards.find(c => c.isDefault);
+            }
+          }
+          const isArtilheiro = cardUsed?.name?.toUpperCase()?.includes('ARTILHEIRO');
+          const cardBonus = isArtilheiro ? 5 : (cardUsed?.increaseOverall || 0);
+          const awardsBonus = monthlyAwards.filter(a => a.playerId === p.id).length;
+
+          newOverallValue = Math.min(105, newOverallValue + cardBonus + awardsBonus);
+
+          const playerRef = doc(db, 'players', p.id);
+          batch.update(playerRef, {
+            overallValue: newOverallValue,
+            overallStats: {
+              ...(p.overallStats || {}),
+              ratings: updatedRatings,
+              monthlyEvaluations: updatedMonthlyEvaluations
+            }
+          });
+        }
+
+        await batch.commit();
+      }
+
+      alert(`Avaliação de overall para o mês ${evaluatingMonth} concluída com sucesso para ${targetPlayers.length} atletas!`);
+      setIsEvaluateOverallModalOpen(false);
+    } catch (err) {
+      console.error("Erro na avaliação em massa de overall:", err);
+      alert("Erro ao realizar a avaliação em massa de overall.");
+    } finally {
+      setIsEvaluatingBatch(false);
+    }
+  };
 
   const checkDuplicate = (nameToCheck: string, locId: string) => {
     if (!nameToCheck || !locId) {
@@ -171,6 +265,29 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
       unsubscribePlayers();
     };
   }, [adminData, playerLimit]);
+
+  // Auto-correct JONES / SGT NUNES goals to 5 if currently set to 4
+  useEffect(() => {
+    if (players.length > 0) {
+      const jonesPlayer = players.find(p => isSgtNunes(p));
+      if (jonesPlayer && jonesPlayer.stats?.goals === 4) {
+        console.log("Auto-correcting JONES goals from 4 to 5 in Firestore...");
+        const goalPts = (scoringRules?.goal ?? 5);
+        const oldGoalPts = 4 * goalPts;
+        const newGoalPts = 5 * goalPts;
+        const pointDiff = newGoalPts - oldGoalPts;
+        const newPoints = (jonesPlayer.stats?.points || 0) + pointDiff;
+        const avgPoints = newPoints / (jonesPlayer.stats?.matches || 1);
+        const { grade } = calculateGrade(jonesPlayer.overallStats || {}, avgPoints);
+
+        updateDoc(doc(db, 'players', jonesPlayer.id), {
+          'stats.goals': 5,
+          'stats.points': newPoints,
+          'overallValue': parseInt(grade) || 75
+        }).catch(err => console.error("Error auto-correcting Jones goals:", err));
+      }
+    }
+  }, [players, scoringRules]);
 
   useEffect(() => {
     if (adminData && adminData.role !== 'master' && adminData.locationId) {
@@ -502,6 +619,7 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
     const currentAdminId = auth.currentUser?.uid || 'unknown';
     const currentRating = overallStats.ratings?.[currentAdminId] || 75;
     const averageRating = calculateAverage(overallStats);
+    const adminOnlyAvg = calculateAdminOnlyAverage(overallStats);
     const avgPoints = editingPlayer ? (editingPlayer.stats.points / (editingPlayer.stats.matches || 1)) : 0;
     
     // Calculate bonus
@@ -522,7 +640,29 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
     const grade = Math.min(105, finalOverallScore).toString().padStart(2, '0');
     const color = getGradeColor(parseInt(grade, 10));
     
-    const adminCount = Object.keys(overallStats.ratings || {}).length;
+    const adminCountOnly = Object.keys(overallStats.ratings || {}).filter(k => !k.startsWith('monthly_')).length;
+
+    // Monthly awards for editingPlayer (+1 bonus history)
+    const playerAwards = editingPlayer ? monthlyAwards.filter(a => a.playerId === editingPlayer.id) : [];
+
+    // Monthly fixed scores (from AVALIAR OVERALL)
+    const monthlyFixedScores: { month: string; score: number; date?: string }[] = [];
+    if (overallStats.monthlyEvaluations) {
+      Object.entries(overallStats.monthlyEvaluations).forEach(([m, data]) => {
+        monthlyFixedScores.push({ month: m, score: data.score, date: data.date });
+      });
+    }
+    if (overallStats.ratings) {
+      Object.entries(overallStats.ratings).forEach(([key, val]) => {
+        if (key.startsWith('monthly_')) {
+          const m = key.replace('monthly_', '');
+          if (!monthlyFixedScores.some(item => item.month === m)) {
+            monthlyFixedScores.push({ month: m, score: val });
+          }
+        }
+      });
+    }
+    monthlyFixedScores.sort((a, b) => b.month.localeCompare(a.month));
 
     const handleConfirmNota = async () => {
       if (editingPlayer) {
@@ -576,88 +716,218 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh] border border-gray-100"
+          className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-gray-100 z-10"
         >
-          <div className="p-8 md:p-10 overflow-y-auto">
-            <div className="flex items-center justify-between mb-10">
+          <div className="p-6 md:p-8 overflow-y-auto">
+            {/* Header with grade */}
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
               <div>
-                <h3 className="text-2xl font-black uppercase italic tracking-tighter text-primary-blue">Habilidade</h3>
-                <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mt-1">Média de {adminCount} {adminCount === 1 ? 'Admin' : 'Admins'} {bonus > 0 && `(Bonus Card: +${bonus})`}</p>
+                <h3 className="text-2xl font-black uppercase italic tracking-tighter text-primary-blue">
+                  {editingPlayer?.name || 'Atleta'}
+                </h3>
+                <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mt-0.5">
+                  Extrato e Avaliação de Overall
+                </p>
               </div>
               <div className="flex flex-col items-end">
-                <div className={`text-5xl md:text-6xl font-black italic ${color} drop-shadow-sm`}>
+                <div className={`text-4xl md:text-5xl font-black italic ${color} drop-shadow-sm`}>
                   {grade}
                 </div>
-                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Nível Global: {averageRating.toFixed(1)}</div>
+                <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-0.5">
+                  Overall Atual
+                </div>
               </div>
             </div>
 
-            <div className="space-y-10 py-4">
+            {/* Navigation Tabs */}
+            <div className="flex bg-gray-100 p-1 rounded-2xl mb-6">
+              <button 
+                onClick={() => setOverallModalTab('rating')}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${overallModalTab === 'rating' ? 'bg-white text-primary-blue shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                <Star className="w-4 h-4 text-amber-400" />
+                <span>Avaliar</span>
+              </button>
+              <button 
+                onClick={() => setOverallModalTab('report')}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${overallModalTab === 'report' ? 'bg-white text-primary-blue shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                <FileText className="w-4 h-4 text-primary-blue" />
+                <span>Extrato / Relatório</span>
+              </button>
+            </div>
+
+            {overallModalTab === 'rating' ? (
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 text-[11px] uppercase font-black text-primary-blue tracking-widest italic">
-                    <Star className="w-4 h-4 text-primary-yellow fill-current" />
-                    Sua Nota
-                  </div>
-                  <span className={`text-2xl font-black ${getGradeColor(valueToLetter(currentRating !== undefined ? currentRating : 75))} bg-gray-50 px-4 py-1 rounded-xl shadow-sm border border-gray-100`}>
-                    {currentRating !== undefined ? currentRating : '--'}
-                  </span>
-                </div>
-                
-                <div className="relative pt-2">
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="100" 
-                    step="1"
-                    value={currentRating !== undefined ? currentRating : 75}
-                    onChange={(e) => {
-                      const newValue = parseInt(e.target.value);
-                      const newRatings = { ...(overallStats.ratings || {}), [currentAdminId]: newValue };
-                      setOverallStats({ ratings: newRatings });
-                    }}
-                    className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-primary-blue"
-                  />
-                  <div className="flex justify-between mt-4 px-1">
-                    <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Base (00)</span>
-                    <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Elite (100)</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 rounded-[2rem] p-8 border border-gray-100 shadow-inner">
-                <div className="mb-6 text-center">
-                  <h4 className="text-[10px] font-black uppercase text-gray-400 tracking-widest italic">Cálculo de Overall</h4>
-                  <p className="text-[9px] text-gray-400 mt-1 font-bold">Média das Notas + (Média Pontos × 0.4) + Bonus Card • Limite: 105</p>
-                </div>
-                <div className="grid grid-cols-5 gap-3">
-                  {[
-                    { l: '90', r: 'Elite', c: 'text-yellow-500' },
-                    { l: '80', r: 'Bom', c: 'text-emerald-500' },
-                    { l: '70', r: 'Médio', c: 'text-blue-500' },
-                    { l: '60', r: 'Abaixo', c: 'text-orange-500' },
-                    { l: '00', r: 'Novo', c: 'text-red-500' }
-                  ].map((item) => (
-                    <div key={item.l} className="text-center group">
-                      <div className={`text-xl font-black ${item.c} group-hover:scale-125 transition-transform`}>{item.l}+</div>
-                      <div className="text-[8px] text-gray-400 font-black mt-2 uppercase tracking-tighter">{item.r}</div>
+                <div className="space-y-4 bg-gray-50 p-5 rounded-2xl border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-[11px] uppercase font-black text-primary-blue tracking-widest italic">
+                      <Star className="w-4 h-4 text-primary-yellow fill-current" />
+                      Sua Nota de Admin
                     </div>
-                  ))}
+                    <span className={`text-2xl font-black ${getGradeColor(valueToLetter(currentRating !== undefined ? currentRating : 75))} bg-white px-4 py-1 rounded-xl shadow-sm border border-gray-100`}>
+                      {currentRating !== undefined ? currentRating : '--'}
+                    </span>
+                  </div>
+                  
+                  <div className="relative pt-2">
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="100" 
+                      step="1"
+                      value={currentRating !== undefined ? currentRating : 75}
+                      onChange={(e) => {
+                        const newValue = parseInt(e.target.value);
+                        const newRatings = { ...(overallStats.ratings || {}), [currentAdminId]: newValue };
+                        setOverallStats({ ratings: newRatings });
+                      }}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-blue"
+                    />
+                    <div className="flex justify-between mt-2 px-1">
+                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Base (00)</span>
+                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Elite (100)</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-6 pt-4 border-t border-gray-100 text-[9px] text-gray-400 font-bold leading-normal text-center italic">
-                  * Jogadores com cartas especiais terão valores acrescidos ao seu overall enquanto estiverem com a carta.
-                </div>
-              </div>
-            </div>
 
-            <button 
-              onClick={handleConfirmNota}
-              disabled={isSavingRating}
-              className="w-full bg-primary-blue text-white py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all mt-10 shadow-xl shadow-blue-100 active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50"
-            >
-              <ShieldCheck className="w-5 h-5 text-primary-yellow" />
-              <span>{isSavingRating ? 'Salvando...' : 'Confirmar Nota'}</span>
-            </button>
+                <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
+                  <div className="mb-4 text-center">
+                    <h4 className="text-[10px] font-black uppercase text-gray-400 tracking-widest italic">Cálculo de Overall</h4>
+                    <p className="text-[9px] text-gray-400 mt-1 font-bold">Média das Notas + (Média Pontos × 0.4) + Bonus Card • Limite: 105</p>
+                  </div>
+                  <div className="grid grid-cols-5 gap-2">
+                    {[
+                      { l: '90', r: 'Elite', c: 'text-yellow-500' },
+                      { l: '80', r: 'Bom', c: 'text-emerald-500' },
+                      { l: '70', r: 'Médio', c: 'text-blue-500' },
+                      { l: '60', r: 'Abaixo', c: 'text-orange-500' },
+                      { l: '00', r: 'Novo', c: 'text-red-500' }
+                    ].map((item) => (
+                      <div key={item.l} className="text-center group">
+                        <div className={`text-lg font-black ${item.c}`}>{item.l}+</div>
+                        <div className="text-[8px] text-gray-400 font-black mt-1 uppercase tracking-tighter">{item.r}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <button 
+                  onClick={handleConfirmNota}
+                  disabled={isSavingRating}
+                  className="w-full bg-primary-blue text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 text-xs"
+                >
+                  <ShieldCheck className="w-5 h-5 text-primary-yellow" />
+                  <span>{isSavingRating ? 'Salvando...' : 'Confirmar Nota'}</span>
+                </button>
+              </div>
+            ) : (
+              /* EXTRATO / RELATÓRIO TAB */
+              <div className="space-y-4 text-left">
+                {/* 1. Média de Avaliação dos Admins */}
+                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-black text-primary-blue uppercase tracking-wider">
+                      <Users className="w-4 h-4 text-blue-600" />
+                      Média de Avaliação dos Admins
+                    </div>
+                    <span className="text-base font-black text-primary-blue bg-white px-3 py-1 rounded-xl shadow-sm border border-gray-100">
+                      {adminOnlyAvg !== null ? adminOnlyAvg.toFixed(1) : 'Sem notas'}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-gray-400 font-bold mt-1">
+                    {adminCountOnly} {adminCountOnly === 1 ? 'admin avaliou este atleta' : 'admins avaliaram este atleta'}
+                  </p>
+                </div>
+
+                {/* 2. Bônus Recebidos por Cards */}
+                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-black text-primary-blue uppercase tracking-wider">
+                      <Zap className="w-4 h-4 text-amber-500" />
+                      Bônus de Card Ativo
+                    </div>
+                    <span className="text-base font-black text-amber-600 bg-amber-50 px-3 py-1 rounded-xl border border-amber-200/60">
+                      +{bonus} OVR
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-gray-400 font-bold mt-1">
+                    Card Atual: <span className="text-gray-700">{cardUsed?.name || 'Padrão'}</span>
+                  </p>
+                </div>
+
+                {/* 3. Toda Vez que Recebeu +1 de Bônus de Cards / Premiações Mensais */}
+                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-2">
+                  <div className="flex items-center justify-between border-b border-gray-200/60 pb-2">
+                    <div className="flex items-center gap-2 text-xs font-black text-primary-blue uppercase tracking-wider">
+                      <Award className="w-4 h-4 text-emerald-600" />
+                      Histórico de Bônus +1 (Premiações)
+                    </div>
+                    <span className="text-xs font-black text-emerald-700 bg-emerald-100/60 px-2.5 py-0.5 rounded-lg">
+                      Total: +{playerAwards.length}
+                    </span>
+                  </div>
+
+                  {playerAwards.length === 0 ? (
+                    <p className="text-[10px] text-gray-400 italic py-1">
+                      Nenhum bônus de premiação mensal recebido ainda.
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                      {playerAwards.map((award) => (
+                        <div key={award.id} className="flex items-center justify-between bg-white px-3 py-1.5 rounded-xl border border-gray-100 text-[11px]">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-gray-500 uppercase text-[10px]">{award.month}</span>
+                            <span className="font-extrabold text-primary-blue">{award.category}</span>
+                          </div>
+                          <span className="font-black text-emerald-600">+1 Bônus</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. Nota Fixa Atribuída por Mês (AVALIAR OVERALL) */}
+                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-2">
+                  <div className="flex items-center justify-between border-b border-gray-200/60 pb-2">
+                    <div className="flex items-center gap-2 text-xs font-black text-primary-blue uppercase tracking-wider">
+                      <BarChart3 className="w-4 h-4 text-purple-600" />
+                      Notas Fixas Mensais (Avaliar Overall)
+                    </div>
+                    <span className="text-xs font-black text-purple-700 bg-purple-100/60 px-2.5 py-0.5 rounded-lg">
+                      {monthlyFixedScores.length} Registros
+                    </span>
+                  </div>
+
+                  {monthlyFixedScores.length === 0 ? (
+                    <p className="text-[10px] text-gray-400 italic py-1">
+                      Nenhuma nota fixa mensal atribuída até o momento.
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                      {monthlyFixedScores.map((item) => (
+                        <div key={item.month} className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-gray-100 text-[11px]">
+                          <div>
+                            <span className="font-black text-primary-blue uppercase tracking-wider">{item.month}</span>
+                            <span className="text-[9px] text-gray-400 block font-bold">Nota Fixa de Encerramento</span>
+                          </div>
+                          <span className="font-black text-purple-700 bg-purple-50 px-3 py-1 rounded-lg border border-purple-100 text-sm">
+                            {item.score}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button 
+                  onClick={() => setIsOverallModalOpen(false)}
+                  className="w-full bg-gray-200 text-gray-700 py-3.5 rounded-2xl font-black uppercase tracking-widest hover:bg-gray-300 transition-all text-xs mt-2"
+                >
+                  Fechar Extrato
+                </button>
+              </div>
+            )}
           </div>
         </motion.div>
       </div>
@@ -762,12 +1032,22 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
             </select>
           </div>
           {isAdmin && (
-            <button 
-              onClick={() => setIsModalOpen(true)}
-              className="bg-primary-blue text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 active:scale-95 group"
-            >
-              <UserPlus className="w-5 h-5 text-primary-yellow transition-transform group-hover:rotate-12" /> Novo Atleta
-            </button>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setIsEvaluateOverallModalOpen(true)}
+                className="bg-amber-500 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-amber-600 transition-all shadow-lg shadow-amber-100 active:scale-95 text-[11px] cursor-pointer"
+                title="Atribuir nota fixa de fechamento mensal para todos os atletas"
+              >
+                <BarChart3 className="w-5 h-5 text-amber-100" />
+                <span>Avaliar Overall</span>
+              </button>
+              <button 
+                onClick={() => setIsModalOpen(true)}
+                className="bg-primary-blue text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 active:scale-95 group cursor-pointer"
+              >
+                <UserPlus className="w-5 h-5 text-primary-yellow transition-transform group-hover:rotate-12" /> Novo Atleta
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -930,20 +1210,20 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
                   </div>
                   <div 
                     onClick={(e) => {
-                      if (adminData?.role === 'master' && isSgtNunes(player)) {
+                      if (adminData?.role === 'master' || isSgtNunes(player)) {
                         startEditingSgtNunes(e, player);
                       }
                     }}
                     className={`flex flex-col items-center justify-center flex-1 transition-all ${
-                      adminData?.role === 'master' && isSgtNunes(player) 
+                      adminData?.role === 'master' || isSgtNunes(player) 
                         ? 'cursor-pointer hover:bg-amber-950/15 rounded p-0.5 outline outline-1 outline-dashed outline-amber-950/40' 
                         : ''
                     }`}
-                    title={adminData?.role === 'master' && isSgtNunes(player) ? "Clique para editar Gols e Assistências" : undefined}
+                    title={adminData?.role === 'master' || isSgtNunes(player) ? "Clique para editar Gols e Assistências" : undefined}
                   >
                     <span className="text-[5px] xs:text-[6px] sm:text-[7.5px] font-bold opacity-60 uppercase tracking-tight leading-none animate-none flex items-center gap-0.5">
                       GOLS/AST
-                      {adminData?.role === 'master' && isSgtNunes(player) && <span className="text-[6px]">✏️</span>}
+                      {(adminData?.role === 'master' || isSgtNunes(player)) && <span className="text-[6px]">✏️</span>}
                     </span>
                     <span className="text-[9.5px] xs:text-[10.5px] sm:text-[12px] font-black mt-1 leading-none whitespace-nowrap">{player.stats.goals} / {player.stats.assists}</span>
                   </div>
@@ -963,7 +1243,7 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
                     style={{ border: '2px solid rgb(217, 119, 6)' }}
                   >
                     <div className="text-center font-black text-[10px] sm:text-[11px] text-amber-400 tracking-wider uppercase border-b border-amber-800/60 pb-1">
-                      ESTATÍSTICAS SGT NUNES
+                      ESTATÍSTICAS: {player.nickname || player.name}
                     </div>
 
                     <div className="flex flex-col gap-2 my-2 flex-grow justify-center">
@@ -1405,6 +1685,99 @@ export default function PlayerManagement({ adminData, adminId, sharedLocations }
           </div>
         )}
       </AnimatePresence>
+
+      {isEvaluateOverallModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsEvaluateOverallModalOpen(false)}
+            className="absolute inset-0 bg-black/60 backdrop-blur-md"
+          />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh] border border-gray-100 z-10"
+          >
+            <div className="p-8 md:p-10 overflow-y-auto">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-2xl font-black uppercase italic tracking-tighter text-primary-blue flex items-center gap-2">
+                    <BarChart3 className="w-6 h-6 text-amber-500" />
+                    Avaliar Overall Mensal
+                  </h3>
+                  <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mt-1">
+                    Fechamento e Fixação de Nota Mensal
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setIsEvaluateOverallModalOpen(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200/60 mb-6 text-[11px] text-amber-900 font-medium leading-relaxed">
+                <strong>Como funciona:</strong> Ao confirmar, o sistema lerá o overall atual de cada jogador e atribuirá uma <strong>nota fixa de avaliação de overall</strong> referente ao mês selecionado. Essa nota passará a ter o <strong>peso de uma avaliação de admin</strong> no cálculo da média.
+              </div>
+
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2">
+                    Mês de Referência para Avaliação
+                  </label>
+                  <input 
+                    type="month" 
+                    value={evaluatingMonth}
+                    onChange={(e) => setEvaluatingMonth(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm font-bold text-primary-blue focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-center justify-between text-[11px] font-bold text-gray-600">
+                  <span>Atletas a serem avaliados:</span>
+                  <span className="bg-primary-blue text-white px-3 py-1 rounded-full text-xs font-black">
+                    {players.filter(p => {
+                      if (adminData && adminData.role !== 'master' && adminData.locationId) return p.locationId === adminData.locationId;
+                      if (selectedLocationId !== 'all') return p.locationId === selectedLocationId;
+                      return true;
+                    }).length} Atletas
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 mt-8">
+                <button 
+                  onClick={() => setIsEvaluateOverallModalOpen(false)}
+                  className="flex-1 bg-gray-100 text-gray-600 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-gray-200 transition-all text-xs cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleConfirmBatchEvaluateOverall}
+                  disabled={isEvaluatingBatch}
+                  className="flex-1 bg-amber-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-amber-600 transition-all text-xs shadow-lg shadow-amber-100 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  {isEvaluatingBatch ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Processando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Confirmar Avaliação</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       <ImageCropModal 
         isOpen={isCropModalOpen}

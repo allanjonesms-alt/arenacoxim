@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../App';
-import { sortPlayersByPosition, getPositionLabel } from '../utils/playerUtils';
+import { sortPlayersByPosition, getPositionLabel, formatDateBR } from '../utils/playerUtils';
 import { cleanUndefinedFields } from '../utils/firestoreUtils';
 import { TeamSquadModal } from '../components/TeamSquadModal';
 
@@ -535,7 +535,7 @@ export default function PublicTournament({ adminData }: PublicTournamentProps) {
                                       <span className="truncate max-w-[40%] text-right">{teamB?.name || 'Time B'}</span>
                                     </div>
                                     <div className="flex items-center justify-between text-[10px] text-gray-400 font-bold border-t border-gray-100 pt-2">
-                                      <span>{m.date ? `${m.date} ${m.time || ''}` : 'A Agendar'}</span>
+                                      <span>{m.date ? `${formatDateBR(m.date)} ${m.time || ''}` : 'A Agendar'}</span>
                                       {canEditMatch && (
                                         <button
                                           onClick={() => handleOpenEditMatchModal(m)}
@@ -602,7 +602,7 @@ export default function PublicTournament({ adminData }: PublicTournamentProps) {
                             {match.roundName || 'Playoff'}
                           </span>
                           <span className="text-xs font-black text-slate-950 bg-amber-400 px-2.5 py-1 rounded-md shadow-xs flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5 text-slate-950" /> {match.date} às {match.time}
+                            <Clock className="w-3.5 h-3.5 text-slate-950" /> {formatDateBR(match.date)} às {match.time}
                           </span>
                         </div>
 
@@ -858,7 +858,7 @@ export default function PublicTournament({ adminData }: PublicTournamentProps) {
                                 <div className="flex items-center justify-between text-[10px] text-gray-400 font-bold pt-1 border-t border-gray-50">
                                   <span className="flex items-center gap-1">
                                     <Calendar className="w-3 h-3 text-gray-400" />
-                                    {match.date ? `${match.date} às ` : ''}{match.time || 'A definir'}
+                                    {match.date ? `${formatDateBR(match.date)} às ` : ''}{match.time || 'A definir'}
                                   </span>
 
                                   {canEditMatch && (

@@ -7,6 +7,16 @@ export const calculateAverage = (stats?: OverallStats) => {
   return sum / ratings.length;
 };
 
+export const calculateAdminOnlyAverage = (stats?: OverallStats) => {
+  if (!stats || !stats.ratings) return null;
+  const adminRatings = Object.entries(stats.ratings)
+    .filter(([key]) => !key.startsWith('monthly_'))
+    .map(([, val]) => val);
+  if (adminRatings.length === 0) return null;
+  const sum = adminRatings.reduce((acc, val) => acc + val, 0);
+  return sum / adminRatings.length;
+};
+
 export const valueToLetter = (value: number) => {
   return Math.round(value).toString().padStart(2, '0');
 };

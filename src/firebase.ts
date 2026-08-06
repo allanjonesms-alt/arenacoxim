@@ -20,7 +20,7 @@ export const auth = getAuth(app);
 // Use persistentLocalCache for instant load times and offline responsiveness
 let firestoreCache;
 try {
-  firestoreCache = persistentLocalCache({ tabManager: persistentMultipleTabManager() });
+  firestoreCache = persistentLocalCache();
 } catch (e) {
   console.warn("Persistent cache not supported in this environment, falling back to memoryLocalCache", e);
   firestoreCache = memoryLocalCache();

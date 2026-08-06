@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, orderBy, onSnapshot } from 'firebase/firestore';
-import { Player, AdminData, Location, ScoringRules, Match } from '../types';
-import { getPositionAbbr, getPositionColor } from '../utils/playerUtils';
+import { Player, AdminData, Location, ScoringRules, Match, Card } from '../types';
+import { getPositionAbbr, getPositionColor, resolvePlayerCard } from '../utils/playerUtils';
 import { Trophy, Users, Search, MapPin, Award, Loader2, ArrowUpDown, PlaySquare, Calendar, Star, Shield, Info } from 'lucide-react';
 import { motion } from 'motion/react';
 import { SoccerBall, SoccerCleat } from '../components/Icons';
@@ -63,9 +63,17 @@ export default function ScoreTable({ adminData, sharedLocations, sharedScoringRu
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
   // Month filter states
+  const [cards, setCards] = useState<Card[]>([]);
   const [allMatches, setAllMatches] = useState<Match[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+
+  useEffect(() => {
+    const unsubCards = onSnapshot(collection(db, 'cards'), (snap) => {
+      setCards(snap.docs.map(d => ({ id: d.id, ...d.data() } as Card)));
+    }, (err) => console.warn("Erro ao carregar cards:", err));
+    return () => unsubCards();
+  }, []);
 
   useEffect(() => {
     // If admin is restricted to a location, overwrite selection
@@ -584,6 +592,7 @@ export default function ScoreTable({ adminData, sharedLocations, sharedScoringRu
                   filteredPlayers.map((player, index) => {
                     // Overall rank position in whole selected context
                     const rank = index + 1;
+                    const { cardBgUrl } = resolvePlayerCard(player, cards);
                     
                     return (
                       <motion.tr 
@@ -617,20 +626,28 @@ export default function ScoreTable({ adminData, sharedLocations, sharedScoringRu
                         {/* Player name and avatar info */}
                         <td className="py-4 px-6">
                           <div className="flex items-center gap-3">
-                            <div className="relative">
-                              {player.photoUrl ? (
+                            <div className="relative w-11 h-14 shrink-0 rounded-[4px] overflow-hidden shadow-md bg-slate-900 group-hover:scale-105 transition-transform border border-amber-950/20 flex items-center justify-center">
+                              {cardBgUrl ? (
                                 <img 
-                                  src={player.photoUrl} 
-                                  alt={player.name} 
-                                  className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm ring-2 ring-gray-100 group-hover:scale-105 transition-transform" 
-                                  referrerPolicy="no-referrer"
+                                  src={cardBgUrl} 
+                                  alt="" 
+                                  className="absolute inset-0 w-full h-full object-fill z-0 pointer-events-none" 
                                 />
                               ) : (
-                                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center border-2 border-white shadow-sm ring-2 ring-gray-100">
-                                  <Users className="w-5 h-5 text-gray-300" />
-                                </div>
+                                <div className="absolute inset-0 w-full h-full bg-slate-900 z-0" />
                               )}
-                              {/* Position tag over the photo on small display? Or next to nickname */}
+                              <div className="absolute right-[5%] top-[12%] w-[72%] aspect-square z-10 flex items-center justify-center overflow-hidden">
+                                {player.photoUrl ? (
+                                  <img 
+                                    src={player.photoUrl} 
+                                    alt={player.name} 
+                                    className="w-full h-full object-cover" 
+                                    referrerPolicy="no-referrer"
+                                  />
+                                ) : (
+                                  <Users className="w-5 h-5 text-amber-200/40" />
+                                )}
+                              </div>
                             </div>
                             <div>
                               <div className="font-extrabold text-primary-blue flex items-center gap-1.5 flex-wrap">

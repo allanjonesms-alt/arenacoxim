@@ -58,33 +58,61 @@ export const getPositionColor = (pos: Position) => {
   }
 };
 
-export const getPlayerFinalOverall = (player: Player, cards: Card[]): number => {
-  let overall = player.overallValue || 75;
-  if (!cards || cards.length === 0) return overall;
-
-  let assignedCard = cards.find(c => c.imageUrl === player.cardBgUrl) || cards.find(c => c.isDefault);
-  
-  if (assignedCard && assignedCard.expirationDate) {
-    const todayStr = new Date().toISOString().split('T')[0];
-    if (assignedCard.expirationDate < todayStr) {
-      assignedCard = cards.find(c => c.name.toUpperCase() === 'GERAL') || cards.find(c => c.isDefault);
-    }
+export const formatDateBR = (dateStr?: string): string => {
+  if (!dateStr) return '';
+  const clean = dateStr.trim();
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(clean)) return clean;
+  const dateOnly = clean.split('T')[0];
+  const parts = dateOnly.split('-');
+  if (parts.length === 3 && parts[0].length === 4) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
   }
-  
-  const isArtilheiroCard = assignedCard?.name?.toUpperCase()?.includes('ARTILHEIRO');
-  const cardBonusValue = isArtilheiroCard ? 5 : (assignedCard?.increaseOverall || 0);
-  const rawOverallWithBonus = overall + cardBonusValue;
+  return clean;
+};
 
-  const silverCard = cards.find(c => {
-    const n = c.name?.toUpperCase() || '';
-    return n === 'PRATA' || n === 'CARTA PRATA' || n.includes('PRATA');
-  });
+export const resolvePlayerCard = (player: Player, cards: Card[]) => {
+  let cardBgUrl = player.cardBgUrl || '';
+  let fontColor = '#a52a2a';
+  let overall = player.overallValue || 75;
+  let resolvedCard: Card | null = null;
 
-  const forceSilver = (!player.cardBgUrl || assignedCard?.isDefault || assignedCard?.name?.toUpperCase() === 'GERAL') && rawOverallWithBonus < 90 && !!silverCard;
-  const resolvedCard = forceSilver ? silverCard! : assignedCard;
+  if (cards && cards.length > 0) {
+    let assignedCard = cards.find(c => c.imageUrl === player.cardBgUrl) || cards.find(c => c.isDefault);
+    
+    if (assignedCard && assignedCard.expirationDate) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (assignedCard.expirationDate < todayStr) {
+        assignedCard = cards.find(c => c.name.toUpperCase() === 'GERAL') || cards.find(c => c.isDefault);
+      }
+    }
 
-  const resolvedIsArtilheiro = resolvedCard?.name?.toUpperCase()?.includes('ARTILHEIRO');
-  const resolvedBonus = resolvedIsArtilheiro ? 5 : (resolvedCard?.increaseOverall || 0);
-  
-  return overall + resolvedBonus;
+    const isArtilheiroCard = assignedCard?.name?.toUpperCase()?.includes('ARTILHEIRO');
+    const cardBonusValue = isArtilheiroCard ? 5 : (assignedCard?.increaseOverall || 0);
+    const rawOverallWithBonus = (player.overallValue || 75) + cardBonusValue;
+
+    const silverCard = cards.find(c => {
+      const n = c.name?.toUpperCase() || '';
+      return n === 'PRATA' || n === 'CARTA PRATA' || n.includes('PRATA');
+    });
+
+    const forceSilver = (!player.cardBgUrl || assignedCard?.isDefault || assignedCard?.name?.toUpperCase() === 'GERAL') && rawOverallWithBonus < 90 && !!silverCard;
+    resolvedCard = (forceSilver ? silverCard! : assignedCard) || null;
+    cardBgUrl = resolvedCard?.imageUrl || cardBgUrl;
+    fontColor = resolvedCard?.fontColor || '#a52a2a';
+
+    const resolvedIsArtilheiro = resolvedCard?.name?.toUpperCase()?.includes('ARTILHEIRO');
+    const resolvedBonus = resolvedIsArtilheiro ? 5 : (resolvedCard?.increaseOverall || 0);
+    overall = (player.overallValue || 75) + resolvedBonus;
+  }
+
+  if (!cardBgUrl && cards && cards.length > 0) {
+    const defaultCard = cards.find(c => c.name.toUpperCase() === 'GERAL') || cards.find(c => c.isDefault);
+    cardBgUrl = defaultCard?.imageUrl || '';
+  }
+
+  return { cardBgUrl, fontColor, overall, card: resolvedCard };
+};
+
+export const getPlayerFinalOverall = (player: Player, cards: Card[]): number => {
+  return resolvePlayerCard(player, cards).overall;
 };

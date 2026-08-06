@@ -578,8 +578,7 @@ export default function PublicDashboard({
       qMatches = query(
         collection(db, 'matches'), 
         where('locationId', '==', adminData.locationId),
-        orderBy('date', 'desc'),
-        limit(25)
+        limit(50)
       );
     }
 

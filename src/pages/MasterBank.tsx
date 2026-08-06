@@ -3,7 +3,7 @@ import { db } from '../firebase';
 import { collection, onSnapshot, query, orderBy, doc, updateDoc, getDoc, runTransaction } from 'firebase/firestore';
 import { AdminData } from '../types';
 import { motion } from 'framer-motion';
-import { Wallet, CheckCircle2, XCircle, Clock, Search, ArrowLeft, History, Plus, Minus, UserCheck, X, AlertTriangle, Coins, Users } from 'lucide-react';
+import { Wallet, CheckCircle2, XCircle, Clock, Search, ArrowLeft, History, Plus, Minus, UserCheck, X, AlertTriangle, Coins, Users, QrCode, Copy, Check } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { processPendingPaymentBets } from '../utils/bettingUtils';
 
@@ -26,6 +26,11 @@ export default function MasterBank({ adminData }: MasterBankProps) {
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [isSubmittingAdjustment, setIsSubmittingAdjustment] = useState(false);
   
+  // Withdrawal approval modal states
+  const [selectedWithdrawTx, setSelectedWithdrawTx] = useState<any | null>(null);
+  const [isApprovingWithdraw, setIsApprovingWithdraw] = useState(false);
+  const [copiedPix, setCopiedPix] = useState(false);
+
   const isMaster = adminData?.role === 'master';
 
   useEffect(() => {
@@ -67,9 +72,98 @@ export default function MasterBank({ adminData }: MasterBankProps) {
     };
   }, [isMaster, navigate]);
 
+  // Auto-correct mislabeled transactions for jquevedobosa@gmail.com
+  useEffect(() => {
+    if (transactions.length > 0) {
+      transactions.forEach((tx) => {
+        const emailMatch = (tx.userEmail || '').toLowerCase().trim() === 'jquevedobosa@gmail.com';
+        const nameMatch = (tx.userName || '').toLowerCase().includes('quevedo');
+        if ((emailMatch || nameMatch) && (tx.type === 'withdraw' || tx.type === 'withdrawal')) {
+          console.log("Auto-correcting transaction type for João Vitor (jquevedobosa@gmail.com) from withdrawal to deposit...");
+          updateDoc(doc(db, 'transactions', tx.id), {
+            type: 'deposit',
+            amount: Math.abs(Number(tx.amount) || 20)
+          }).catch(err => console.error("Error auto-correcting transaction type:", err));
+        }
+      });
+    }
+  }, [transactions]);
+
+  const handleToggleTxType = async (tx: any) => {
+    const isCurrentlyDeposit = tx.type === 'deposit';
+    const newType = isCurrentlyDeposit ? 'withdrawal' : 'deposit';
+    const newTypeLabel = isCurrentlyDeposit ? 'Saque' : 'Depósito PIX';
+
+    if (window.confirm(`Deseja alterar o tipo da transação de R$ ${tx.amount.toFixed(2)} (${tx.userName}) para "${newTypeLabel}"?`)) {
+      try {
+        await updateDoc(doc(db, 'transactions', tx.id), {
+          type: newType,
+          amount: Math.abs(Number(tx.amount) || 0)
+        });
+        alert(`Tipo da transação alterado para "${newTypeLabel}" com sucesso!`);
+      } catch (err: any) {
+        console.error("Erro ao alterar tipo:", err);
+        alert("Erro ao alterar tipo da transação.");
+      }
+    }
+  };
+
+  const handleCopyPixKey = (key: string) => {
+    if (!key) return;
+    navigator.clipboard.writeText(key);
+    setCopiedPix(true);
+    setTimeout(() => setCopiedPix(false), 2200);
+  };
+
+  const executeWithdrawApproval = async (transaction: any) => {
+    if (!transaction) return;
+    setIsApprovingWithdraw(true);
+    try {
+      await runTransaction(db, async (t) => {
+        const userRef = doc(db, 'users', transaction.userId);
+        const userSnap = await t.get(userRef);
+        
+        if (!userSnap.exists()) {
+          throw new Error("Usuário não encontrado!");
+        }
+        
+        const currentBalance = userSnap.data().balance || 0;
+        const newBalance = currentBalance - transaction.amount;
+        
+        if (newBalance < 0) {
+          throw new Error("Saldo do usuário é insuficiente para aprovar este saque!");
+        }
+        
+        t.update(userRef, { balance: newBalance });
+        
+        const txRef = doc(db, 'transactions', transaction.id);
+        t.update(txRef, { 
+          status: 'approved',
+          approvedAt: new Date().toISOString(),
+          approvedBy: adminData?.email || 'Admin Master'
+        });
+      });
+
+      alert(`Saque de R$ ${transaction.amount.toFixed(2)} para ${transaction.userName} foi APROVADO com sucesso!`);
+      setSelectedWithdrawTx(null);
+    } catch (error: any) {
+      console.error("Erro ao aprovar saque:", error);
+      alert(`Erro ao aprovar saque: ${error.message || 'Tente novamente.'}`);
+    } finally {
+      setIsApprovingWithdraw(false);
+    }
+  };
+
   const handleApprove = async (transaction: any) => {
+    const isWithdraw = transaction.type === 'withdraw' || transaction.type === 'withdrawal';
+    if (isWithdraw) {
+      setSelectedWithdrawTx(transaction);
+      setCopiedPix(false);
+      return;
+    }
+
     const isDeposit = transaction.type === 'deposit';
-    const actionLabel = isDeposit ? 'depósito' : 'saque';
+    const actionLabel = isDeposit ? 'depósito' : 'transação';
     if (window.confirm(`Aprovar ${actionLabel} de R$ ${transaction.amount.toFixed(2)} para ${transaction.userName}?`)) {
       try {
         await runTransaction(db, async (t) => {
@@ -85,10 +179,6 @@ export default function MasterBank({ adminData }: MasterBankProps) {
             ? currentBalance + transaction.amount 
             : currentBalance - transaction.amount;
           
-          if (!isDeposit && newBalance < 0) {
-            throw new Error("Saldo insuficiente para aprovar este saque!");
-          }
-          
           t.update(userRef, { balance: newBalance });
           
           const txRef = doc(db, 'transactions', transaction.id);
@@ -103,7 +193,7 @@ export default function MasterBank({ adminData }: MasterBankProps) {
           await processPendingPaymentBets(db, transaction.userId);
         }
 
-        alert(`${isDeposit ? 'Depósito' : 'Saque'} aprovado e saldo atualizado!`);
+        alert(`${isDeposit ? 'Depósito' : 'Transação'} aprovado e saldo atualizado!`);
       } catch (error: any) {
         console.error("Erro ao aprovar:", error);
         alert(`Erro ao aprovar transação: ${error.message || 'Tente novamente.'}`);
@@ -497,12 +587,29 @@ export default function MasterBank({ adminData }: MasterBankProps) {
                           <span className="text-[10px] font-bold text-gray-400">
                             {new Date(tx.createdAt).toLocaleString('pt-BR')}
                           </span>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleTxType(tx)}
+                            className="text-[9px] font-bold text-slate-400 hover:text-primary-blue underline cursor-pointer ml-1"
+                            title="Clique para corrigir o tipo entre Depósito e Saque"
+                          >
+                            Mudar p/ {tx.type === 'deposit' ? 'Saque' : 'Depósito'}
+                          </button>
                         </div>
 
                         {tx.note && (
                           <p className="text-[11px] text-slate-500 font-semibold mt-1 bg-white/60 border border-slate-100 px-2 py-1 rounded-lg">
                             {tx.note}
                           </p>
+                        )}
+
+                        {(tx.type === 'withdraw' || tx.type === 'withdrawal') && tx.pixKey && (
+                          <div className="mt-1.5 text-xs font-medium text-slate-700 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-xl flex items-center justify-between gap-2 max-w-md">
+                            <span className="truncate">
+                              <span className="text-[9px] uppercase font-black tracking-wider text-amber-800 mr-1.5">PIX ({tx.pixKeyType || 'Chave'}):</span>
+                              <strong className="font-mono text-gray-900 select-all">{tx.pixKey}</strong>
+                            </span>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -547,6 +654,139 @@ export default function MasterBank({ adminData }: MasterBankProps) {
           </div>
         </div>
       </div>
+
+      {/* Modal de Aprovação de Saque PIX */}
+      {selectedWithdrawTx && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-gray-100 flex flex-col gap-5 relative overflow-hidden text-slate-800">
+            
+            {/* Top Banner Accent */}
+            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-500 via-primary-blue to-emerald-500" />
+
+            {/* Header */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shadow-xs">
+                  <QrCode className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black uppercase italic tracking-tight text-gray-900">
+                    Aprovação de Saque PIX
+                  </h3>
+                  <p className="text-xs text-gray-500 font-bold">
+                    Confirme os dados do pagamento antes de aprovar
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedWithdrawTx(null)}
+                className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* User & Amount Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-100">
+                <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 block mb-1">Solicitante</span>
+                <p className="font-black text-xs sm:text-sm text-gray-800 truncate">{selectedWithdrawTx.userName || 'Usuário'}</p>
+                <p className="text-[11px] font-semibold text-gray-500 truncate">{selectedWithdrawTx.userEmail || '-'}</p>
+              </div>
+
+              <div className="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-100/80">
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 block mb-1">Valor do Saque</span>
+                <p className="font-black text-lg sm:text-xl text-emerald-700 leading-none">
+                  R$ {(Number(selectedWithdrawTx.amount) || 0).toFixed(2)}
+                </p>
+                <p className="text-[10px] font-bold text-emerald-600 mt-1">
+                  {selectedWithdrawTx.createdAt ? new Date(selectedWithdrawTx.createdAt).toLocaleString('pt-BR') : ''}
+                </p>
+              </div>
+            </div>
+
+            {/* PIX Key Section */}
+            <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-5 space-y-2.5 shadow-md">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                  <Coins className="w-4 h-4" />
+                  Chave PIX Cadastrada
+                </span>
+                {selectedWithdrawTx.pixKeyType && (
+                  <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                    Tipo: {selectedWithdrawTx.pixKeyType}
+                  </span>
+                )}
+              </div>
+
+              {selectedWithdrawTx.pixKey ? (
+                <div className="flex items-center justify-between bg-slate-800/90 border border-slate-700/80 rounded-xl p-3 gap-2">
+                  <span className="font-mono font-bold text-xs sm:text-sm text-white select-all break-all">
+                    {selectedWithdrawTx.pixKey}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyPixKey(selectedWithdrawTx.pixKey)}
+                    className="flex-shrink-0 bg-primary-blue hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                  >
+                    {copiedPix ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-300" />
+                        <span className="text-emerald-300">Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copiar</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-rose-950/40 border border-rose-800/50 p-3 rounded-xl text-rose-300 text-xs font-semibold">
+                  Chave PIX não informada explicitamente nesta solicitação. Verifique com o usuário ({selectedWithdrawTx.userEmail}).
+                </div>
+              )}
+            </div>
+
+            {/* Warning Notice */}
+            <div className="bg-amber-50 border border-amber-200/80 p-3 rounded-xl flex items-start gap-2 text-amber-900 text-xs font-medium">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <p className="leading-tight">
+                Realize a transferência via PIX no aplicativo do seu banco usando a chave acima. Ao clicar em <strong>Aprovar</strong>, o saldo de R$ {(Number(selectedWithdrawTx.amount) || 0).toFixed(2)} será deduzido da conta do usuário no sistema.
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedWithdrawTx(null)}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isApprovingWithdraw}
+                onClick={() => executeWithdrawApproval(selectedWithdrawTx)}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black py-3 rounded-2xl text-xs uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isApprovingWithdraw ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Confirmar e Aprovar</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
