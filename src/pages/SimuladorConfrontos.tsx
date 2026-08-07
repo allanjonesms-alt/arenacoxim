@@ -1581,6 +1581,22 @@ export default function SimuladorConfrontos({ adminData }: Props) {
     }
   };
 
+  const handleToggleTournamentChampionMarket = async () => {
+    try {
+      const current = betSettings.longTermTournamentChampion?.enabled !== false;
+      const ref = doc(db, 'settings', 'bets');
+      await setDoc(ref, { 
+        longTermTournamentChampion: { 
+          enabled: !current 
+        } 
+      }, { merge: true });
+      alert(!current ? 'Mercado do Campeão do Torneio HABILITADO para o público!' : 'Mercado do Campeão do Torneio DESABILITADO.');
+    } catch (error: any) {
+      console.error(error);
+      alert("Erro ao atualizar o mercado do Campeão do Torneio: " + error.message);
+    }
+  };
+
   const handleSelectMatch = (match: Match) => {
     setSelectedMatch(match);
     const tA = match.teamA.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[];
@@ -2112,6 +2128,22 @@ export default function SimuladorConfrontos({ adminData }: Props) {
               </div>
               
               <div className="flex flex-wrap gap-2">
+                <button 
+                  onClick={handleToggleTournamentChampionMarket}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-wider transition-all cursor-pointer ${
+                    betSettings.longTermTournamentChampion?.enabled !== false
+                      ? 'bg-black/30 text-amber-300 border border-white/20'
+                      : 'bg-black/20 text-white/60 border border-white/10'
+                  }`}
+                  title="Habilita/Desabilita mercado de Apostas para o Campeão do Torneio ACS 2026"
+                >
+                  {betSettings.longTermTournamentChampion?.enabled !== false ? (
+                    <><Trophy className="w-3.5 h-3.5 text-amber-300" /> Campeão Torneio: ON</>
+                  ) : (
+                    <><Shield className="w-3.5 h-3.5" /> Campeão Torneio: OFF</>
+                  )}
+                </button>
+
                 <button 
                   onClick={handleToggleLongTermMarket}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-wider transition-all cursor-pointer ${
@@ -2770,6 +2802,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                   if (m === 'long_term' || m === 'longTermMonthlyGoals') return 'Gols no Mês (Linha)';
                   if (m === 'longTermConcededGoals') return 'Gols Sofridos (Goleiros)';
                   if (m === 'longTermMonthlyScorer') return 'Maior Pontuador do Mês';
+                  if (m === 'longTermTournamentChampion') return 'Campeão do Torneio (Longo Prazo)';
                   if (m === 'boosted') return 'Aposta Turbinada';
                   return m || 'Personalizado';
                 };

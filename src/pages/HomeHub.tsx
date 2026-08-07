@@ -144,6 +144,12 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
   // Public menu cards
   const publicCards = [
     {
+      title: 'Apostas &\nMercados',
+      icon: TrendingUp,
+      to: '/apostas',
+      gradient: 'from-purple-600 via-indigo-600 to-purple-800',
+    },
+    {
       title: 'Atletas\n ',
       icon: Users,
       to: '/players',
@@ -309,7 +315,7 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
             
             <Link
               to="/apostas"
-              className="hidden sm:flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider px-4 py-2 rounded-xl transition-all shadow-md active:scale-95"
+              className="flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider px-3.5 py-2 rounded-xl transition-all shadow-md active:scale-95 shrink-0"
             >
               Ir para Apostas <ChevronRight className="w-4 h-4" />
             </Link>
@@ -353,17 +359,47 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
         </div>
       )}
       
+      {/* ArenaBet Featured Banner */}
+      <div className="my-3 sm:my-4">
+        <Link
+          to="/apostas"
+          className="group relative flex items-center justify-between w-full bg-gradient-to-r from-purple-900 via-slate-900 to-indigo-950 hover:from-purple-800 hover:to-indigo-900 text-white p-3 sm:p-5 rounded-2xl sm:rounded-3xl shadow-xl border border-purple-500/30 transition-all hover:scale-[1.01] active:scale-[0.99] overflow-hidden gap-2.5 sm:gap-4"
+        >
+          <div className="absolute -right-8 -top-8 w-40 h-40 bg-purple-500/20 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-transform" />
+
+          <div className="flex items-center gap-2.5 sm:gap-3.5 relative z-10 min-w-0">
+            <div className="bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 p-2 sm:p-3 rounded-xl sm:rounded-2xl shadow-md group-hover:rotate-6 transition-transform shrink-0">
+              <TrendingUp className="w-5 h-5 sm:w-7 sm:h-7 stroke-[2.5]" />
+            </div>
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-400/20 border border-amber-400/40 rounded-full text-amber-300 text-[9px] sm:text-[10px] font-black uppercase tracking-wider mb-0.5 sm:mb-1">
+                <span>🔥 ArenaBet Ao Vivo</span>
+              </div>
+              <h3 className="text-xs sm:text-lg font-black uppercase italic tracking-tight text-white leading-tight truncate">
+                Mercado de Apostas & Campeão
+              </h3>
+              <p className="text-xs text-purple-200/80 font-medium truncate hidden sm:block">
+                Aposte nos jogos agendados e na equipe Campeã do Torneio ACS 2026!
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider shadow-lg shrink-0 hover:from-amber-300 hover:to-amber-400 transition-all">
+            <span>Apostar</span>
+            <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
+      </div>
+
       <div className="space-y-10">
         <div className="space-y-8">
           
-
-      
-      {/* 1. Botões Públicos */}
+          {/* 1. Botões Públicos (ocultos no mobile pois já existem na barra inferior) */}
           <motion.div 
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            className="hidden md:grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4"
+            className="hidden md:grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 my-4"
           >
             {publicCards.map((card, idx) => {
               const IconComponent = card.icon;

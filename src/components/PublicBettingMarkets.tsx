@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, query, where, getDoc, getDocs, doc, addDoc, runTransaction } from 'firebase/firestore';
-import { Match, OddsEngineConfig, Player, Card, ScoringRules, BoostedBet } from '../types';
-import { TrendingUp, Shield, Trophy, Target, Zap, CalendarDays, Search, ChevronDown, ChevronUp, ArrowLeft, ChevronRight, Clock, Users } from 'lucide-react';
+import { Match, OddsEngineConfig, Player, Card, ScoringRules, BoostedBet, Tournament } from '../types';
+import { TrendingUp, Shield, Trophy, Target, Zap, CalendarDays, Search, ChevronDown, ChevronUp, ArrowLeft, ChevronRight, Clock, Users, Flame, Award } from 'lucide-react';
 import { getPositionAbbr, getPositionColor, getPlayerFinalOverall } from '../utils/playerUtils';
 import { calculateMatchPoints } from '../utils/scoringEngine';
 import { processPendingPaymentBets } from '../utils/bettingUtils';
+import { calculateTournamentChampionOdds } from '../utils/tournamentOdds';
 
 const isMatchWithin30MinOrPast = (matchDate: string, matchTime: string) => {
   if (!matchDate) return false;
@@ -53,6 +54,9 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
   const [loading, setLoading] = useState(true);
   const [activeMarketTab, setActiveMarketTab] = useState<'matches' | 'longTerm'>('matches');
   const [longTermSearch, setLongTermSearch] = useState('');
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [isChampionCollapsed, setIsChampionCollapsed] = useState(false);
+  const [showAllChampionTeams, setShowAllChampionTeams] = useState(false);
   const [isGolsNoMesCollapsed, setIsGolsNoMesCollapsed] = useState(false);
   const [showAllGolsNoMes, setShowAllGolsNoMes] = useState(false);
   const [isGolsSofridosCollapsed, setIsGolsSofridosCollapsed] = useState(false);
@@ -152,18 +156,33 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
       console.error("Error loading boosted bets:", err);
     });
 
+    const unsubTournaments = onSnapshot(collection(db, 'tournaments'), snap => {
+      setTournaments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Tournament)));
+    }, (err) => {
+      console.error("Error loading tournaments:", err);
+    });
+
     return () => {
       unsubMatches();
       unsubPlayers();
       unsubCards();
       unsubBets();
       unsubBoosted();
+      unsubTournaments();
       unsubBetsSettings();
       unsubBettingParams();
       unsubOdds();
       unsubScoring();
     };
   }, []);
+
+  const activeTournament = useMemo(() => {
+    return tournaments.find(t => t.status === 'em_andamento') || tournaments[0] || null;
+  }, [tournaments]);
+
+  const tournamentChampionOdds = useMemo(() => {
+    return calculateTournamentChampionOdds(activeTournament, players, cards, 0.35, matches, allBets);
+  }, [activeTournament, players, cards, matches, allBets]);
 
   const getGkAverageConceded = (gk: Player) => {
     const finishedMatches = matches.filter(m => m.status === 'finished');
@@ -1117,7 +1136,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
     return timeA.localeCompare(timeB);
   });
 
-  const isAnyMarketOpen = sortedBettableMatches.length > 0 || (betSettings.longTermMonthlyGoals?.enabled) || boostedBets.length > 0;
+  const isAnyMarketOpen = sortedBettableMatches.length > 0 || (betSettings.longTermMonthlyGoals?.enabled) || (betSettings.longTermTournamentChampion?.enabled !== false) || boostedBets.length > 0;
 
   if (!isAnyMarketOpen) {
     return (
@@ -1723,6 +1742,91 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
               })}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* SEÇÃO MERCADO: CAMPEÃO DO TORNEIO ACS 2026 */}
+      {(betSettings.longTermTournamentChampion?.enabled !== false) && (
+        <div className="bg-slate-900 text-white border border-slate-800 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-6 shadow-xl space-y-3 sm:space-y-4 my-6 sm:my-8">
+          <div className="border-b border-slate-800 pb-3 sm:pb-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="p-2 sm:p-2.5 bg-amber-500/20 text-amber-400 rounded-xl sm:rounded-2xl border border-amber-500/30 shrink-0">
+                <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-xl font-black uppercase italic tracking-tight text-white truncate">
+                  Campeão do {activeTournament?.name || "Torneio ACS 2026"}
+                </h3>
+                <p className="text-[10px] sm:text-xs text-gray-400 font-medium truncate">
+                  Escolha quem levará o título do torneio
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setIsChampionCollapsed(!isChampionCollapsed)}
+              className="p-1.5 sm:p-2 bg-slate-800 hover:bg-slate-700 rounded-xl transition-all text-gray-300 cursor-pointer shrink-0"
+              title={isChampionCollapsed ? "Expandir" : "Recolher"}
+            >
+              {isChampionCollapsed ? <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5" /> : <ChevronUp className="w-4 h-4 sm:w-5 sm:h-5" />}
+            </button>
+          </div>
+
+          {!isChampionCollapsed && (
+            <div className="divide-y divide-slate-800/80">
+              {tournamentChampionOdds
+                .filter(item => !longTermSearch || item.teamName.toLowerCase().includes(longTermSearch.toLowerCase()))
+                .map((item) => {
+                  const existingBet = getUserBet('long_term', 'longTermTournamentChampion', item.teamName);
+                  
+                  return (
+                    <div 
+                      key={item.teamId}
+                      className="py-2.5 sm:py-3 flex items-center justify-between gap-2.5 sm:gap-4 hover:bg-white/[0.02] px-1 sm:px-2 rounded-xl transition-colors min-w-0"
+                    >
+                      {/* Team Logo & Name */}
+                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                        {item.logoUrl ? (
+                          <img src={item.logoUrl} alt={item.teamName} className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl object-cover bg-slate-800 p-0.5 border border-slate-700 shrink-0" />
+                        ) : (
+                          <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center font-black text-slate-950 text-[10px] sm:text-xs shadow-sm shrink-0">
+                            {item.teamName.substring(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <span className="font-extrabold text-xs sm:text-sm text-white truncate min-w-0">
+                          {item.teamName}
+                        </span>
+                      </div>
+
+                      {/* Betting Button with Odd only */}
+                      <div className="shrink-0">
+                        {existingBet ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider">
+                            <Shield className="w-3 h-3 text-emerald-400" />
+                            <span>{existingBet.odd}</span>
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => setSelectedBet({
+                              match: null,
+                              matchId: 'long_term',
+                              market: 'longTermTournamentChampion',
+                              selection: item.teamName,
+                              selectedOutcome: `Campeão: ${item.teamName}`,
+                              odd: item.odd,
+                              matchInfo: `Torneio ACS 2026 - ${item.teamName}`
+                            })}
+                            className="px-3.5 py-1.5 sm:px-4 sm:py-2 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black rounded-lg sm:rounded-xl text-xs sm:text-sm tracking-wide transition-all cursor-pointer shadow-md text-center"
+                          >
+                            <span>{item.odd}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
         </div>
       )}
 
