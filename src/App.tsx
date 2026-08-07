@@ -13,7 +13,7 @@ import {
 } from 'firebase/auth';
 import { auth, db } from './firebase';
 import { doc, getDoc, setDoc, getDocFromServer, collection, query, where, getDocs, deleteDoc, updateDoc, onSnapshot } from 'firebase/firestore';
-import { Trophy, Users, Calendar, LayoutDashboard, LogIn, LogOut, Menu, X, ShieldCheck, MapPin, TrendingUp, User as UserIcon, Lock, Key, Eye, EyeOff, Loader2, Home, Star, Award, Wallet, ExternalLink } from 'lucide-react';
+import { Trophy, Users, Calendar, LayoutDashboard, LogIn, LogOut, Menu, X, ShieldCheck, MapPin, TrendingUp, User as UserIcon, Lock, Key, Eye, EyeOff, Loader2, Home, Star, Award, Wallet, ExternalLink, Shirt } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AdminData, Location, Team, ScoringRules, Player } from './types';
 
@@ -33,6 +33,8 @@ import HomeHub from './pages/HomeHub';
 import NewsManagement from './pages/NewsManagement';
 import CardManagement from './pages/CardManagement';
 import BannerManagement from './pages/BannerManagement';
+import CartolaAdmin from './pages/CartolaAdmin';
+import CartolaUser from './pages/CartolaUser';
 import MasterBank from './pages/MasterBank';
 import MonthlyAwardsManagement from './pages/MonthlyAwardsManagement';
 import Diagnostic from './pages/Diagnostic';
@@ -454,41 +456,40 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-app-bg text-app-text font-sans selection:bg-primary-blue selection:text-white">
-    {/* Navigation */}
+        {/* Navigation */}
         <nav className="bg-primary-blue text-white shadow-lg sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col items-center justify-center py-3 gap-3">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between py-3 gap-3">
+              
+              {/* Brand Logo & Início Link */}
+              <div className="flex items-center gap-3">
                 <Link to="/" className="flex items-center gap-2 group">
                   <div className="bg-primary-yellow p-1.5 rounded-lg group-hover:scale-110 transition-transform shadow-md">
-                    <Trophy className="w-6 h-6 text-primary-blue" />
+                    <Trophy className="w-5 h-5 text-primary-blue" />
                   </div>
-                  <span className="text-xl font-black tracking-tighter uppercase italic">
+                  <span className="text-lg sm:text-xl font-black tracking-tighter uppercase italic">
                     ARENA<span className="text-primary-yellow">COXIM</span>
                   </span>
                 </Link>
-              </div>
 
-              {/* Header components: profile pic, logout and home button */}
-              <div className="flex items-center gap-3 sm:gap-4">
                 <Link 
                   to="/" 
-                  className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-black text-xs uppercase tracking-wider px-3.5 py-2 rounded-xl border border-white/10 transition-all shadow-sm active:scale-95 hover:text-primary-yellow"
+                  className="hidden sm:flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-black text-xs uppercase tracking-wider px-3 py-1.5 rounded-xl border border-white/10 transition-all shadow-sm active:scale-95 hover:text-primary-yellow ml-2"
                   title="Ir para a Página Inicial"
                 >
-                  <Home className="w-4 h-4 text-primary-yellow" />
-                  <span className="hidden sm:inline">Início</span>
+                  <Home className="w-3.5 h-3.5 text-primary-yellow" />
+                  <span>Início</span>
                 </Link>
+              </div>
 
-
-
-
+              {/* User / Auth Info & Mobile Menu Button */}
+              <div className="flex items-center gap-2 sm:gap-3">
                 {user ? (
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     {adminData?.role === 'master' && (
                       <Link
                         to="/admin/banco"
-                        className="relative flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs uppercase tracking-wider px-3.5 py-2 rounded-xl transition-all shadow-md active:scale-95 border border-slate-700/50"
+                        className="relative flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs uppercase tracking-wider px-3 py-2 rounded-xl transition-all shadow-md active:scale-95 border border-slate-700/50"
                         title="Banco Master - Gerenciar Transações"
                       >
                         <Wallet className="w-4 h-4 text-primary-yellow shrink-0" />
@@ -501,35 +502,37 @@ export default function App() {
                         )}
                       </Link>
                     )}
+
                     <Link
                       to="/banco"
-                      className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-xs uppercase tracking-wider px-3.5 py-2 rounded-xl transition-all shadow-md active:scale-95 border border-emerald-400/20"
+                      className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-xs uppercase tracking-wider px-3 py-2 rounded-xl transition-all shadow-md active:scale-95 border border-emerald-400/20"
                       title="Ir para o Banco Arena Coxim"
                     >
                       <Wallet className="w-4 h-4 text-primary-yellow shrink-0 animate-pulse" />
                       <span>R$ {userBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </Link>
 
-                    <div className="flex items-center gap-2 bg-white/5 py-1 px-3 rounded-full border border-white/10">
+                    <div className="hidden sm:flex items-center gap-2 bg-white/10 py-1 px-3 rounded-full border border-white/10">
                       {user.photoURL ? (
                         <img 
                           src={user.photoURL} 
                           alt="" 
-                          className="w-7 h-7 rounded-full border border-primary-yellow object-cover" 
+                          className="w-6 h-6 rounded-full border border-primary-yellow object-cover" 
                           referrerPolicy="no-referrer"
                         />
                       ) : (
-                        <div className="w-7 h-7 rounded-full border border-primary-yellow bg-white/10 flex items-center justify-center">
-                          <UserIcon size={14} className="text-white" />
+                        <div className="w-6 h-6 rounded-full border border-primary-yellow bg-white/10 flex items-center justify-center">
+                          <UserIcon size={12} className="text-white" />
                         </div>
                       )}
-                      <span className="text-xs font-black truncate max-w-[120px] hidden sm:inline">
+                      <span className="text-xs font-black truncate max-w-[110px]">
                         {user.displayName || user.email?.split('@')[0]}
                       </span>
                     </div>
+
                     <button 
                       onClick={handleLogout} 
-                      className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white font-black text-[11px] uppercase tracking-widest px-4 py-2 rounded-xl transition-all shadow-md active:scale-95 animate-in fade-in"
+                      className="hidden sm:flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-wider px-3 py-2 rounded-xl transition-all shadow-md active:scale-95"
                     >
                       <LogOut className="w-3.5 h-3.5" /> Sair
                     </button>
@@ -537,12 +540,23 @@ export default function App() {
                 ) : (
                   <button 
                     onClick={() => setShowLoginModal(true)}
-                    className="flex items-center gap-2 bg-primary-yellow text-primary-blue px-4 py-2 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-yellow-400 transition-all shadow-md active:scale-95 animate-in fade-in"
+                    className="flex items-center gap-1.5 bg-primary-yellow text-primary-blue px-3.5 py-2 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-yellow-400 transition-all shadow-md active:scale-95"
                   >
                     <LogIn className="w-4 h-4" /> Login
                   </button>
                 )}
+
+                {/* Mobile Hamburger Toggle (3 traços na lateral direita) */}
+                <button
+                  onClick={() => setIsMenuOpen(true)}
+                  className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all flex items-center justify-center border border-white/10 active:scale-95"
+                  aria-label="Abrir Menu"
+                  title="Abrir Menu Lateral"
+                >
+                  <Menu className="w-5 h-5 text-primary-yellow" />
+                </button>
               </div>
+
             </div>
           </div>
         </nav>
@@ -554,6 +568,7 @@ export default function App() {
             <Route path="/campeonato" element={<PublicTournament adminData={adminData} />} />
             <Route path="/apostas" element={<ApostasUsuario user={user} isMaster={isAdmin && adminData?.role === 'master'} />} />
             <Route path="/banco" element={<BancoUsuario user={user} />} />
+            <Route path="/cartola" element={<CartolaUser adminData={adminData} />} />
             <Route path="/dashboard" element={<PublicDashboard adminData={adminData} sharedLocations={locations} sharedTeams={teams} sharedScoringRules={scoringRules} />} />
             <Route path="/melhores-do-mes" element={<PublicMonthlyAwards />} />
             <Route path="/players" element={<PlayerManagement adminData={adminData} adminId={user?.uid} sharedLocations={locations} />} />
@@ -585,7 +600,8 @@ export default function App() {
                 <Route path="/admin/banners" element={<BannerManagement />} />
                 <Route path="/admin/awards" element={<MonthlyAwardsManagement adminData={adminData} locations={locations} />} />
                 <Route path="/admin/awards" element={<MonthlyAwardsManagement adminData={adminData} locations={locations} />} />
-                <Route path="/admin/cards" element={<CardManagement />} />                
+                <Route path="/admin/cards" element={<CardManagement />} />
+                <Route path="/admin/cartola" element={<CartolaAdmin adminData={adminData} />} />                
                 {adminData?.role === 'master' && (
                   <Route path="/admin/scoring" element={<Tabelas />} />
                 )}
@@ -599,68 +615,236 @@ export default function App() {
           </Routes>
         </main>
 
-        {/* Menu Flutuante Inferior para Mobile */}
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-gray-150 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] py-3 px-2 pb-[calc(10px+env(safe-area-inset-bottom))] md:hidden flex justify-around items-center">
-          <Link
-            to="/apostas"
-            className={`flex flex-col items-center gap-1 flex-1 text-center transition-all ${
-              routerLocation.pathname === '/apostas' || routerLocation.pathname === '/admin/arenabet'
-                ? 'text-primary-blue font-black scale-105'
-                : 'text-gray-400 font-semibold'
-            }`}
-          >
-            <TrendingUp className={`w-5 h-5 ${routerLocation.pathname === '/apostas' || routerLocation.pathname === '/admin/arenabet' ? 'text-primary-blue' : ''}`} />
-            <span className="text-[9px] uppercase tracking-wider font-extrabold">Apostas</span>
-          </Link>
+        {/* Floating Mobile 3-Bar Trigger (Bottom Right) */}
+        <button
+          onClick={() => setIsMenuOpen(true)}
+          className="fixed bottom-5 right-5 z-40 md:hidden bg-primary-blue text-primary-yellow p-3 rounded-full shadow-2xl border-2 border-primary-yellow flex items-center justify-center active:scale-95 hover:bg-blue-900 transition-all"
+          aria-label="Menu Principal"
+          title="Abrir Menu (3 traços)"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
 
-          <Link
-            to="/players"
-            className={`flex flex-col items-center gap-1 flex-1 text-center transition-all ${
-              routerLocation.pathname === '/players' || routerLocation.pathname === '/admin/players'
-                ? 'text-primary-blue font-black scale-105'
-                : 'text-gray-400 font-semibold'
-            }`}
-          >
-            <Users className={`w-5 h-5 ${routerLocation.pathname === '/players' || routerLocation.pathname === '/admin/players' ? 'text-primary-blue' : ''}`} />
-            <span className="text-[9px] uppercase tracking-wider font-extrabold">Atletas</span>
-          </Link>
+        {/* Drawer Lateral Mobile - Preenche até a Metade da Tela (3 Traços) */}
+        <AnimatePresence>
+          {isMenuOpen && (
+            <>
+              {/* Backdrop / Fundo Escuro */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsMenuOpen(false)}
+                className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-[200] md:hidden"
+              />
 
-          <Link
-            to="/score-table"
-            className={`flex flex-col items-center gap-1 flex-1 text-center transition-all ${
-              routerLocation.pathname === '/score-table' || routerLocation.pathname === '/admin/score-table'
-                ? 'text-primary-blue font-black scale-105'
-                : 'text-gray-400 font-semibold'
-            }`}
-          >
-            <Trophy className={`w-5 h-5 ${routerLocation.pathname === '/score-table' || routerLocation.pathname === '/admin/score-table' ? 'text-primary-blue' : ''}`} />
-            <span className="text-[9px] uppercase tracking-wider font-extrabold">Tabela</span>
-          </Link>
+              {/* Menu Lateral Ocupando Metade da Tela */}
+              <motion.div
+                initial={{ x: '100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 250 }}
+                className="fixed top-0 right-0 bottom-0 w-1/2 min-w-[220px] max-w-[320px] bg-slate-950 text-white z-[201] md:hidden flex flex-col justify-between shadow-2xl border-l border-slate-800 p-4 overflow-y-auto"
+              >
+                <div>
+                  {/* Top Header Drawer */}
+                  <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-primary-yellow p-1 rounded-lg">
+                        <Trophy className="w-4 h-4 text-primary-blue" />
+                      </div>
+                      <span className="text-sm font-black italic tracking-tight uppercase">
+                        ARENA<span className="text-primary-yellow">COXIM</span>
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setIsMenuOpen(false)}
+                      className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
 
-          <Link
-            to="/melhores-do-mes"
-            className={`flex flex-col items-center gap-1 flex-1 text-center transition-all ${
-              routerLocation.pathname === '/melhores-do-mes' || routerLocation.pathname === '/admin/awards'
-                ? 'text-primary-blue font-black scale-105'
-                : 'text-gray-400 font-semibold'
-            }`}
-          >
-            <Star className={`w-5 h-5 ${routerLocation.pathname === '/melhores-do-mes' || routerLocation.pathname === '/admin/awards' ? 'text-primary-blue' : ''}`} />
-            <span className="text-[9px] uppercase tracking-wider font-extrabold">Melhores Mês</span>
-          </Link>
+                  {/* Links de Navegação Vertical */}
+                  <div className="flex flex-col gap-1.5 text-xs font-black uppercase tracking-wider">
+                    <Link
+                      to="/"
+                      onClick={() => setIsMenuOpen(false)}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl transition-all ${
+                        routerLocation.pathname === '/'
+                          ? 'bg-primary-yellow text-primary-blue font-black shadow-md'
+                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      }`}
+                    >
+                      <Home className="w-4 h-4 text-primary-yellow" />
+                      <span>Início</span>
+                    </Link>
 
-          <Link
-            to="/resenha"
-            className={`flex flex-col items-center gap-1 flex-1 text-center transition-all ${
-              routerLocation.pathname === '/resenha'
-                ? 'text-primary-blue font-black scale-105'
-                : 'text-gray-400 font-semibold'
-            }`}
-          >
-            <Award className={`w-5 h-5 ${routerLocation.pathname === '/resenha' ? 'text-primary-blue' : ''}`} />
-            <span className="text-[9px] uppercase tracking-wider font-extrabold">M. e Piores</span>
-          </Link>
-        </div>
+                    <Link
+                      to="/apostas"
+                      onClick={() => setIsMenuOpen(false)}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl transition-all ${
+                        routerLocation.pathname === '/apostas'
+                          ? 'bg-primary-yellow text-primary-blue font-black shadow-md'
+                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      }`}
+                    >
+                      <TrendingUp className="w-4 h-4 text-emerald-400" />
+                      <span>Apostas</span>
+                    </Link>
+
+                    <Link
+                      to="/cartola"
+                      onClick={() => setIsMenuOpen(false)}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl transition-all ${
+                        routerLocation.pathname === '/cartola'
+                          ? 'bg-amber-400 text-slate-950 font-black shadow-md'
+                          : 'text-amber-300 hover:bg-amber-500/10'
+                      }`}
+                    >
+                      <Shirt className="w-4 h-4 text-amber-400" />
+                      <span>Cartola Arena</span>
+                    </Link>
+
+                    <Link
+                      to="/players"
+                      onClick={() => setIsMenuOpen(false)}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl transition-all ${
+                        routerLocation.pathname === '/players'
+                          ? 'bg-primary-yellow text-primary-blue font-black shadow-md'
+                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      }`}
+                    >
+                      <Users className="w-4 h-4 text-blue-400" />
+                      <span>Atletas</span>
+                    </Link>
+
+                    <Link
+                      to="/score-table"
+                      onClick={() => setIsMenuOpen(false)}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl transition-all ${
+                        routerLocation.pathname === '/score-table'
+                          ? 'bg-primary-yellow text-primary-blue font-black shadow-md'
+                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      }`}
+                    >
+                      <Trophy className="w-4 h-4 text-amber-400" />
+                      <span>Tabela</span>
+                    </Link>
+
+                    <Link
+                      to="/melhores-do-mes"
+                      onClick={() => setIsMenuOpen(false)}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl transition-all ${
+                        routerLocation.pathname === '/melhores-do-mes'
+                          ? 'bg-primary-yellow text-primary-blue font-black shadow-md'
+                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      }`}
+                    >
+                      <Star className="w-4 h-4 text-primary-yellow" />
+                      <span>Melhores Mês</span>
+                    </Link>
+
+                    <Link
+                      to="/resenha"
+                      onClick={() => setIsMenuOpen(false)}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl transition-all ${
+                        routerLocation.pathname === '/resenha'
+                          ? 'bg-primary-yellow text-primary-blue font-black shadow-md'
+                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      }`}
+                    >
+                      <Award className="w-4 h-4 text-purple-400" />
+                      <span>M. e Piores</span>
+                    </Link>
+
+                    <Link
+                      to="/campeonato"
+                      onClick={() => setIsMenuOpen(false)}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl transition-all ${
+                        routerLocation.pathname === '/campeonato'
+                          ? 'bg-primary-yellow text-primary-blue font-black shadow-md'
+                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      }`}
+                    >
+                      <Trophy className="w-4 h-4 text-emerald-400" />
+                      <span>Campeonato</span>
+                    </Link>
+
+                    <Link
+                      to="/banco"
+                      onClick={() => setIsMenuOpen(false)}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl transition-all ${
+                        routerLocation.pathname === '/banco'
+                          ? 'bg-emerald-500 text-slate-950 font-black shadow-md'
+                          : 'text-emerald-300 hover:bg-emerald-500/10'
+                      }`}
+                    >
+                      <Wallet className="w-4 h-4 text-emerald-400" />
+                      <span>Meu Banco</span>
+                    </Link>
+
+                    {isAdmin && (
+                      <Link
+                        to="/admin"
+                        onClick={() => setIsMenuOpen(false)}
+                        className={`flex items-center gap-2.5 p-2.5 rounded-xl transition-all border border-emerald-500/30 mt-2 ${
+                          routerLocation.pathname.startsWith('/admin')
+                            ? 'bg-emerald-500 text-slate-950 font-black shadow-md'
+                            : 'text-emerald-300 hover:bg-emerald-500/10'
+                        }`}
+                      >
+                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                        <span>Painel Admin</span>
+                      </Link>
+                    )}
+                  </div>
+                </div>
+
+                {/* Footer User Info Inside Drawer */}
+                <div className="pt-4 border-t border-slate-800 space-y-3">
+                  {user ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 bg-slate-900 p-2 rounded-xl border border-slate-800">
+                        {user.photoURL ? (
+                          <img src={user.photoURL} alt="" className="w-7 h-7 rounded-full border border-primary-yellow object-cover" />
+                        ) : (
+                          <div className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center">
+                            <UserIcon className="w-4 h-4 text-slate-400" />
+                          </div>
+                        )}
+                        <div className="overflow-hidden text-[10px]">
+                          <p className="font-bold text-white truncate">{user.displayName || user.email}</p>
+                          <p className="text-emerald-400 font-black">R$ {userBalance.toFixed(2)}</p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          handleLogout();
+                        }}
+                        className="w-full flex items-center justify-center gap-2 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-rose-500/30"
+                      >
+                        <LogOut className="w-3.5 h-3.5" /> Sair da Conta
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        setShowLoginModal(true);
+                      }}
+                      className="w-full flex items-center justify-center gap-2 bg-primary-yellow text-primary-blue py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-md hover:bg-yellow-400 transition-all"
+                    >
+                      <LogIn className="w-4 h-4" /> Entrar
+                    </button>
+                  )}
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
 
         {/* Modals */}
         <AnimatePresence>

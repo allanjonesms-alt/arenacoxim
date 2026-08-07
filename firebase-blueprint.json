@@ -208,6 +208,44 @@
         "createdAt": { "type": "integer" }
       },
       "required": ["name", "locationId", "status", "format"]
+    },
+    "CartolaSettings": {
+      "title": "CartolaSettings",
+      "description": "Global settings for Cartola Arena fantasy game",
+      "type": "object",
+      "properties": {
+        "marketStatus": { "type": "string", "enum": ["open", "closed"] },
+        "currentRound": { "type": "integer" },
+        "seasonName": { "type": "string" },
+        "maxPlayersPerTeam": { "type": "integer" },
+        "captainMultiplier": { "type": "number" },
+        "scoringRules": { "type": "object" },
+        "updatedAt": { "type": "integer" }
+      },
+      "required": ["marketStatus", "currentRound", "seasonName"]
+    },
+    "CartolaUserTeam": {
+      "title": "CartolaUserTeam",
+      "description": "A user's fantasy team in Cartola Arena",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userPhotoUrl": { "type": "string" },
+        "teamName": { "type": "string" },
+        "badgeUrl": { "type": "string" },
+        "badgeColor": { "type": "string" },
+        "playerIds": { "type": "array", "items": { "type": "string" } },
+        "captainId": { "type": "string" },
+        "totalPoints": { "type": "number" },
+        "subscriptionExpiresAt": { "type": "number" },
+        "subscriptionPaidAt": { "type": "number" },
+        "subscriptionActive": { "type": "boolean" },
+        "updatedAt": { "type": "integer" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["userId", "teamName", "playerIds"]
     }
   },
   "firestore": {
@@ -254,6 +292,14 @@
     "/tournaments/{tournamentId}": {
       "schema": "Tournament",
       "description": "Collection of tournaments"
+    },
+    "/cartola_settings/{settingId}": {
+      "schema": "CartolaSettings",
+      "description": "Cartola Arena configuration settings"
+    },
+    "/cartola_teams/{teamId}": {
+      "schema": "CartolaUserTeam",
+      "description": "Collection of user fantasy teams in Cartola Arena"
     }
   }
 }

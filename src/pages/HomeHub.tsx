@@ -19,7 +19,8 @@ import {
   X,
   Zap,
   ChevronRight,
-  Dices
+  Dices,
+  Shirt
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { AdminData, News, Location, Team, ScoringRules, Player, Card, BoostedBet } from '../types';
@@ -144,31 +145,37 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
   // Public menu cards
   const publicCards = [
     {
-      title: 'Apostas\n ',
+      title: 'Apostas',
       icon: TrendingUp,
       to: '/apostas',
       gradient: 'from-purple-600 via-indigo-600 to-purple-800',
     },
     {
-      title: 'Atletas\n ',
+      title: 'Cartola Arena',
+      icon: Shirt,
+      to: '/cartola',
+      gradient: 'from-amber-400 via-emerald-500 to-emerald-700',
+    },
+    {
+      title: 'Atletas',
       icon: Users,
       to: '/players',
       gradient: 'from-emerald-500 to-teal-700',
     },
     {
-      title: 'Tabela\nGeral',
+      title: 'Tabela Geral',
       icon: Trophy,
       to: '/score-table',
       gradient: 'from-yellow-500 to-amber-600',
     },
     {
-      title: 'Melhores\ndo Mês',
+      title: 'Melhores Mês',
       icon: Star,
       to: '/melhores-do-mes',
       gradient: 'from-amber-500 to-orange-600',
     },
     {
-      title: 'Melhores\ne Piores',
+      title: 'M. e Piores',
       icon: Award,
       to: '/resenha',
       gradient: 'from-rose-500 to-red-600',
@@ -225,6 +232,12 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
       icon: ShieldCheck,
       to: '/admin/teams',
       gradient: 'from-indigo-600 to-violet-700',
+    },
+    {
+      title: 'Cartola Arena',
+      icon: Shirt,
+      to: '/admin/cartola',
+      gradient: 'from-amber-500 to-emerald-600',
     },
     {
       title: 'Gerenciar Notícias',
@@ -334,7 +347,7 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
                       {boost.betType && !boost.betType.startsWith('COMBINADA') ? boost.betType : 'TURBINADA'}
                     </span>
                     <span className="text-lg font-black text-amber-300">
-                      @ {Number(boost.odd).toFixed(2).replace('.', ',')}
+                      {Number(boost.odd).toFixed(2).replace('.', ',')}
                     </span>
                   </div>
                   {boost.title && (
@@ -399,31 +412,31 @@ export default function HomeHub({ user, isAdmin, adminData, sharedLocations = []
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            className="hidden md:grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 md:gap-3 my-2.5"
+            className="hidden md:grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-2.5 my-2.5"
           >
             {publicCards.map((card, idx) => {
               const IconComponent = card.icon;
               return (
                 <motion.div variants={itemVariants} key={idx} className="group">
                   <Link to={card.to} className="block w-full">
-                    <div className={`relative overflow-hidden rounded-xl md:rounded-2xl bg-gradient-to-br ${card.gradient} text-white p-3 md:p-3.5 shadow-sm transition-all duration-300 hover:scale-[1.02] hover:shadow-lg flex items-center justify-between border border-white/10 active:scale-95`}>
+                    <div className={`relative overflow-hidden rounded-xl md:rounded-2xl bg-gradient-to-br ${card.gradient} text-white p-2.5 md:p-3 shadow-sm transition-all duration-300 hover:scale-[1.02] hover:shadow-lg flex items-center justify-between border border-white/10 active:scale-95`}>
                       
                       {/* Visual pattern overlay */}
                       <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-white/5 rounded-full blur-xl group-hover:scale-125 transition-transform" />
                       
-                      <div className="flex items-center gap-2.5 relative z-10 w-full">
-                        <div className="bg-white/10 p-2 rounded-xl w-9 h-9 md:w-10 md:h-10 flex-shrink-0 flex items-center justify-center border border-white/20">
-                          <IconComponent className="w-4 h-4 md:w-5 md:h-5 text-primary-yellow" />
+                      <div className="flex items-center gap-1.5 md:gap-2 relative z-10 w-full min-w-0">
+                        <div className="bg-white/10 p-1.5 rounded-lg w-7 h-7 md:w-8 md:h-8 flex-shrink-0 flex items-center justify-center border border-white/20">
+                          <IconComponent className="w-3.5 h-3.5 md:w-4 md:h-4 text-primary-yellow" />
                         </div>
                         
-                        <div className="space-y-0.5 flex-1 min-w-0">
-                          <h3 className="text-xs md:text-sm font-black uppercase tracking-tight italic whitespace-pre-line leading-snug">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-[10px] sm:text-xs font-black uppercase tracking-tight italic whitespace-nowrap truncate leading-tight">
                             {card.title}
                           </h3>
                         </div>
 
-                        <div className="flex-shrink-0 text-primary-yellow/80 group-hover:text-primary-yellow transition-colors group-hover:translate-x-1 text-xs">
-                           <motion.span animate={{ x: [0, 4, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>→</motion.span>
+                        <div className="flex-shrink-0 text-primary-yellow/80 group-hover:text-primary-yellow transition-colors group-hover:translate-x-1 text-[10px]">
+                           <motion.span animate={{ x: [0, 3, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>→</motion.span>
                         </div>
                       </div>
                     </div>

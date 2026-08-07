@@ -1963,12 +1963,12 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                     <div className="grid grid-cols-2 gap-2 text-center">
                       <div className="bg-slate-800/50 p-2 rounded-xl">
                         <span className="block text-[9px] text-slate-400 font-bold uppercase">Mais de</span>
-                        <span className="block text-sm font-black text-white">@ {opt.oddOver}</span>
+                        <span className="block text-sm font-black text-white">{opt.oddOver}</span>
                         <span className="block text-[8px] text-emerald-400 font-bold">{opt.probOver}%</span>
                       </div>
                       <div className="bg-slate-800/50 p-2 rounded-xl">
                         <span className="block text-[9px] text-slate-400 font-bold uppercase">Menos de</span>
-                        <span className="block text-sm font-black text-white">@ {opt.oddUnder}</span>
+                        <span className="block text-sm font-black text-white">{opt.oddUnder}</span>
                         <span className="block text-[8px] text-amber-500 font-bold">{opt.probUnder}%</span>
                       </div>
                     </div>
@@ -2358,7 +2358,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
 
                           <div className="flex items-center justify-between border-t border-white/10 pt-3">
                             <div className="text-xs font-black text-amber-300">
-                              Odd: @ {Number(boost.odd).toFixed(2).replace('.', ',')}
+                              Odd: {Number(boost.odd).toFixed(2).replace('.', ',')}
                             </div>
 
                             <div className="flex items-center gap-2">
@@ -2467,11 +2467,11 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                               <div className="flex gap-2">
                                 <div className="bg-slate-900 border border-slate-800 rounded-lg py-1 px-3 text-center min-w-[70px]">
                                   <span className="block text-[11px] font-bold text-white tracking-wider">+{ltOdds.line}</span>
-                                  <span className="text-[12.5px] font-black text-primary-yellow">@ {ltOdds.oddOver}</span>
+                                  <span className="text-[12.5px] font-black text-primary-yellow">{ltOdds.oddOver}</span>
                                 </div>
                                 <div className="bg-slate-900 border border-slate-800 rounded-lg py-1 px-3 text-center min-w-[70px]">
                                   <span className="block text-[11px] font-bold text-white tracking-wider">-{ltOdds.line}</span>
-                                  <span className="text-[12.5px] font-black text-primary-yellow">@ {ltOdds.oddUnder}</span>
+                                  <span className="text-[12.5px] font-black text-primary-yellow">{ltOdds.oddUnder}</span>
                                 </div>
                               </div>
                             </div>
@@ -2553,11 +2553,11 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                               <div className="flex gap-2">
                                 <div className="bg-slate-900 border border-slate-800 rounded-lg py-1 px-3 text-center min-w-[70px]">
                                   <span className="block text-[11px] font-bold text-white tracking-wider">+{ltOdds.line}</span>
-                                  <span className="text-[12.5px] font-black text-primary-yellow">@ {ltOdds.oddOver}</span>
+                                  <span className="text-[12.5px] font-black text-primary-yellow">{ltOdds.oddOver}</span>
                                 </div>
                                 <div className="bg-slate-900 border border-slate-800 rounded-lg py-1 px-3 text-center min-w-[70px]">
                                   <span className="block text-[11px] font-bold text-white tracking-wider">-{ltOdds.line}</span>
-                                  <span className="text-[12.5px] font-black text-primary-yellow">@ {ltOdds.oddUnder}</span>
+                                  <span className="text-[12.5px] font-black text-primary-yellow">{ltOdds.oddUnder}</span>
                                 </div>
                               </div>
                             </div>
@@ -2692,7 +2692,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                                   </div>
                                   <div className="bg-slate-900 border border-slate-800 rounded-xl py-1 px-3 text-center min-w-[80px]">
                                     <span className="block text-[9px] font-bold text-gray-400 tracking-wider">ODD</span>
-                                    <span className="text-xs font-black text-primary-yellow">@ {odd.toFixed(2)}</span>
+                                    <span className="text-xs font-black text-primary-yellow">{odd.toFixed(2)}</span>
                                   </div>
                                 </div>
                               </div>
@@ -2884,7 +2884,7 @@ export default function SimuladorConfrontos({ adminData }: Props) {
                                 {bet.selectedOutcome || bet.selection}
                               </span>
                               <span className="text-xs font-black text-primary-yellow bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800">
-                                @ {(bet.odds || bet.odd || 1).toFixed(2)}
+                                {(bet.odds || bet.odd || 1).toFixed(2)}
                               </span>
                             </div>
 

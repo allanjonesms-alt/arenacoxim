@@ -782,7 +782,7 @@ export default function UserManagement({ adminData }: UserManagementProps) {
                                   {bet.matchInfo || 'Aposta em Partida'}
                                 </span>
                                 <span className="text-[10px] font-bold text-primary-blue uppercase">
-                                  Palpite: {bet.selectedOutcome || bet.selection} (@ {bet.odd})
+                                  Palpite: {bet.selectedOutcome || bet.selection} ({bet.odd})
                                 </span>
                               </div>
 

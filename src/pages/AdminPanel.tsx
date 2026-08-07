@@ -4,7 +4,7 @@ import { collection, query, where, getDocs, limit, orderBy, getCountFromServer }
 import { Player, Match, AdminData, Admin } from '../types';
 import { getPositionAbbr, getPositionColor } from '../utils/playerUtils';
 import { calculateGrade } from '../utils/gradeUtils';
-import { Trophy, Users, Calendar, TrendingUp, ShieldCheck, User, ChevronRight, Plus, Settings, Loader2, Link2, X } from 'lucide-react';
+import { Trophy, Users, Calendar, TrendingUp, ShieldCheck, User, ChevronRight, Plus, Settings, Loader2, Link2, X, Shirt } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
@@ -267,6 +267,10 @@ export default function AdminPanel({ adminData }: AdminPanelProps) {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-4">
+            <Link to="/admin/cartola" className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-6 rounded-3xl border border-emerald-500 flex items-center justify-between shadow-md hover:shadow-lg transition-all group">
+              <span className="font-black uppercase tracking-widest text-white">Cartola Arena</span>
+              <Shirt className="text-amber-300 w-6 h-6" />
+            </Link>
             <Link to="/admin/tournaments" className="bg-gradient-to-r from-amber-500 to-yellow-600 text-slate-950 p-6 rounded-3xl border border-amber-400 flex items-center justify-between shadow-md hover:shadow-lg transition-all group">
               <span className="font-black uppercase tracking-widest text-slate-950">Gerenciar Torneios</span>
               <Trophy className="text-slate-950 w-6 h-6" />

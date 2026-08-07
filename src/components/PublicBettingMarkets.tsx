@@ -1230,7 +1230,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                   className="bg-black/25 border-2 border-white/20 text-white rounded-2xl p-4 flex flex-col items-center hover:border-amber-300 hover:bg-black/40 transition-all cursor-pointer shadow-sm active:scale-95 group"
                 >
                   <span className="text-xs text-white/80 uppercase font-black mb-1 group-hover:text-amber-300">Time Azul</span>
-                  <span className="text-2xl font-black text-amber-300">@ {odds.oddA}</span>
+                  <span className="text-2xl font-black text-amber-300">{odds.oddA}</span>
                 </button>
 
                 <button 
@@ -1245,7 +1245,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                   className="bg-black/25 border-2 border-white/20 text-white rounded-2xl p-4 flex flex-col items-center hover:border-amber-300 hover:bg-black/40 transition-all cursor-pointer shadow-sm active:scale-95 group"
                 >
                   <span className="text-xs text-white/80 uppercase font-black mb-1 group-hover:text-amber-300">Empate</span>
-                  <span className="text-2xl font-black text-amber-300">@ {odds.oddDraw}</span>
+                  <span className="text-2xl font-black text-amber-300">{odds.oddDraw}</span>
                 </button>
 
                 <button 
@@ -1260,7 +1260,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                   className="bg-black/25 border-2 border-white/20 text-white rounded-2xl p-4 flex flex-col items-center hover:border-amber-300 hover:bg-black/40 transition-all cursor-pointer shadow-sm active:scale-95 group"
                 >
                   <span className="text-xs text-white/80 uppercase font-black mb-1 group-hover:text-amber-300">Time Amarelo</span>
-                  <span className="text-2xl font-black text-amber-300">@ {odds.oddB}</span>
+                  <span className="text-2xl font-black text-amber-300">{odds.oddB}</span>
                 </button>
               </div>
             </div>
@@ -1408,7 +1408,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                       className="bg-white/10 border border-white/20 hover:border-amber-300 hover:bg-white/20 text-white rounded-lg px-2 py-0.5 text-center transition-all cursor-pointer active:scale-95 flex items-center gap-1"
                                     >
                                       <span className="text-[8px] text-white/70 font-bold">+0.5</span>
-                                      <span className="text-xs font-black text-amber-300">@{pOdds.g1}</span>
+                                      <span className="text-xs font-black text-amber-300">{pOdds.g1}</span>
                                     </button>
                                     <button 
                                       onClick={() => setSelectedBet({
@@ -1422,7 +1422,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                       className="bg-white/10 border border-white/20 hover:border-amber-300 hover:bg-white/20 text-white rounded-lg px-2 py-0.5 text-center transition-all cursor-pointer active:scale-95 flex items-center gap-1"
                                     >
                                       <span className="text-[8px] text-white/70 font-bold">+1.5</span>
-                                      <span className="text-xs font-black text-amber-300">@{pOdds.g2}</span>
+                                      <span className="text-xs font-black text-amber-300">{pOdds.g2}</span>
                                     </button>
                                   </div>
                                 )}
@@ -1442,7 +1442,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                       className="bg-white/10 border border-white/20 hover:border-amber-300 hover:bg-white/20 text-white rounded-lg px-2 py-0.5 text-center transition-all cursor-pointer active:scale-95 flex items-center gap-1"
                                     >
                                       <span className="text-[8px] text-white/70 font-bold">+0.5</span>
-                                      <span className="text-xs font-black text-amber-300">@{pOdds.a1}</span>
+                                      <span className="text-xs font-black text-amber-300">{pOdds.a1}</span>
                                     </button>
                                     <button 
                                       onClick={() => setSelectedBet({
@@ -1456,7 +1456,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                       className="bg-white/10 border border-white/20 hover:border-amber-300 hover:bg-white/20 text-white rounded-lg px-2 py-0.5 text-center transition-all cursor-pointer active:scale-95 flex items-center gap-1"
                                     >
                                       <span className="text-[8px] text-white/70 font-bold">+1.5</span>
-                                      <span className="text-xs font-black text-amber-300">@{pOdds.a2}</span>
+                                      <span className="text-xs font-black text-amber-300">{pOdds.a2}</span>
                                     </button>
                                   </div>
                                 )}
@@ -1542,7 +1542,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                   <div className="flex flex-col">
                     <span className="text-[9px] font-black uppercase text-gray-400 tracking-wider">Odd Especial</span>
                     <span className="text-xl font-black text-amber-300">
-                      @ {Number(boost.odd).toFixed(2).replace('.', ',')}
+                      {Number(boost.odd).toFixed(2).replace('.', ',')}
                     </span>
                   </div>
 
@@ -1922,7 +1922,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                     className="bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl py-1 px-2 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center"
                                   >
                                     <span className="text-[9.5px] font-black uppercase text-white/80 mb-0.5 tracking-wider">+{ltOdds.line}</span>
-                                    <span className="text-xs font-black text-amber-300">@ {ltOdds.oddOver}</span>
+                                    <span className="text-xs font-black text-amber-300">{ltOdds.oddOver}</span>
                                   </button>
                                   <button
                                     onClick={() => setSelectedBet({
@@ -1936,7 +1936,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                     className="bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl py-1 px-2 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center"
                                   >
                                     <span className="text-[9.5px] font-black uppercase text-white/80 mb-0.5 tracking-wider">-{ltOdds.line}</span>
-                                    <span className="text-xs font-black text-amber-300">@ {ltOdds.oddUnder}</span>
+                                    <span className="text-xs font-black text-amber-300">{ltOdds.oddUnder}</span>
                                   </button>
                                 </div>
                               </div>
@@ -2038,7 +2038,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                     className="bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl py-1 px-2 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center"
                                   >
                                     <span className="text-[9.5px] font-black uppercase text-white/80 mb-0.5 tracking-wider">+{ltOdds.line}</span>
-                                    <span className="text-xs font-black text-amber-300">@ {ltOdds.oddOver}</span>
+                                    <span className="text-xs font-black text-amber-300">{ltOdds.oddOver}</span>
                                   </button>
                                   <button
                                     onClick={() => setSelectedBet({
@@ -2052,7 +2052,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                     className="bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl py-1 px-2 min-w-[72px] text-center transition-all cursor-pointer shadow-sm active:scale-95 flex flex-col items-center justify-center"
                                   >
                                     <span className="text-[9.5px] font-black uppercase text-white/80 mb-0.5 tracking-wider">-{ltOdds.line}</span>
-                                    <span className="text-xs font-black text-amber-300">@ {ltOdds.oddUnder}</span>
+                                    <span className="text-xs font-black text-amber-300">{ltOdds.oddUnder}</span>
                                   </button>
                                 </div>
                               </div>
@@ -2156,7 +2156,7 @@ export function PublicBettingMarkets({ user, balance, onRequestDeposit }: Props)
                                   className="bg-black/40 hover:bg-black/60 text-white rounded-xl py-1 px-3 transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5 border border-white/20 shrink-0"
                                 >
                                   <span className="text-[9px] font-bold text-white/80 uppercase tracking-wider">APOSTAR</span>
-                                  <span className="text-xs font-black text-amber-300">@ {odd.toFixed(2)}</span>
+                                  <span className="text-xs font-black text-amber-300">{odd.toFixed(2)}</span>
                                 </button>
                               </div>
                             ))}

@@ -505,7 +505,7 @@ export default function BancoUsuario({ user }: BancoUsuarioProps) {
                               </div>
                               <div>
                                 <span className="block text-xs font-black text-gray-800 uppercase tracking-tight">
-                                  {tx.note ? tx.note : (isDeposit ? 'Depósito PIX' : 'Saque Bancário')}
+                                  {tx.note ? tx.note : tx.description ? tx.description : (isDeposit ? 'Depósito PIX' : 'Saque Bancário')}
                                 </span>
                                 <span className="block text-[10px] text-gray-400 font-bold">
                                   {new Date(tx.createdAt).toLocaleString('pt-BR')}
@@ -803,7 +803,7 @@ export default function BancoUsuario({ user }: BancoUsuarioProps) {
                             </div>
                             <h4 className="text-xs font-black text-gray-800">{bet.matchInfo || 'Partida'}</h4>
                             <p className="text-xs text-gray-600 font-semibold">
-                              Palpite: <span className="text-primary-blue font-black">{bet.selectedOutcome || bet.selection}</span> @ {bet.odds || bet.odd}
+                              Palpite: <span className="text-primary-blue font-black">{bet.selectedOutcome || bet.selection}</span> ({bet.odds || bet.odd})
                             </p>
                           </div>
                           <div className="text-right sm:text-right w-full sm:w-auto flex sm:flex-col justify-between sm:justify-center items-center sm:items-end">
@@ -847,7 +847,7 @@ export default function BancoUsuario({ user }: BancoUsuarioProps) {
                           </div>
                           <h4 className="text-sm font-black text-gray-800">{bet.matchInfo || 'Partida'}</h4>
                           <p className="text-xs text-gray-500 font-semibold">
-                            Seu palpite: <span className="text-primary-blue font-black">{bet.selectedOutcome}</span> @ {bet.odds}
+                            Seu palpite: <span className="text-primary-blue font-black">{bet.selectedOutcome}</span> ({bet.odds})
                           </p>
                         </div>
 
@@ -912,7 +912,7 @@ export default function BancoUsuario({ user }: BancoUsuarioProps) {
                           </div>
                           <h4 className="text-sm font-black text-gray-800">{bet.matchInfo || 'Partida'}</h4>
                           <p className="text-xs text-gray-500 font-semibold">
-                            Seu palpite: <span className="text-primary-blue font-black">{bet.selectedOutcome}</span> @ {bet.odds}
+                            Seu palpite: <span className="text-primary-blue font-black">{bet.selectedOutcome}</span> ({bet.odds})
                           </p>
                         </div>
 

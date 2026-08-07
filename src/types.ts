@@ -287,6 +287,8 @@ export interface TournamentGroup {
   name: string; // "Grupo A", "Grupo B"
 }
 
+
+
 export interface Tournament {
   id: string;
   name: string;
@@ -302,4 +304,61 @@ export interface Tournament {
   createdAt: number;
   updatedAt?: number;
 }
+
+// --- CARTOLA ARENA FANTASY TYPES ---
+export interface CartolaScoringRules {
+  goal: number;         // default: 8.0
+  assist: number;       // default: 5.0
+  win: number;          // default: 3.0
+  draw: number;         // default: 1.0
+  cleanSheet: number;   // default: 5.0 (for Goalkeeper)
+  yellowCard: number;   // default: -2.0
+  redCard: number;      // default: -5.0
+  ownGoal: number;      // default: -4.0
+  mvpBonus: number;     // default: 5.0
+}
+
+export interface CartolaSettings {
+  marketStatus: 'open' | 'closed';
+  currentRound: number;
+  seasonName: string;
+  maxPlayersPerTeam: number; // default 8
+  captainMultiplier: number; // default 1.5 or 2.0
+  scoringRules: CartolaScoringRules;
+  updatedAt?: number;
+}
+
+export interface CartolaUserTeam {
+  id: string; // doc ID (e.g. userId or auto)
+  userId: string;
+  userName: string;
+  userEmail?: string;
+  userPhotoUrl?: string;
+  teamName: string;
+  badgeUrl?: string;
+  badgeColor?: string;
+  playerIds: string[]; // Up to 8 player IDs selected
+  captainId?: string;  // Player ID of chosen captain
+  totalPoints: number; // Sum of points
+  roundScores?: { [roundNumber: string]: number };
+  subscriptionExpiresAt?: number;
+  subscriptionPaidAt?: number;
+  subscriptionActive?: boolean;
+  updatedAt: number;
+  createdAt: number;
+}
+
+export interface CartolaPlayerRoundScore {
+  playerId: string;
+  roundNumber: number;
+  matchCount: number;
+  goals: number;
+  assists: number;
+  wins: number;
+  draws: number;
+  cleanSheets: number;
+  mvps: number;
+  points: number;
+}
+
 
