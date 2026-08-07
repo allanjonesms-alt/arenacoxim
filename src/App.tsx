@@ -3,6 +3,8 @@ import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom'
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider, 
   signOut, 
   User, 
@@ -11,7 +13,7 @@ import {
 } from 'firebase/auth';
 import { auth, db } from './firebase';
 import { doc, getDoc, setDoc, getDocFromServer, collection, query, where, getDocs, deleteDoc, updateDoc, onSnapshot } from 'firebase/firestore';
-import { Trophy, Users, Calendar, LayoutDashboard, LogIn, LogOut, Menu, X, ShieldCheck, MapPin, TrendingUp, User as UserIcon, Lock, Key, Eye, EyeOff, Loader2, Home, Star, Award, Wallet } from 'lucide-react';
+import { Trophy, Users, Calendar, LayoutDashboard, LogIn, LogOut, Menu, X, ShieldCheck, MapPin, TrendingUp, User as UserIcon, Lock, Key, Eye, EyeOff, Loader2, Home, Star, Award, Wallet, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AdminData, Location, Team, ScoringRules, Player } from './types';
 
@@ -258,6 +260,14 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
+    // Process redirect result if popup was blocked or redirect mode was used
+    getRedirectResult(auth).then((result) => {
+      if (result?.user) {
+        setUser(result.user);
+        setShowLoginModal(false);
+      }
+    }).catch(console.warn);
+
     // Listen to common data in real-time (centralized to avoid multiple listeners in pages)
     const unsubscribeLocations = onSnapshot(collection(db, 'locations'), (snapshot) => {
       setLocations(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Location)));
@@ -408,14 +418,17 @@ export default function App() {
       setShowLoginModal(false);
       navigate('/');
     } catch (error: any) {
-      console.error("Login failed:", error);
-      let errMsg = "Erro de login do Google.";
-      if (error?.message?.includes("auth/internal-error") || error?.message?.includes("popup") || error?.code === "auth/internal-error") {
-        errMsg = "Bloqueio do navegador/iframe: por segurança, faça login abrindo o app em uma nova aba.";
-      } else if (error?.message) {
-        errMsg = error.message;
+      console.error("Login popup failed, trying redirect:", error);
+      try {
+        await signInWithRedirect(auth, provider);
+      } catch (redirectErr: any) {
+        console.error("Login redirect failed:", redirectErr);
+        let errMsg = "Não foi possível autenticar. Se estiver em um navegador com bloqueio de iframe/popups, abra a aplicação diretamente em uma nova aba.";
+        if (redirectErr?.message) {
+          errMsg = redirectErr.message;
+        }
+        setLoginError(errMsg);
       }
-      setLoginError(errMsg);
     }
   };
 
@@ -686,6 +699,21 @@ export default function App() {
                     <p className="text-gray-500 text-sm font-bold leading-relaxed px-4">
                       Para sua segurança, o acesso administrativo é restrito a contas Google autorizadas.
                     </p>
+                    <div className="bg-amber-50 border border-amber-200 p-3.5 rounded-2xl text-amber-900 text-xs font-semibold leading-snug text-left flex items-start gap-2.5">
+                      <ExternalLink className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-black uppercase block text-[10px] text-amber-700 tracking-wider">Dica de Acesso (Iframe)</span>
+                        Se o login do Google não atualizar a tela nesta janela da prévia, abra o app em uma aba separada do navegador:
+                        <a 
+                          href={window.location.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl uppercase text-[10px] font-black tracking-wider transition-colors"
+                        >
+                          Abrir App em Nova Aba <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+                    </div>
                   </div>
 
                   {loginError && (
